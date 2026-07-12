@@ -1,17 +1,21 @@
 window.toolArticles = {};
 
 window.toolArticles['merge'] = `
-<h2>What is Merge PDF?</h2>
-<p>The Merge PDF tool is a powerful and essential utility designed to seamlessly combine multiple separate PDF documents into a single, unified file. In the modern digital workspace, it is incredibly common to receive individual documents such as scattered invoice pages, separate chapters of a manuscript, or various scanned images that have been saved as disparate PDF files. Trying to manage, share, or archive these separate files can quickly become a logistical nightmare. The Merge PDF tool solves this by stitching these pages together in the exact order you specify. This concept of document concatenation has existed since the early days of digital document management in the late 1990s, evolving from cumbersome desktop software into the lightning-fast web-based utilities we rely on today.</p>
+<h2>What is a PDF Merger?</h2>
+<p>PDFBox's PDF Merger is a free and professional tool that allows you to combine and merge multiple scattered PDF files into a single, organized document in a custom order within seconds. Whether you want to merge university reports, work files, or personal documents, this tool eliminates the need to download and install complex software and provides you with a high-quality merged file without affecting the formatting of the original text or images.</p>
 
-<h2>How to Use This Tool</h2>
-<p>Using our Merge PDF tool is designed to be as intuitive as possible. First, you drag and drop all the PDF files you wish to combine into the designated upload area above. Alternatively, you can click the upload box to manually select the files from your computer's storage. Once your files are loaded, they will appear in a list. If you need to add more files, you can use the "Add More Files" button. Finally, when you are ready, simply click the "Process PDF" button. Our application will instantly combine the documents in the order they were provided and automatically trigger a download of the newly merged, single PDF file to your device.</p>
+<h2>How to Use PDF Merger</h2>
+<ul>
+<li><strong>Upload Files:</strong> Click the "Select Files" button and choose the PDF documents you want to merge from your device.</li>
+<li><strong>Reorder:</strong> Drag and drop the files in your preferred order to appear in the final file.</li>
+<li><strong>Merge and Download:</strong> Click the "Merge PDF" button, wait a few moments, and then click "Download" to save your new, unified file.</li>
+</ul>
 
-<h2>Why is it Safe?</h2>
-<p>When dealing with sensitive documents like financial records, legal contracts, or personal information, security is paramount. Unlike traditional online PDF services that force you to upload your private files to a remote server for processing, our platform utilizes cutting-edge web technologies to process everything locally. This means the actual merging process happens entirely within your own web browser's memory. Your files never leave your computer, they are never uploaded to the cloud, and we never have access to them. This guarantees absolute privacy and security, as there is zero risk of data interception or unauthorized retention on third-party servers.</p>
+<h2>Security and Privacy</h2>
+<p>At PDFBox, the privacy and security of your data are our top priorities. All file processing is done using fully encrypted and secure communication protocols. We do not store or access your files. All uploaded documents and resulting files are automatically and permanently deleted from our servers as soon as you complete the merging process, ensuring 100% security and privacy.</p>
 
-<h2>Advantages of Merging PDFs</h2>
-<p>The primary advantage of merging PDF files is improved organization. A single, comprehensive document is drastically easier to email, print, and archive than a folder full of loose files. It reduces clutter on your hard drive and ensures that the recipient of your document views the information exactly as you intended, in the correct sequence. Furthermore, since our tool performs this operation client-side, the process is instantaneous. You don't have to wait for large files to upload or download, saving you valuable time and bandwidth while keeping your workflow smooth and uninterrupted.</p>
+<h2>Why Choose PDF Merger?</h2>
+<p>Merging PDFs simplifies file management and makes sharing easier. The resulting unified file preserves the original layout, text, and images so your final document looks professional and consistent. It is the fastest way to consolidate multiple pages into one neat PDF without clutter or formatting issues.</p>
 `;
 
 window.toolArticles['split'] = `
@@ -85,17 +89,21 @@ window.toolArticles['pdf-to-jpg'] = `
 `;
 
 window.toolArticles['jpg-to-pdf'] = `
-<h2>What is JPG to PDF Conversion?</h2>
-<p>The JPG to PDF conversion tool allows you to take one or more image files and compile them into a single, standardized PDF document. While JPGs are great for individual photos or graphics, sending a collection of 10 different JPGs via email can be disorganized and frustrating for the recipient. Converting them into a PDF binds those images together into a single file with a consistent, readable flow. This practice became incredibly popular with the rise of digital scanners and smartphone cameras, as users needed a way to package multiple photos of receipts, whiteboard notes, or physical documents into a neat, professional format for archiving or sharing.</p>
+<h2>What is the Image to PDF Converter Tool?</h2>
+<p>The Image to PDF Converter Tool allows you to convert your images in various formats and extensions (such as JPG, PNG, and BMP) into a single, high-quality, professional PDF document. This tool is ideal for students and professionals to compile images of lectures, IDs, or receipts and convert them into a well-organized PDF file that is easy to share via email or print clearly and with consistent dimensions.</p>
 
-<h2>How to Use This Tool</h2>
-<p>Using this tool is fast and intuitive. Drag and drop your JPG or PNG image files into the upload area. You can upload multiple images at once. Once your images are queued up, click the "Process PDF" button. Our script will instantly generate a brand new, empty PDF document in your browser's memory. It will then create a new page for each image you uploaded, embed the image onto the page, and scale it perfectly to fit. Finally, it merges all these pages together and downloads the compiled PDF directly to your device.</p>
+<h2>How to Use the Image to PDF Converter Tool</h2>
+<ul>
+<li><strong>Select Images:</strong> Click the Upload Images button and select the images you want to convert from your photo gallery or device files.</li>
+<li><strong>Set the Order:</strong> Arrange the images in the correct order you want them to appear as pages within the PDF file.</li>
+<li><strong>Convert and Save:</strong> Click the "Convert to PDF" button, and within seconds your images will be processed and converted, allowing you to download the final file directly.</li>
+</ul>
 
-<h2>Why is it Safe?</h2>
-<p>Privacy is a major concern when dealing with personal photos or pictures of sensitive documents like IDs or financial statements. Uploading these images to a cloud converter is an unnecessary risk. Our JPG to PDF tool performs the entire compilation process locally on your machine. Using advanced JavaScript libraries, the images are read into your browser's memory, embedded into the PDF structure, and exported without ever touching a remote server. This client-side approach guarantees that your photos remain 100% private and secure from external access.</p>
+<h2>Security and Privacy</h2>
+<p>Your files and personal photos are in safe hands. PDFBox employs an advanced security system that ensures no image you upload is stored on the site. Once you close the page or the conversion process is complete, all uploaded images are permanently and automatically deleted from the server, and no third party will be able to access them under any circumstances, giving you a completely secure and reliable user experience.</p>
 
-<h2>Advantages of Converting JPG to PDF</h2>
-<p>The primary advantage is organization and professionalism. A single PDF containing multiple scanned images is significantly easier to manage, share, and review than a folder full of loose JPGs. It ensures that the images are viewed in the exact order you intend. Additionally, PDFs are the accepted standard for business and legal document submission; converting your photo-scans to PDF ensures they will be accepted by formal institutions. Because our tool works instantly in your browser, it's the fastest and safest way to organize your visual data into a clean, shareable document.</p>
+<h2>Why Use Image to PDF?</h2>
+<p>Converting images to PDF makes sharing and archiving much easier. A single PDF file is more polished and consistent than multiple separate images, and it is accepted by most formal review and submission systems. It also keeps your images in the order you choose, preserving the intended flow of pages and content.</p>
 `;
 
 window.toolArticles['rotate'] = `
