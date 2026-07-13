@@ -1,36 +1,39 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
     <title>PDFBox | Complete PDF & Document Converter Toolkit</title>
-    <meta name="description" content="Professional PDF & Document conversion tools. Convert PDF to Word, Word to PDF, encrypt/decrypt PDFs with passwords. Fast, secure, client-side processing.">
-    <meta name="keywords" content="pdf to word, word to pdf, pdf converter, pdf encryption, password protect pdf, pdf decrypt, document converter">
+    <meta name="description"
+        content="Professional PDF & Document conversion tools. Convert PDF to Word, Word to PDF, encrypt/decrypt PDFs with passwords. Fast, secure, client-side processing.">
+    <meta name="keywords"
+        content="pdf to word, word to pdf, pdf converter, pdf encryption, password protect pdf, pdf decrypt, document converter">
     <link rel="canonical" href="https://pdfbox.online/">
     <link rel="stylesheet" href="css/styles.css">
-    
+
     <!-- Google Fonts -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    
+
     <!-- Lucide Icons -->
     <script src="https://unpkg.com/lucide@latest"></script>
-    
+
     <!-- Core Libraries -->
     <!-- PDF-Lib: Advanced PDF manipulation with encryption support -->
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
-    
+
     <!-- مكتبة pdf.js لقراءة ملفات الـ PDF (مستقرة) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script>
         pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
     </script>
-    
+
     <!-- jsPDF: PDF generation -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-    
+
     <!-- html2canvas: HTML to image conversion (used with jsPDF) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
@@ -39,17 +42,18 @@
 
     <!-- Tesseract.js: OCR for scanned PDFs in the browser -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
-    
+
     <!-- مكتبة docx المخصصة للمتصفح مباشرة عبر ESM -->
     <script type="module">
         import * as docxModule from 'https://cdn.jsdelivr.net/npm/docx@7.8.2/+esm';
         window.docx = docxModule;
         window.docxReady = Promise.resolve(docxModule);
     </script>
-    
+
     <!-- Mammoth.js: DOCX file reading -->
     <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
 </head>
+
 <body>
 
     <!-- Header -->
@@ -64,7 +68,8 @@
                 <li><a href="#about">About</a></li>
                 <li><a href="#contact">Contact</a></li>
                 <li id="nav-auth-container" style="display: flex; align-items: center;">
-                    <a href="#auth" id="nav-signin-btn" class="btn" style="padding: 6px 16px; font-size: 0.9rem; margin-left: 8px;">Sign In</a>
+                    <a href="#auth" id="nav-signin-btn" class="btn"
+                        style="padding: 6px 16px; font-size: 0.9rem; margin-left: 8px;">Sign In</a>
                     <div id="nav-user-menu" class="header-user-menu hidden">
                         <div class="header-avatar" id="nav-user-avatar">U</div>
                         <span class="header-username" id="nav-user-name">User</span>
@@ -95,14 +100,15 @@
         <section id="view-home" class="view-section">
             <div class="hero">
                 <h1>Free, Fast & Secure PDF Tools</h1>
-                <p>Everything you need to manage your PDF files. Processed securely in your browser so your files never leave your computer.</p>
+                <p>Everything you need to manage your PDF files. Processed securely in your browser so your files never
+                    leave your computer.</p>
                 <div class="trust-badges">
                     <span class="badge"><i data-lucide="shield-check"></i> 100% Secure</span>
                     <span class="badge"><i data-lucide="zap"></i> Lightning Fast</span>
                     <span class="badge"><i data-lucide="browser"></i> In-Browser Processing</span>
                 </div>
             </div>
-            
+
             <h2 style="text-align: center; margin-bottom: 24px;">Our Most Popular Tools</h2>
             <div class="tools-grid" id="home-tools-grid">
                 <!-- Injected via JS -->
@@ -150,8 +156,10 @@
                     <button id="process-btn" class="btn hidden">
                         <span>Process PDF</span> <i data-lucide="settings"></i>
                     </button>
-                    <div id="loading-indicator" class="hidden" style="display: flex; align-items: center; justify-content: center; gap: 12px; color: var(--primary);">
-                        <div class="spinner" style="border-color: rgba(14, 165, 233, 0.3); border-top-color: var(--primary);"></div>
+                    <div id="loading-indicator" class="hidden"
+                        style="display: flex; align-items: center; justify-content: center; gap: 12px; color: var(--primary);">
+                        <div class="spinner"
+                            style="border-color: rgba(14, 165, 233, 0.3); border-top-color: var(--primary);"></div>
                         <strong>Processing...</strong>
                     </div>
                 </div>
@@ -165,9 +173,13 @@
         <section id="view-about" class="view-section hidden text-page">
             <h1>About Us</h1>
             <p>Welcome to PDF Toolkit, your secure, free, and fast platform for managing PDF files.</p>
-            <p>Our mission is to provide simple yet powerful tools to merge, split, compress, and edit PDFs without compromising your privacy. Unlike many other services that require you to upload your sensitive documents to their servers, our tools leverage modern web technologies to process your files directly in your web browser.</p>
+            <p>Our mission is to provide simple yet powerful tools to merge, split, compress, and edit PDFs without
+                compromising your privacy. Unlike many other services that require you to upload your sensitive
+                documents to their servers, our tools leverage modern web technologies to process your files directly in
+                your web browser.</p>
             <h2>Our Commitment to Privacy</h2>
-            <p>Your privacy is our top priority. Because all processing happens locally on your device, we never see, store, or share your files. Your data remains strictly yours.</p>
+            <p>Your privacy is our top priority. Because all processing happens locally on your device, we never see,
+                store, or share your files. Your data remains strictly yours.</p>
         </section>
 
         <!-- View: Contact -->
@@ -189,34 +201,55 @@
                 </div>
                 <button type="submit" class="btn">Send Message</button>
             </form>
-            <p style="margin-top: 24px;">Alternative contact: <a href="https://mail.google.com/mail/?view=cm&fs=1&to=hasan.saad898@gmail.com" target="_blank" rel="noopener noreferrer">hasan.saad898@gmail.com</a></p>
+            <p style="margin-top: 24px;">Alternative contact: <a
+                    href="https://mail.google.com/mail/?view=cm&fs=1&to=hasan.saad898@gmail.com" target="_blank"
+                    rel="noopener noreferrer">hasan.saad898@gmail.com</a></p>
         </section>
 
         <!-- View: Privacy -->
         <section id="view-privacy" class="view-section hidden text-page">
             <h1>Privacy Policy</h1>
             <p>Last updated: July 2026</p>
-            <p>At PDFBox, the privacy and security of your data are our top priorities. We build our PDF tools so users can process documents safely and confidently without exposing sensitive files to unnecessary risk.</p>
-            
+            <p>At PDFBox, the privacy and security of your data are our top priorities. We build our PDF tools so users
+                can process documents safely and confidently without exposing sensitive files to unnecessary risk.</p>
+
             <h2>1. Information We Collect</h2>
-            <p>We collect as little information as possible. Our priority is to keep your data private and minimize any personal information stored or processed.</p>
+            <p>We collect as little information as possible. Our priority is to keep your data private and minimize any
+                personal information stored or processed.</p>
             <ul>
-                <li><strong>Files and Documents:</strong> We do NOT store or access any PDF files, images, or documents you process with our tools. All uploaded items are processed securely and are removed immediately after the conversion or merging workflow completes.</li>
-                <li><strong>Processing Security:</strong> When files are handled through any communication channels, we use fully encrypted and secure protocols. This ensures that data remains protected during the processing session.</li>
-                <li><strong>Log Files:</strong> We may use standard server logs for monitoring site health. These logs can include IP address, browser type, ISP, date/time stamp, and referring pages. This information is not linked to personally identifiable information.</li>
+                <li><strong>Files and Documents:</strong> We do NOT store or access any PDF files, images, or documents
+                    you process with our tools. All uploaded items are processed securely and are removed immediately
+                    after the conversion or merging workflow completes.</li>
+                <li><strong>Processing Security:</strong> When files are handled through any communication channels, we
+                    use fully encrypted and secure protocols. This ensures that data remains protected during the
+                    processing session.</li>
+                <li><strong>Log Files:</strong> We may use standard server logs for monitoring site health. These logs
+                    can include IP address, browser type, ISP, date/time stamp, and referring pages. This information is
+                    not linked to personally identifiable information.</li>
             </ul>
 
             <h2>2. Cookies and Web Beacons</h2>
-            <p>Like many websites, PDFBox uses cookies to improve user experience and remember settings. Cookies may store information about visitor preferences and the pages visited. We do not use cookies to track personal identity.</p>
+            <p>Like many websites, PDFBox uses cookies to improve user experience and remember settings. Cookies may
+                store information about visitor preferences and the pages visited. We do not use cookies to track
+                personal identity.</p>
 
             <h2>3. Security and Data Retention</h2>
-            <p>Your files are treated with strict confidentiality. Any uploaded document or generated result is automatically and permanently deleted as soon as the processing session is complete. We do not retain document contents, and no third party can access your files after the task finishes.</p>
+            <p>Your files are treated with strict confidentiality. Any uploaded document or generated result is
+                automatically and permanently deleted as soon as the processing session is complete. We do not retain
+                document contents, and no third party can access your files after the task finishes.</p>
 
             <h2>4. Advertising Partners</h2>
-            <p>Third-party ad networks may use cookies, JavaScript, or web beacons to serve ads and analyze performance. These third parties may receive your IP address when ads are displayed. PDFBox does not control these technologies and is not responsible for their privacy practices.</p>
+            <p>Third-party ad networks may use cookies, JavaScript, or web beacons to serve ads and analyze performance.
+                These third parties may receive your IP address when ads are displayed. PDFBox does not control these
+                technologies and is not responsible for their privacy practices.</p>
 
             <h2>5. CCPA & GDPR Privacy Rights</h2>
-            <p>Under CCPA and GDPR, residents may request disclosure of the categories of personal data collected. Because we do not collect or retain personal files through our document tools, these requests are generally not applicable to processing workflows. If you have questions about cookies or analytic data, please contact us at <a href="https://mail.google.com/mail/?view=cm&fs=1&to=hasan.saad898@gmail.com" target="_blank" rel="noopener noreferrer">hasan.saad898@gmail.com</a>. We will respond within one month.</p>
+            <p>Under CCPA and GDPR, residents may request disclosure of the categories of personal data collected.
+                Because we do not collect or retain personal files through our document tools, these requests are
+                generally not applicable to processing workflows. If you have questions about cookies or analytic data,
+                please contact us at <a href="https://mail.google.com/mail/?view=cm&fs=1&to=hasan.saad898@gmail.com"
+                    target="_blank" rel="noopener noreferrer">hasan.saad898@gmail.com</a>. We will respond within one
+                month.</p>
         </section>
 
         <!-- View: Terms -->
@@ -227,10 +260,13 @@
             <p>These terms and conditions outline the rules and regulations for the use of PDF Toolkit's Website.</p>
 
             <h2>1. Acceptance of Terms</h2>
-            <p>By accessing this website we assume you accept these terms and conditions. Do not continue to use PDF Toolkit if you do not agree to take all of the terms and conditions stated on this page.</p>
+            <p>By accessing this website we assume you accept these terms and conditions. Do not continue to use PDF
+                Toolkit if you do not agree to take all of the terms and conditions stated on this page.</p>
 
             <h2>2. License and Usage</h2>
-            <p>Unless otherwise stated, PDF Toolkit and/or its licensors own the intellectual property rights for all material on PDF Toolkit. All intellectual property rights are reserved. You may access this from PDF Toolkit for your own personal use subjected to restrictions set in these terms and conditions.</p>
+            <p>Unless otherwise stated, PDF Toolkit and/or its licensors own the intellectual property rights for all
+                material on PDF Toolkit. All intellectual property rights are reserved. You may access this from PDF
+                Toolkit for your own personal use subjected to restrictions set in these terms and conditions.</p>
             <p>You must not:</p>
             <ul>
                 <li>Republish material from PDF Toolkit</li>
@@ -240,16 +276,27 @@
             </ul>
 
             <h2>3. Disclaimer of Warranties</h2>
-            <p>Our tools are provided "as is" without any representations or warranties, express or implied. PDF Toolkit makes no representations or warranties in relation to this website or the information and materials provided on this website. While we strive for accuracy in document conversion and processing, we do not guarantee that the tools will be completely error-free or perfectly format every document.</p>
+            <p>Our tools are provided "as is" without any representations or warranties, express or implied. PDF Toolkit
+                makes no representations or warranties in relation to this website or the information and materials
+                provided on this website. While we strive for accuracy in document conversion and processing, we do not
+                guarantee that the tools will be completely error-free or perfectly format every document.</p>
 
             <h2>4. Limitation of Liability</h2>
-            <p>In no event shall PDF Toolkit, nor any of its officers, directors and employees, be held liable for anything arising out of or in any way connected with your use of this website. PDF Toolkit, including its officers, directors and employees shall not be held liable for any indirect, consequential or special liability arising out of or in any way related to your use of this website, including but not limited to loss of data or loss of business.</p>
+            <p>In no event shall PDF Toolkit, nor any of its officers, directors and employees, be held liable for
+                anything arising out of or in any way connected with your use of this website. PDF Toolkit, including
+                its officers, directors and employees shall not be held liable for any indirect, consequential or
+                special liability arising out of or in any way related to your use of this website, including but not
+                limited to loss of data or loss of business.</p>
 
             <h2>5. Client-Side Processing Acknowledgment</h2>
-            <p>By using our service, you acknowledge that our tools operate primarily client-side (within your browser). We do not host, store, or backup your files. It is your sole responsibility to ensure you maintain copies of your original documents.</p>
+            <p>By using our service, you acknowledge that our tools operate primarily client-side (within your browser).
+                We do not host, store, or backup your files. It is your sole responsibility to ensure you maintain
+                copies of your original documents.</p>
 
             <h2>6. Governing Law</h2>
-            <p>These terms and conditions are governed by and construed in accordance with the laws of the applicable jurisdiction, and you irrevocably submit to the exclusive jurisdiction of the courts in that location.</p>
+            <p>These terms and conditions are governed by and construed in accordance with the laws of the applicable
+                jurisdiction, and you irrevocably submit to the exclusive jurisdiction of the courts in that location.
+            </p>
         </section>
 
         <!-- View: Auth (Sign In / Sign Up) -->
@@ -257,23 +304,33 @@
             <div class="auth-container">
                 <!-- Loading Overlay -->
                 <div class="auth-loading-overlay hidden" id="auth-loading-overlay">
-                    <div class="spinner" style="border-color: rgba(14, 165, 233, 0.2); border-top-color: var(--primary);"></div>
+                    <div class="spinner"
+                        style="border-color: rgba(14, 165, 233, 0.2); border-top-color: var(--primary);"></div>
                     <h3 id="loading-overlay-text">Signing in securely...</h3>
-                    <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 6px;">Verifying browser credentials</p>
+                    <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 6px;">Verifying browser
+                        credentials</p>
                 </div>
 
                 <!-- Sign In Form -->
                 <div id="form-signin-container" class="auth-form-pane">
                     <h2 class="auth-title">Welcome Back</h2>
                     <p class="auth-subtitle">Sign in to manage your PDFs and access more features.</p>
-                    
+
                     <button type="button" class="btn-google" id="google-signin-btn">
                         <svg viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
                             <g transform="matrix(1, 0, 0, 1, 0, 0)">
-                                <path d="M21.35,11.1H12v2.7h5.38c-0.24,1.28 -0.96,2.37 -2.04,3.1v2.58h3.3c1.93,-1.78 3.04,-4.4 3.04,-7.38c0,-0.68 -0.06,-1.34 -0.18,-2H21.35z" fill="#4285F4"/>
-                                <path d="M12,20.6c2.43,0 4.47,-0.8 5.96,-2.2l-3.3,-2.58c-0.92,0.62 -2.1,1 -2.66,1c-2.43,0 -4.5,-1.64 -5.23,-3.85H3.37v2.67C4.85,18.06 8.13,20.6 12,20.6z" fill="#34A853"/>
-                                <path d="M6.77,12.97c-0.18,-0.54 -0.28,-1.11 -0.28,-1.7c0,-0.59 0.1,-1.16 0.28,-1.7V6.9H3.37C2.73,8.19 2.37,9.65 2.37,11.27c0,1.62 0.36,3.08 1.01,4.37l3.39,-2.67z" fill="#FBBC05"/>
-                                <path d="M12,5.7c1.32,0 2.5,0.45 3.44,1.35l2.58,-2.58C16.46,3.02 14.43,2.3 12,2.3C8.13,2.3 4.85,4.84 3.37,7.52l3.39,2.67C7.5,7.98 9.57,5.7 12,5.7z" fill="#EA4335"/>
+                                <path
+                                    d="M21.35,11.1H12v2.7h5.38c-0.24,1.28 -0.96,2.37 -2.04,3.1v2.58h3.3c1.93,-1.78 3.04,-4.4 3.04,-7.38c0,-0.68 -0.06,-1.34 -0.18,-2H21.35z"
+                                    fill="#4285F4" />
+                                <path
+                                    d="M12,20.6c2.43,0 4.47,-0.8 5.96,-2.2l-3.3,-2.58c-0.92,0.62 -2.1,1 -2.66,1c-2.43,0 -4.5,-1.64 -5.23,-3.85H3.37v2.67C4.85,18.06 8.13,20.6 12,20.6z"
+                                    fill="#34A853" />
+                                <path
+                                    d="M6.77,12.97c-0.18,-0.54 -0.28,-1.11 -0.28,-1.7c0,-0.59 0.1,-1.16 0.28,-1.7V6.9H3.37C2.73,8.19 2.37,9.65 2.37,11.27c0,1.62 0.36,3.08 1.01,4.37l3.39,-2.67z"
+                                    fill="#FBBC05" />
+                                <path
+                                    d="M12,5.7c1.32,0 2.5,0.45 3.44,1.35l2.58,-2.58C16.46,3.02 14.43,2.3 12,2.3C8.13,2.3 4.85,4.84 3.37,7.52l3.39,2.67C7.5,7.98 9.57,5.7 12,5.7z"
+                                    fill="#EA4335" />
                             </g>
                         </svg>
                         Sign in with Google
@@ -286,26 +343,31 @@
                             <label for="signin-email">Email Address</label>
                             <div class="input-group">
                                 <i data-lucide="mail"></i>
-                                <input type="email" id="signin-email" class="form-control" placeholder="name@example.com" required>
+                                <input type="email" id="signin-email" class="form-control"
+                                    placeholder="name@example.com" required>
                             </div>
                         </div>
                         <div class="form-group">
                             <label for="signin-password">Password</label>
                             <div class="input-group">
                                 <i data-lucide="lock"></i>
-                                <input type="password" id="signin-password" class="form-control" placeholder="••••••••" required>
+                                <input type="password" id="signin-password" class="form-control" placeholder="••••••••"
+                                    required>
                             </div>
                         </div>
                         <div class="form-group" style="text-align: right; margin-top: -10px; margin-bottom: 20px;">
-                            <a href="#" id="link-forgot" style="font-size: 0.85rem; font-weight: 500;">Forgot your password?</a>
+                            <a href="#" id="link-forgot" style="font-size: 0.85rem; font-weight: 500;">Forgot your
+                                password?</a>
                         </div>
-                        <button type="submit" class="btn" style="width: 100%; justify-content: center; margin-top: 8px;">
+                        <button type="submit" class="btn"
+                            style="width: 100%; justify-content: center; margin-top: 8px;">
                             Sign In
                         </button>
                     </form>
 
                     <div class="auth-footer" style="margin-top: 24px; text-align: center; font-size: 0.9rem;">
-                        Don't have an account? <a href="#" id="link-goto-signup" style="font-weight: 500;">Create a new account</a>
+                        Don't have an account? <a href="#" id="link-goto-signup" style="font-weight: 500;">Create a new
+                            account</a>
                     </div>
                 </div>
 
@@ -317,10 +379,18 @@
                     <button type="button" class="btn-google" id="google-signup-btn">
                         <svg viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
                             <g transform="matrix(1, 0, 0, 1, 0, 0)">
-                                <path d="M21.35,11.1H12v2.7h5.38c-0.24,1.28 -0.96,2.37 -2.04,3.1v2.58h3.3c1.93,-1.78 3.04,-4.4 3.04,-7.38c0,-0.68 -0.06,-1.34 -0.18,-2H21.35z" fill="#4285F4"/>
-                                <path d="M12,20.6c2.43,0 4.47,-0.8 5.96,-2.2l-3.3,-2.58c-0.92,0.62 -2.1,1 -2.66,1c-2.43,0 -4.5,-1.64 -5.23,-3.85H3.37v2.67C4.85,18.06 8.13,20.6 12,20.6z" fill="#34A853"/>
-                                <path d="M6.77,12.97c-0.18,-0.54 -0.28,-1.11 -0.28,-1.7c0,-0.59 0.1,-1.16 0.28,-1.7V6.9H3.37C2.73,8.19 2.37,9.65 2.37,11.27c0,1.62 0.36,3.08 1.01,4.37l3.39,-2.67z" fill="#FBBC05"/>
-                                <path d="M12,5.7c1.32,0 2.5,0.45 3.44,1.35l2.58,-2.58C16.46,3.02 14.43,2.3 12,2.3C8.13,2.3 4.85,4.84 3.37,7.52l3.39,2.67C7.5,7.98 9.57,5.7 12,5.7z" fill="#EA4335"/>
+                                <path
+                                    d="M21.35,11.1H12v2.7h5.38c-0.24,1.28 -0.96,2.37 -2.04,3.1v2.58h3.3c1.93,-1.78 3.04,-4.4 3.04,-7.38c0,-0.68 -0.06,-1.34 -0.18,-2H21.35z"
+                                    fill="#4285F4" />
+                                <path
+                                    d="M12,20.6c2.43,0 4.47,-0.8 5.96,-2.2l-3.3,-2.58c-0.92,0.62 -2.1,1 -2.66,1c-2.43,0 -4.5,-1.64 -5.23,-3.85H3.37v2.67C4.85,18.06 8.13,20.6 12,20.6z"
+                                    fill="#34A853" />
+                                <path
+                                    d="M6.77,12.97c-0.18,-0.54 -0.28,-1.11 -0.28,-1.7c0,-0.59 0.1,-1.16 0.28,-1.7V6.9H3.37C2.73,8.19 2.37,9.65 2.37,11.27c0,1.62 0.36,3.08 1.01,4.37l3.39,-2.67z"
+                                    fill="#FBBC05" />
+                                <path
+                                    d="M12,5.7c1.32,0 2.5,0.45 3.44,1.35l2.58,-2.58C16.46,3.02 14.43,2.3 12,2.3C8.13,2.3 4.85,4.84 3.37,7.52l3.39,2.67C7.5,7.98 9.57,5.7 12,5.7z"
+                                    fill="#EA4335" />
                             </g>
                         </svg>
                         Sign up with Google
@@ -333,30 +403,36 @@
                             <label for="signup-name">Full Name</label>
                             <div class="input-group">
                                 <i data-lucide="user"></i>
-                                <input type="text" id="signup-name" class="form-control" placeholder="John Doe" required>
+                                <input type="text" id="signup-name" class="form-control" placeholder="John Doe"
+                                    required>
                             </div>
                         </div>
                         <div class="form-group">
                             <label for="signup-email">Email Address</label>
                             <div class="input-group">
                                 <i data-lucide="mail"></i>
-                                <input type="email" id="signup-email" class="form-control" placeholder="name@example.com" required>
+                                <input type="email" id="signup-email" class="form-control"
+                                    placeholder="name@example.com" required>
                             </div>
                         </div>
                         <div class="form-group">
                             <label for="signup-password">Password</label>
                             <div class="input-group">
                                 <i data-lucide="lock"></i>
-                                <input type="password" id="signup-password" class="form-control" placeholder="••••••••" required>
+                                <input type="password" id="signup-password" class="form-control" placeholder="••••••••"
+                                    required>
                             </div>
                         </div>
                         <div class="form-group" style="display: flex; align-items: flex-start; gap: 8px;">
                             <input type="checkbox" id="signup-terms" required style="margin-top: 4px;">
-                            <label for="signup-terms" style="font-size: 0.85rem; color: var(--text-muted); cursor: pointer; user-select: none;">
-                                I agree to the <a href="#terms">Terms of Service</a> and <a href="#privacy">Privacy Policy</a>
+                            <label for="signup-terms"
+                                style="font-size: 0.85rem; color: var(--text-muted); cursor: pointer; user-select: none;">
+                                I agree to the <a href="#terms">Terms of Service</a> and <a href="#privacy">Privacy
+                                    Policy</a>
                             </label>
                         </div>
-                        <button type="submit" class="btn" style="width: 100%; justify-content: center; margin-top: 8px;">
+                        <button type="submit" class="btn"
+                            style="width: 100%; justify-content: center; margin-top: 8px;">
                             Create Account
                         </button>
                     </form>
@@ -369,23 +445,27 @@
                 <!-- Password Recovery Form -->
                 <div id="form-forgot-container" class="auth-form-pane hidden">
                     <h2 class="auth-title">Reset Password</h2>
-                    <p class="auth-subtitle">Enter your email address and we'll send you a link to reset your password.</p>
-                    
+                    <p class="auth-subtitle">Enter your email address and we'll send you a link to reset your password.
+                    </p>
+
                     <form id="form-forgot">
                         <div class="form-group">
                             <label for="forgot-email">Email Address</label>
                             <div class="input-group">
                                 <i data-lucide="mail"></i>
-                                <input type="email" id="forgot-email" class="form-control" placeholder="name@example.com" required>
+                                <input type="email" id="forgot-email" class="form-control"
+                                    placeholder="name@example.com" required>
                             </div>
                         </div>
-                        <button type="submit" class="btn" style="width: 100%; justify-content: center; margin-top: 8px;">
+                        <button type="submit" class="btn"
+                            style="width: 100%; justify-content: center; margin-top: 8px;">
                             Send Reset Link
                         </button>
                     </form>
-                    
+
                     <div class="auth-footer" style="margin-top: 24px; text-align: center; font-size: 0.9rem;">
-                        Remembered your password? <a href="#" id="link-forgot-goto-signin" style="font-weight: 500;">Sign In</a>
+                        Remembered your password? <a href="#" id="link-forgot-goto-signin"
+                            style="font-weight: 500;">Sign In</a>
                     </div>
                 </div>
             </div>
@@ -405,7 +485,8 @@
                     <div class="logo" style="margin-bottom: 16px;">
                         <i data-lucide="file-text"></i> PDF Toolkit
                     </div>
-                    <p style="color: var(--text-muted); font-size: 0.9rem;">The simplest, most secure way to manage your PDF files. Processed entirely in your browser.</p>
+                    <p style="color: var(--text-muted); font-size: 0.9rem;">The simplest, most secure way to manage your
+                        PDF files. Processed entirely in your browser.</p>
                 </div>
                 <div class="footer-col">
                     <h4>Quick Links</h4>
@@ -432,9 +513,14 @@
 
     <!-- Global Loading Overlay -->
     <div id="global-loader" class="modal-backdrop">
-        <div style="background: white; border-radius: 12px; padding: 40px; text-align: center; box-shadow: var(--shadow-lg); border: 1px solid var(--border); max-width: 320px; width: 100%;">
-            <div class="spinner" style="border-color: rgba(14, 165, 233, 0.2); border-top-color: var(--primary); width: 40px; height: 40px; border-width: 3px; margin-bottom: 16px;"></div>
-            <h3 id="global-loader-text" style="font-weight: 600; margin-bottom: 6px; font-size: 1.15rem; color: var(--text-main);">Signing out...</h3>
+        <div
+            style="background: white; border-radius: 12px; padding: 40px; text-align: center; box-shadow: var(--shadow-lg); border: 1px solid var(--border); max-width: 320px; width: 100%;">
+            <div class="spinner"
+                style="border-color: rgba(14, 165, 233, 0.2); border-top-color: var(--primary); width: 40px; height: 40px; border-width: 3px; margin-bottom: 16px;">
+            </div>
+            <h3 id="global-loader-text"
+                style="font-weight: 600; margin-bottom: 6px; font-size: 1.15rem; color: var(--text-main);">Signing
+                out...</h3>
             <p style="color: var(--text-muted); font-size: 0.85rem;">Clearing secure session</p>
         </div>
     </div>
@@ -450,20 +536,31 @@
             </button>
             <div class="google-header">
                 <!-- SVG Google Logo -->
-                <svg class="google-logo-svg" viewBox="0 0 74 24" width="74" height="24" xmlns="http://www.w3.org/2000/svg">
+                <svg class="google-logo-svg" viewBox="0 0 74 24" width="74" height="24"
+                    xmlns="http://www.w3.org/2000/svg">
                     <g fill="none" fill-rule="evenodd">
-                        <path d="M9.24 5H1v14h8.24c3.84 0 6.76-2.8 6.76-7s-2.92-7-6.76-7zm-.12 11.24H3.72V7.76h5.4c2.3 0 4.12 1.62 4.12 4.24s-1.82 4.24-4.12 4.24z" fill="#4285F4"/>
-                        <path d="M25.32 8.76c-3.16 0-5.74 2.5-5.74 5.76s2.58 5.76 5.74 5.76 5.74-2.5 5.74-5.76-2.58-5.76-5.74-5.76zm0 8.76c-1.78 0-3.3-1.46-3.3-3s1.52-3 3.3-3 3.3 1.46 3.3 3-1.52 3-3.3 3z" fill="#EA4335"/>
-                        <path d="M38.82 8.76c-3.16 0-5.74 2.5-5.74 5.76s2.58 5.76 5.74 5.76 5.74-2.5 5.74-5.76-2.58-5.76-5.74-5.76zm0 8.76c-1.78 0-3.3-1.46-3.3-3s1.52-3 3.3-3 3.3 1.46 3.3 3-1.52 3-3.3 3z" fill="#FBBC05"/>
-                        <path d="M51.84 8.76c-3.08 0-5.7 2.44-5.7 5.76s2.56 5.76 5.7 5.76c1.78 0 3.02-.78 3.76-1.68h.1v1.28c0 2.2-1.18 3.38-3.08 3.38-1.56 0-2.52-1.12-2.92-2.08l-2.38 1c.7 1.66 2.5 3.84 5.3 3.84 3.6 0 6.06-2.12 6.06-6v-10h-2.62v1.04h-.12c-.74-1-1.98-1.76-3.82-1.76zm-.22 8.76c-1.72 0-3.02-1.48-3.02-3.04s1.3-3.02 3.02-3.02c1.7 0 3.04 1.48 3.04 3.02s-1.34 3.04-3.04 3.04z" fill="#4285F4"/>
-                        <path d="M60.6 1.76h2.7v18.5h-2.7z" fill="#34A853"/>
-                        <path d="M70.92 8.76c-2.8 0-5.18 2.22-5.18 5.76s2.32 5.76 5.18 5.76c2.3 0 3.86-1.42 4.46-2.3l-2.02-1.34c-.46.7-1.16 1.28-2.44 1.28-1.46 0-2.32-.9-2.94-1.9l7.38-3.04-1.44-4.22zm-.22 2.66c1.1 0 1.94.56 2.24 1.28l-4.7 1.94c-.16-1.92 1.44-3.22 2.46-3.22z" fill="#EA4335"/>
+                        <path
+                            d="M9.24 5H1v14h8.24c3.84 0 6.76-2.8 6.76-7s-2.92-7-6.76-7zm-.12 11.24H3.72V7.76h5.4c2.3 0 4.12 1.62 4.12 4.24s-1.82 4.24-4.12 4.24z"
+                            fill="#4285F4" />
+                        <path
+                            d="M25.32 8.76c-3.16 0-5.74 2.5-5.74 5.76s2.58 5.76 5.74 5.76 5.74-2.5 5.74-5.76-2.58-5.76-5.74-5.76zm0 8.76c-1.78 0-3.3-1.46-3.3-3s1.52-3 3.3-3 3.3 1.46 3.3 3-1.52 3-3.3 3z"
+                            fill="#EA4335" />
+                        <path
+                            d="M38.82 8.76c-3.16 0-5.74 2.5-5.74 5.76s2.58 5.76 5.74 5.76 5.74-2.5 5.74-5.76-2.58-5.76-5.74-5.76zm0 8.76c-1.78 0-3.3-1.46-3.3-3s1.52-3 3.3-3 3.3 1.46 3.3 3-1.52 3-3.3 3z"
+                            fill="#FBBC05" />
+                        <path
+                            d="M51.84 8.76c-3.08 0-5.7 2.44-5.7 5.76s2.56 5.76 5.7 5.76c1.78 0 3.02-.78 3.76-1.68h.1v1.28c0 2.2-1.18 3.38-3.08 3.38-1.56 0-2.52-1.12-2.92-2.08l-2.38 1c.7 1.66 2.5 3.84 5.3 3.84 3.6 0 6.06-2.12 6.06-6v-10h-2.62v1.04h-.12c-.74-1-1.98-1.76-3.82-1.76zm-.22 8.76c-1.72 0-3.02-1.48-3.02-3.04s1.3-3.02 3.02-3.02c1.7 0 3.04 1.48 3.04 3.02s-1.34 3.04-3.04 3.04z"
+                            fill="#4285F4" />
+                        <path d="M60.6 1.76h2.7v18.5h-2.7z" fill="#34A853" />
+                        <path
+                            d="M70.92 8.76c-2.8 0-5.18 2.22-5.18 5.76s2.32 5.76 5.18 5.76c2.3 0 3.86-1.42 4.46-2.3l-2.02-1.34c-.46.7-1.16 1.28-2.44 1.28-1.46 0-2.32-.9-2.94-1.9l7.38-3.04-1.44-4.22zm-.22 2.66c1.1 0 1.94.56 2.24 1.28l-4.7 1.94c-.16-1.92 1.44-3.22 2.46-3.22z"
+                            fill="#EA4335" />
                     </g>
                 </svg>
                 <h3 class="google-title">Choose an account</h3>
                 <p class="google-subtitle">to continue to PDF Toolkit</p>
             </div>
-            
+
             <div class="google-account-list">
                 <div class="google-account-item" data-email="hasan.saad898@gmail.com" data-name="Hasan Saad">
                     <div class="google-account-avatar">H</div>
@@ -487,7 +584,7 @@
                     </div>
                 </div>
             </div>
-            
+
             <div class="google-footer-links">
                 <span>English (United States)</span>
                 <div>
@@ -504,4 +601,5 @@
     <script src="js/pdf-tools.js"></script>
     <script src="js/tool-content.js"></script>
 </body>
+
 </html>
