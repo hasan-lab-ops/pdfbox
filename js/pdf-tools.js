@@ -192,23 +192,34 @@ class PDFToWordConverter {
 
   /**
    * Horizontal gap threshold (in PDF user-space units, ≈ pixels at 1x).
-   * Increase to 6–8 if words still merge; decrease to 2–3 for very tight fonts.
+   * RTL Arabic formula: gap = (current.x − current.width) − next.x
+   *   where current.x is the right edge, current.width is the advance width,
+   *   so (current.x − current.width) is the LEFT edge of the current word,
+   *   and next.x is the RIGHT edge of the next word (to the left in RTL flow).
+   * Any gap > 1.5 px is treated as a word boundary and a space is injected.
    */
-  static GAP_THRESHOLD = 4;
+  static GAP_THRESHOLD = 1.5;
 
   /**
    * Compute the visual gap between two consecutive text items on the same line.
-   * For RTL text the X axis decreases, so «prevItem» is to the right.
-   *   gap = prevItem.x − (currItem.x + currItem.width)
-   * For LTR text the X axis increases:
+   *
+   * RTL (Arabic): items are sorted descending by X (right→left).
+   *   prevItem is to the RIGHT, currItem is to the LEFT.
+   *   end of prevItem  = prevItem.x − prevItem.width  (its left edge)
+   *   start of currItem = currItem.x                  (its right edge)
+   *   gap = (prevItem.x − prevItem.width) − currItem.x
+   *
+   * LTR: items are sorted ascending by X (left→right).
+   *   end of prevItem  = prevItem.x + prevItem.width  (its right edge)
+   *   start of currItem = currItem.x                  (its left edge)
    *   gap = currItem.x − (prevItem.x + prevItem.width)
    *
-   * A positive value means there is empty space between them.
+   * A positive value means there is visible empty space between the two items.
    */
   computeHorizontalGap(prevItem, currItem, isRtl) {
     if (isRtl) {
-      // prevItem sits to the right of currItem in RTL flow
-      return prevItem.x - (currItem.x + (currItem.width || 0));
+      // end of word = left edge = x − width; start of next word = right edge = x
+      return (prevItem.x - (prevItem.width || 0)) - currItem.x;
     }
     return currItem.x - (prevItem.x + (prevItem.width || 0));
   }
@@ -463,8 +474,10 @@ class PDFToWordConverter {
             alignment: isRtl
               ? docxLib.AlignmentType.RIGHT
               : docxLib.AlignmentType.LEFT,
-            // rightToLeft on Paragraph sets the paragraph-level bidi flag (w:bidi)
-            rightToLeft: isRtl,
+            // bidirectional + rightToLeft both set the paragraph-level bidi flag (w:bidi)
+            // bidirectional is the canonical docx.js v7 property name
+            bidirectional: isRtl,
+            rightToLeft:   isRtl,
             spacing: isRtl
               ? {
                   // 360 twips = 1.5× line height; prevents diacritic/nunation overlap
