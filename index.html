@@ -34,8 +34,12 @@
     <!-- html2canvas: HTML to image conversion (used with jsPDF) -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     
-    <!-- الرابط الجديد والمصحح لمكتبة docx المخصصة للمتصفح مباشرة (UMD) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/docx/7.8.2/docx.min.js"></script>
+    <!-- مكتبة docx المخصصة للمتصفح مباشرة عبر ESM -->
+    <script type="module">
+        import * as docxModule from 'https://cdn.jsdelivr.net/npm/docx@7.8.2/+esm';
+        window.docx = docxModule;
+        window.docxReady = Promise.resolve(docxModule);
+    </script>
     
     <!-- Mammoth.js: DOCX file reading -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.min.js"></script>

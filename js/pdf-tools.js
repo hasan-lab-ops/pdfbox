@@ -19,6 +19,43 @@ class PDFToWordConverter {
   constructor() {
     this.pdfDoc = null;
     this.docxLib = globalThis.docx || window.docx || null;
+    this.docxReadyPromise = null;
+  }
+
+  async getDocxLib() {
+    if (this.docxLib) {
+      return this.docxLib;
+    }
+
+    if (this.docxReadyPromise) {
+      this.docxLib = await this.docxReadyPromise;
+      return this.docxLib;
+    }
+
+    this.docxReadyPromise = (async () => {
+      if (globalThis.docx) {
+        this.docxLib = globalThis.docx;
+        return this.docxLib;
+      }
+
+      if (window.docx) {
+        this.docxLib = window.docx;
+        return this.docxLib;
+      }
+
+      try {
+        const module = await import('https://cdn.jsdelivr.net/npm/docx@7.8.2/+esm');
+        this.docxLib = module;
+        globalThis.docx = module;
+        window.docx = module;
+        return this.docxLib;
+      } catch (error) {
+        throw new Error(`Unable to load the DOCX library: ${error.message}`);
+      }
+    })();
+
+    this.docxLib = await this.docxReadyPromise;
+    return this.docxLib;
   }
 
   async convert(file) {
@@ -48,21 +85,23 @@ class PDFToWordConverter {
       
       showLoading('📝 Creating Word document...');
       
-      if (!this.docxLib) {
+      const docxLib = await this.getDocxLib();
+
+      if (!docxLib || !docxLib.Document || !docxLib.Packer) {
         throw new Error('The docx library failed to load from the CDN.');
       }
 
-      // Create DOCX using the globally loaded docx library
-      const doc = new this.docxLib.Document({
+      // Create DOCX using the loaded docx library
+      const doc = new docxLib.Document({
         sections: [
           {
             properties: {},
-            children: this.createWordContent(pageTexts, this.docxLib)
+            children: this.createWordContent(pageTexts, docxLib)
           }
         ]
       });
       
-      const blob = await this.docxLib.Packer.toBlob(doc);
+      const blob = await docxLib.Packer.toBlob(doc);
       return blob;
       
     } catch (error) {
