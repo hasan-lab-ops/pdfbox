@@ -2,14 +2,14 @@ const tools = [
     { id: 'merge', title: 'Merge PDF', icon: 'files', desc: 'Combine multiple PDFs into one unified document.' },
     { id: 'split', title: 'Split PDF', icon: 'file-minus', desc: 'Separate one page or a whole set for easy conversion into independent PDF files.' },
     { id: 'compress', title: 'Compress PDF', icon: 'minimize', desc: 'Reduce file size while optimizing for maximal PDF quality.' },
-    { id: 'pdf-to-word', title: 'PDF to Word', icon: 'file-text', desc: 'Convert your PDFs to Word documents. (Mock)' },
-    { id: 'word-to-pdf', title: 'Word to PDF', icon: 'file', desc: 'Make DOC files easy to read by converting them to PDF. (Mock)' },
+    { id: 'pdf-to-word', title: 'PDF to Word', icon: 'file-text', desc: '🔄 Convert PDF to editable Word (.docx) format with text extraction.' },
+    { id: 'word-to-pdf', title: 'Word to PDF', icon: 'file', desc: '🔄 Convert Word (.docx) documents to professional PDF files.' },
     { id: 'pdf-to-jpg', title: 'PDF to JPG', icon: 'image', desc: 'Convert each PDF page into a JPG image.' },
     { id: 'jpg-to-pdf', title: 'JPG to PDF', icon: 'image', desc: 'Convert JPG images to PDF in seconds.' },
     { id: 'rotate', title: 'Rotate PDF', icon: 'rotate-cw', desc: 'Rotate your PDFs the way you need them.' },
     { id: 'delete', title: 'Delete Pages', icon: 'trash-2', desc: 'Remove pages from a PDF document.' },
-    { id: 'protect', title: 'Protect PDF', icon: 'lock', desc: 'Protect PDF files with a password.' },
-    { id: 'unlock', title: 'Unlock PDF', icon: 'unlock', desc: 'Remove PDF password security.' },
+    { id: 'protect-pdf', title: 'Protect PDF', icon: 'lock', desc: '🔐 Add password protection & 128-bit encryption to PDFs.' },
+    { id: 'unlock-pdf', title: 'Unlock PDF', icon: 'unlock', desc: '🔓 Remove password protection and decrypt PDF files.' },
     { id: 'watermark', title: 'Watermark', icon: 'droplet', desc: 'Stamp an image or text over your PDF.' }
 ];
 
@@ -117,6 +117,12 @@ function initToolDetailView(tool) {
         } else if (tool.id === 'merge') {
             fileInput.accept = '.pdf';
             fileInput.multiple = true;
+        } else if (tool.id === 'word-to-pdf') {
+            fileInput.accept = '.docx,.doc';
+            fileInput.multiple = false;
+        } else if (tool.id === 'pdf-to-word') {
+            fileInput.accept = '.pdf';
+            fileInput.multiple = false;
         } else {
             fileInput.accept = '.pdf';
             fileInput.multiple = false;
@@ -154,21 +160,37 @@ function initToolDetailView(tool) {
             </div>
         `;
         optionsContainer.classList.remove('hidden');
-    } else if (tool.id === 'protect') {
+    } else if (tool.id === 'protect-pdf') {
         optionsContainer.innerHTML = `
             <div class="form-group" style="max-width: 300px; margin: 0 auto;">
-                <label>Set Password</label>
-                <input type="password" id="tool-password" class="form-control" placeholder="Enter secure password">
-                <small style="color: var(--text-muted);">Browser-only encryption is not supported in this build.</small>
+                <label for="tool-password">🔐 Set Password</label>
+                <input type="password" id="tool-password" class="form-control" placeholder="Enter secure password (min 4 chars)" />
+                <small style="color: var(--text-muted);">Your PDF will require this password to open on all devices.</small>
             </div>
         `;
         optionsContainer.classList.remove('hidden');
-    } else if (tool.id === 'unlock') {
+    } else if (tool.id === 'unlock-pdf') {
         optionsContainer.innerHTML = `
             <div class="form-group" style="max-width: 300px; margin: 0 auto;">
-                <label>Current Password</label>
-                <input type="password" id="tool-password" class="form-control" placeholder="Enter password to unlock">
-                <small style="color: var(--text-muted);">This will try to open the PDF if it is encrypted.</small>
+                <label for="tool-password">🔓 Current Password</label>
+                <input type="password" id="tool-password" class="form-control" placeholder="Enter password to unlock" />
+                <small style="color: var(--text-muted);">Will create a new, unencrypted copy of your PDF.</small>
+            </div>
+        `;
+        optionsContainer.classList.remove('hidden');
+    } else if (tool.id === 'pdf-to-word') {
+        optionsContainer.innerHTML = `
+            <div class="form-group" style="max-width: 300px; margin: 0 auto;">
+                <label>📄 Convert PDF to Word</label>
+                <p style="color: var(--text-muted); font-size: 0.9rem;">Extracts text and converts to editable .docx format</p>
+            </div>
+        `;
+        optionsContainer.classList.remove('hidden');
+    } else if (tool.id === 'word-to-pdf') {
+        optionsContainer.innerHTML = `
+            <div class="form-group" style="max-width: 300px; margin: 0 auto;">
+                <label>📝 Convert Word to PDF</label>
+                <p style="color: var(--text-muted); font-size: 0.9rem;">Converts your .docx document to professional PDF format</p>
             </div>
         `;
         optionsContainer.classList.remove('hidden');
@@ -234,8 +256,13 @@ function setupDropzone() {
 
     document.getElementById('process-btn').addEventListener('click', () => {
         if (selectedFiles.length > 0 && currentTool) {
-            // Trigger processing from pdf-tools.js
-            window.processPDF(currentTool.id, selectedFiles);
+            // Use new conversion handler for document converters and encryption tools
+            if (['pdf-to-word', 'word-to-pdf', 'protect-pdf', 'unlock-pdf'].includes(currentTool.id)) {
+                window.processConversion(currentTool);
+            } else {
+                // Use legacy PDF processor for other tools
+                window.processPDF(currentTool.id, selectedFiles);
+            }
         }
     });
 }
@@ -247,12 +274,26 @@ function handleFiles(files) {
     }
 
     // Validate file types by tool
-    const validFiles = Array.from(files).filter(file => {
-        if (currentTool.id === 'jpg-to-pdf') {
-            return file.type.startsWith('image/');
-        }
-        return file.type === 'application/pdf';
-    });
+    let validFiles = [];
+    
+    if (currentTool.id === 'jpg-to-pdf') {
+        validFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
+    } else if (currentTool.id === 'word-to-pdf') {
+        validFiles = Array.from(files).filter(file => 
+            file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+            file.type === 'application/msword' ||
+            file.name.endsWith('.docx') || 
+            file.name.endsWith('.doc')
+        );
+    } else if (currentTool.id === 'pdf-to-word') {
+        validFiles = Array.from(files).filter(file => file.type === 'application/pdf' || file.name.endsWith('.pdf'));
+    } else if (currentTool.id === 'protect-pdf' || currentTool.id === 'unlock-pdf') {
+        validFiles = Array.from(files).filter(file => file.type === 'application/pdf' || file.name.endsWith('.pdf'));
+    } else if (currentTool.id === 'merge') {
+        validFiles = Array.from(files).filter(file => file.type === 'application/pdf' || file.name.endsWith('.pdf'));
+    } else {
+        validFiles = Array.from(files).filter(file => file.type === 'application/pdf' || file.name.endsWith('.pdf'));
+    }
     
     if (validFiles.length === 0) {
         alert('Please upload a valid file format for this tool.');

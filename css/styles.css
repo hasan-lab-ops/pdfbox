@@ -821,6 +821,7 @@ footer {
   flex-direction: column;
   gap: 12px;
   z-index: 2000;
+  pointer-events: none;
 }
 
 .toast {
@@ -835,25 +836,51 @@ footer {
   color: var(--text-main);
   font-weight: 500;
   font-size: 0.9rem;
-  transform: translateX(120%);
-  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transform: translateX(0);
+  opacity: 1;
+  animation: slideInToast 0.3s ease-in-out;
   pointer-events: auto;
 }
 
-.toast.show {
-  transform: translateX(0);
+.toast.toast-removing {
+  animation: slideOutToast 0.3s ease-in-out;
 }
 
 .toast-success {
   border-left-color: var(--success);
+  color: var(--success);
 }
 
 .toast-error {
   border-left-color: var(--error);
+  color: var(--error);
 }
 
 .toast-info {
   border-left-color: var(--primary);
+  color: var(--primary);
+}
+
+@keyframes slideInToast {
+  from {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOutToast {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(400px);
+    opacity: 0;
+  }
 }
 
 /* Loading Spinner */
