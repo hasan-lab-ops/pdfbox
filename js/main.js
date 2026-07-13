@@ -40,7 +40,16 @@ function initRouter() {
             const tool = tools.find(t => t.id === toolId);
             
             if (tool) {
-                document.getElementById('view-tool-detail').classList.remove('hidden');
+                const toolView = document.getElementById('view-tool-detail');
+                toolView.classList.remove('hidden');
+                toolView.classList.remove('view-animate-enter');
+                void toolView.offsetWidth;
+                toolView.classList.add('view-animate-enter');
+                const cleanup = () => {
+                    toolView.classList.remove('view-animate-enter');
+                    toolView.removeEventListener('animationend', cleanup);
+                };
+                toolView.addEventListener('animationend', cleanup);
                 initToolDetailView(tool);
             } else {
                 window.location.hash = '#home';
@@ -100,6 +109,20 @@ function initToolDetailView(tool) {
     
     resetWorkspace();
     
+    const fileInput = document.getElementById('file-input');
+    if (fileInput) {
+        if (tool.id === 'jpg-to-pdf') {
+            fileInput.accept = 'image/*';
+            fileInput.multiple = true;
+        } else if (tool.id === 'merge') {
+            fileInput.accept = '.pdf';
+            fileInput.multiple = true;
+        } else {
+            fileInput.accept = '.pdf';
+            fileInput.multiple = false;
+        }
+    }
+    
     // Inject dynamic SEO article
     const articleContainer = document.getElementById('tool-detail-article');
     if (articleContainer && window.toolArticles && window.toolArticles[tool.id]) {
@@ -113,11 +136,30 @@ function initToolDetailView(tool) {
     optionsContainer.innerHTML = '';
     optionsContainer.classList.add('hidden');
     
-    if (tool.id === 'protect') {
+    if (tool.id === 'split') {
+        optionsContainer.innerHTML = `
+            <div class="form-group" style="max-width: 300px; margin: 0 auto;">
+                <label>Page Range</label>
+                <input type="text" id="tool-range" class="form-control" placeholder="e.g. 1-3,5" />
+                <small style="color: var(--text-muted);">Leave blank to keep all pages.</small>
+            </div>
+        `;
+        optionsContainer.classList.remove('hidden');
+    } else if (tool.id === 'delete') {
+        optionsContainer.innerHTML = `
+            <div class="form-group" style="max-width: 300px; margin: 0 auto;">
+                <label>Pages to Delete</label>
+                <input type="text" id="tool-range" class="form-control" placeholder="e.g. 2,4-5" />
+                <small style="color: var(--text-muted);">Use commas and ranges to remove pages.</small>
+            </div>
+        `;
+        optionsContainer.classList.remove('hidden');
+    } else if (tool.id === 'protect') {
         optionsContainer.innerHTML = `
             <div class="form-group" style="max-width: 300px; margin: 0 auto;">
                 <label>Set Password</label>
                 <input type="password" id="tool-password" class="form-control" placeholder="Enter secure password">
+                <small style="color: var(--text-muted);">Browser-only encryption is not supported in this build.</small>
             </div>
         `;
         optionsContainer.classList.remove('hidden');
@@ -126,6 +168,7 @@ function initToolDetailView(tool) {
             <div class="form-group" style="max-width: 300px; margin: 0 auto;">
                 <label>Current Password</label>
                 <input type="password" id="tool-password" class="form-control" placeholder="Enter password to unlock">
+                <small style="color: var(--text-muted);">This will try to open the PDF if it is encrypted.</small>
             </div>
         `;
         optionsContainer.classList.remove('hidden');
@@ -198,7 +241,12 @@ function setupDropzone() {
 }
 
 function handleFiles(files) {
-    // Validate
+    if (!currentTool) {
+        alert('Please select a tool before uploading files.');
+        return;
+    }
+
+    // Validate file types by tool
     const validFiles = Array.from(files).filter(file => {
         if (currentTool.id === 'jpg-to-pdf') {
             return file.type.startsWith('image/');
@@ -211,11 +259,10 @@ function handleFiles(files) {
         return;
     }
     
-    if (['merge'].includes(currentTool.id) === false && validFiles.length > 1) {
-        // Most tools only accept 1 file, merge accepts multiple
-        selectedFiles = [validFiles[0]];
-    } else {
+    if (currentTool.id === 'merge' || currentTool.id === 'jpg-to-pdf') {
         selectedFiles = validFiles;
+    } else {
+        selectedFiles = [validFiles[0]];
     }
     
     updateFileListUI();

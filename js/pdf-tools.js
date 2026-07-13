@@ -13,12 +13,11 @@ window.processPDF = async function(toolId, files) {
                 resultFileName = 'merged.pdf';
                 break;
             case 'split':
-                // For demo, just extract first page
-                resultBytes = await extractFirstPage(files[0]);
-                resultFileName = 'split-page-1.pdf';
+                const splitRange = document.getElementById('tool-range')?.value || '';
+                resultBytes = await extractPages(files[0], splitRange);
+                resultFileName = 'split-output.pdf';
                 break;
             case 'compress':
-                // pdf-lib can't deeply compress images, but resaving without objects can help
                 resultBytes = await compressPDF(files[0]);
                 resultFileName = 'compressed.pdf';
                 break;
@@ -28,8 +27,8 @@ window.processPDF = async function(toolId, files) {
                 resultFileName = 'rotated.pdf';
                 break;
             case 'delete':
-                // For demo, delete last page
-                resultBytes = await deleteLastPage(files[0]);
+                const deleteRange = document.getElementById('tool-range')?.value || '';
+                resultBytes = await deletePages(files[0], deleteRange);
                 resultFileName = 'deleted-pages.pdf';
                 break;
             case 'protect':
@@ -112,20 +111,64 @@ async function mergePDFs(files) {
     return await mergedPdf.save();
 }
 
-async function extractFirstPage(file) {
+function parsePageRange(rangeInput, pageCount) {
+    if (!rangeInput || !rangeInput.trim()) {
+        return Array.from({ length: pageCount }, (_, index) => index);
+    }
+
+    const pages = new Set();
+    const tokens = rangeInput.split(',').map(token => token.trim()).filter(Boolean);
+
+    for (const token of tokens) {
+        const rangeMatch = token.match(/^(\d+)\s*-\s*(\d+)$/);
+        if (rangeMatch) {
+            let start = parseInt(rangeMatch[1], 10);
+            let end = parseInt(rangeMatch[2], 10);
+            if (start > end) [start, end] = [end, start];
+            for (let page = start; page <= end; page++) {
+                if (page < 1 || page > pageCount) {
+                    throw new Error(`Invalid page range: ${page} is outside document bounds.`);
+                }
+                pages.add(page - 1);
+            }
+            continue;
+        }
+
+        const singleMatch = token.match(/^(\d+)$/);
+        if (singleMatch) {
+            const page = parseInt(singleMatch[1], 10);
+            if (page < 1 || page > pageCount) {
+                throw new Error(`Invalid page number: ${page} is outside document bounds.`);
+            }
+            pages.add(page - 1);
+            continue;
+        }
+
+        throw new Error(`Invalid page range format: '${token}'. Use formats like 1-3,5.`);
+    }
+
+    return Array.from(pages).sort((a, b) => a - b);
+}
+
+async function extractPages(file, range) {
     const buffer = await fileToBuffer(file);
-    const pdf = await PDFDocument.load(buffer);
+    const pdf = await PDFDocument.load(buffer, { ignoreEncryption: true });
+    const pageCount = pdf.getPageCount();
+    const pageIndices = parsePageRange(range, pageCount);
+
     const newPdf = await PDFDocument.create();
-    const [page] = await newPdf.copyPages(pdf, [0]);
-    newPdf.addPage(page);
+    const pages = await newPdf.copyPages(pdf, pageIndices);
+    pages.forEach((page) => newPdf.addPage(page));
     return await newPdf.save();
 }
 
 async function compressPDF(file) {
     const buffer = await fileToBuffer(file);
-    const pdf = await PDFDocument.load(buffer);
-    // Saving without keeping objects uncompressed will often reduce size a bit if it was bloated
-    return await pdf.save({ useObjectStreams: true }); 
+    const pdf = await PDFDocument.load(buffer, { ignoreEncryption: true });
+    const newPdf = await PDFDocument.create();
+    const pages = await newPdf.copyPages(pdf, pdf.getPageIndices());
+    pages.forEach((page) => newPdf.addPage(page));
+    return await newPdf.save({ useObjectStreams: true, updateFieldAppearances: false });
 }
 
 async function rotatePDF(file, degreesVal) {
@@ -139,13 +182,14 @@ async function rotatePDF(file, degreesVal) {
     return await pdf.save();
 }
 
-async function deleteLastPage(file) {
+async function deletePages(file, pagesToDelete) {
     const buffer = await fileToBuffer(file);
-    const pdf = await PDFDocument.load(buffer);
+    const pdf = await PDFDocument.load(buffer, { ignoreEncryption: true });
     const count = pdf.getPageCount();
-    if (count > 1) {
-        pdf.removePage(count - 1);
-    }
+    const pageIndices = parsePageRange(pagesToDelete, count);
+
+    // Remove pages in reverse order to keep indexes stable
+    pageIndices.reverse().forEach(index => pdf.removePage(index));
     return await pdf.save();
 }
 
@@ -160,8 +204,9 @@ async function protectPDF(file, password) {
 
 async function unlockPDF(file, password) {
     const buffer = await fileToBuffer(file);
-    // As above, decrypt requires crypto.
-    return buffer;
+    // If the file is encrypted, ignoreEncryption will attempt to load it without enforcing the password.
+    const pdf = await PDFDocument.load(buffer, { ignoreEncryption: true });
+    return await pdf.save();
 }
 
 async function watermarkPDF(file, text) {
@@ -209,35 +254,42 @@ async function jpgToPdf(files) {
 }
 
 async function pdfToJpg(file) {
-    // using pdf.js
     const buffer = await fileToBuffer(file);
     const typedarray = new Uint8Array(buffer);
-    
     const pdf = await pdfjsLib.getDocument({ data: typedarray }).promise;
-    
-    // For demo, just convert the first page
-    const page = await pdf.getPage(1);
-    const viewport = page.getViewport({ scale: 2.0 }); // High res
-    
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
-    canvas.height = viewport.height;
-    canvas.width = viewport.width;
-    
-    await page.render({
-        canvasContext: context,
-        viewport: viewport
-    }).promise;
-    
-    // Download image
-    canvas.toBlob(blob => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = 'page-1.jpg';
-        a.click();
-        URL.revokeObjectURL(url);
-    }, 'image/jpeg', 0.9);
+    const numPages = pdf.numPages;
+
+    for (let pageNumber = 1; pageNumber <= numPages; pageNumber++) {
+        const page = await pdf.getPage(pageNumber);
+        const viewport = page.getViewport({ scale: 2.0 });
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d');
+        canvas.height = viewport.height;
+        canvas.width = viewport.width;
+
+        await page.render({
+            canvasContext: context,
+            viewport: viewport
+        }).promise;
+
+        await new Promise((resolve, reject) => {
+            canvas.toBlob(blob => {
+                if (!blob) {
+                    reject(new Error('Unable to create image blob.'));
+                    return;
+                }
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `page-${pageNumber}.jpg`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+                resolve();
+            }, 'image/jpeg', 0.9);
+        });
+    }
 }
 
 async function mockConversion(toolId, file) {
