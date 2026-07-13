@@ -76,9 +76,18 @@ class PDFToWordConverter {
         const extractedText = await this.extractTextFromPage(page, pageNum);
         console.log(`Extracted text from page ${pageNum}:`, extractedText);
 
-        if (extractedText) {
+        const textLength = (extractedText || '').replace(/\s+/g, '').length;
+        if (textLength >= 10) {
           pageTexts.push(extractedText);
+          continue;
         }
+
+        showLoading('🖼️ Reading text from images, please wait...');
+        showConversionNotice('The document appears to contain scanned images. OCR is running in your browser to extract text.', 'warning');
+
+        const ocrText = await this.performOcrOnPage(page, pageNum);
+        console.log(`OCR text from page ${pageNum}:`, ocrText);
+        pageTexts.push(ocrText || extractedText || '');
       }
 
       const fullText = pageTexts.join('\n\n');
@@ -142,6 +151,39 @@ class PDFToWordConverter {
       hideLoading();
       throw new Error(`PDF to Word conversion failed: ${error.message}`);
     }
+  }
+
+  async performOcrOnPage(page, pageNum) {
+    if (!window.Tesseract || !window.Tesseract.recognize) {
+      throw new Error('Tesseract.js failed to load from the CDN.');
+    }
+
+    const viewport = page.getViewport({ scale: 2.0 });
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d');
+
+    if (!context) {
+      throw new Error('Unable to create an image canvas for OCR.');
+    }
+
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+
+    await page.render({
+      canvasContext: context,
+      viewport
+    }).promise;
+
+    const result = await window.Tesseract.recognize(canvas, 'ara+eng', {
+      logger: (message) => {
+        if (message?.status === 'recognizing text' && typeof message.progress === 'number') {
+          const progressPercent = Math.round(message.progress * 100);
+          showLoading(`🖼️ Reading text from images... ${progressPercent}%`);
+        }
+      }
+    });
+
+    return (result?.data?.text || '').replace(/\s+/g, ' ').trim();
   }
 
   async extractTextFromPage(page, pageNum) {
