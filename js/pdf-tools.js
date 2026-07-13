@@ -61,37 +61,49 @@ class PDFToWordConverter {
   async convert(file) {
     try {
       showLoading('📄 Extracting text from PDF...');
-      
+
       const arrayBuffer = await this.readFile(file);
       this.pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      
+
       const pageTexts = [];
-      
-      for (let pageNum = 1; pageNum <= this.pdfDoc.numPages; pageNum++) {
-        showLoading(`📖 Processing page ${pageNum} of ${this.pdfDoc.numPages}...`);
-        
+      const pageCount = this.pdfDoc.numPages;
+
+      for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
+        showLoading(`📖 Processing page ${pageNum} of ${pageCount}...`);
+
         const page = await this.pdfDoc.getPage(pageNum);
-        const textContent = await page.getTextContent();
-        
-        const text = textContent.items
-          .map(item => item.str)
-          .join(' ')
-          .trim();
-        
-        if (text) {
-          pageTexts.push(text);
+        const extractedText = await this.extractTextFromPage(page, pageNum);
+        console.log(`Extracted text from page ${pageNum}:`, extractedText);
+
+        if (extractedText) {
+          pageTexts.push(extractedText);
         }
       }
-      
+
+      const fullText = pageTexts.join('\n\n');
+      const extractedCharacterCount = fullText.replace(/\s+/g, '').length;
+      console.log('Aggregated extracted text:', fullText);
+      console.log('Extraction summary:', {
+        pageCount,
+        extractedCharacterCount,
+        pageTexts
+      });
+
+      const minimumExpectedCharacters = Math.max(20, pageCount * 20);
+      if (extractedCharacterCount < minimumExpectedCharacters) {
+        showToast('Warning: This document consists of scanned images and does not contain editable text for conversion.', 'error');
+        hideLoading();
+        return null;
+      }
+
       showLoading('📝 Creating Word document...');
-      
+
       const docxLib = await this.getDocxLib();
 
       if (!docxLib || !docxLib.Document || !docxLib.Packer) {
         throw new Error('The docx library failed to load from the CDN.');
       }
 
-      // Create DOCX using the loaded docx library
       const doc = new docxLib.Document({
         sections: [
           {
@@ -117,13 +129,60 @@ class PDFToWordConverter {
           }
         ]
       });
-      
+
       const blob = await docxLib.Packer.toBlob(doc);
+      hideLoading();
       return blob;
-      
+
     } catch (error) {
+      hideLoading();
       throw new Error(`PDF to Word conversion failed: ${error.message}`);
     }
+  }
+
+  async extractTextFromPage(page, pageNum) {
+    const textContent = await page.getTextContent({ disableCombineTextItems: true });
+    const items = (textContent.items || [])
+      .filter((item) => item && typeof item.str === 'string' && item.str.trim())
+      .map((item) => ({
+        text: item.str.replace(/\s+/g, ' ').trim(),
+        x: item.transform?.[4] || 0,
+        y: item.transform?.[5] || 0
+      }));
+
+    if (!items.length) {
+      return '';
+    }
+
+    items.sort((a, b) => b.y - a.y || a.x - b.x);
+
+    const lines = [];
+    const lineTolerance = 7;
+
+    items.forEach((item) => {
+      const currentLine = lines[lines.length - 1];
+      if (!currentLine || Math.abs(item.y - currentLine.y) > lineTolerance) {
+        lines.push({ y: item.y, words: [item] });
+      } else {
+        currentLine.words.push(item);
+      }
+    });
+
+    const orderedLines = lines
+      .map((line) => {
+        const isRtlLine = line.words.some((word) => /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(word.text));
+        const sortedWords = [...line.words].sort((a, b) => (isRtlLine ? b.x - a.x : a.x - b.x));
+        const lineText = sortedWords
+          .map((word) => word.text)
+          .join(' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+
+        return lineText;
+      })
+      .filter(Boolean);
+
+    return orderedLines.join('\n');
   }
 
   createWordContent(pageTexts, docxLib) {
