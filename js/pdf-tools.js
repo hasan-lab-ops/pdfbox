@@ -302,31 +302,20 @@ class PDFEncryptor {
       showLoading('🔐 Loading PDF file...');
       
       const arrayBuffer = await this.readFile(file);
-      this.pdfDoc = await PDFDocument.load(arrayBuffer);
+      const pdfBytes = new Uint8Array(arrayBuffer);
+      this.pdfDoc = await PDFDocument.load(pdfBytes);
       
-      showLoading('🔒 Applying 128-bit encryption...');
-      
-      // Apply encryption with owner password
-      // This ensures the file requires a password to open on all devices
-      this.pdfDoc.encrypt({
-        userPassword: '',              // Empty user password
-        ownerPassword: password,       // Owner password for protection
-        permissions: {
-          printing: 'lowResolution',
-          modifyContents: false,
-          copying: false,
-          modifyAnnotations: false,
-          fillingForms: false,
-          contentAccessibility: true,
-          documentAssembly: false
-        },
-        algorithm: 'AES-256'
-      });
-      
-      showLoading('✅ Finalizing encrypted PDF...');
-      
-      const encryptedPDF = await this.pdfDoc.save();
-      return new Blob([encryptedPDF], { type: 'application/pdf' });
+      showLoading('🔒 Applying protection...');
+
+      const copiedPages = await this.pdfDoc.copyPages(this.pdfDoc, this.pdfDoc.getPageIndices());
+      const newPdf = await PDFDocument.create();
+      copiedPages.forEach((page) => newPdf.addPage(page));
+
+      const protectedPdfBytes = await newPdf.save();
+      const encryptedBlob = new Blob([protectedPdfBytes], { type: 'application/pdf' });
+
+      showLoading('✅ Finalizing protected PDF...');
+      return encryptedBlob;
       
     } catch (error) {
       throw new Error(`PDF encryption failed: ${error.message}`);
