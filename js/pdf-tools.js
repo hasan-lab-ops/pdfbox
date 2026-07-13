@@ -191,20 +191,9 @@ class WordToPDFConverter {
       return this.mammothLib;
     }
 
-    if (window.mammothReady) {
-      await window.mammothReady;
-      if (globalThis.mammoth) {
-        this.mammothLib = globalThis.mammoth;
-        return this.mammothLib;
-      }
-      if (window.mammoth) {
-        this.mammothLib = window.mammoth;
-        return this.mammothLib;
-      }
-    }
-
     try {
-      this.mammothLib = await import('https://cdn.jsdelivr.net/npm/mammoth@1.6.0/+esm');
+      const module = await import('https://cdn.jsdelivr.net/npm/mammoth@1.6.0/+esm');
+      this.mammothLib = module.default || module;
       globalThis.mammoth = this.mammothLib;
       window.mammoth = this.mammothLib;
       return this.mammothLib;
