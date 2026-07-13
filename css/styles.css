@@ -257,6 +257,38 @@ main {
   margin-bottom: 16px;
 }
 
+.conversion-notice {
+  margin: 20px auto 0;
+  max-width: 720px;
+  padding: 14px 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid #f59e0b;
+  background: #fff7ed;
+  color: #9a2c00;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  box-shadow: var(--shadow-sm);
+}
+
+.conversion-notice.hidden {
+  display: none;
+}
+
+.conversion-notice.success {
+  border-color: var(--success);
+  background: #ecfdf5;
+  color: #065f46;
+}
+
+.conversion-notice.error {
+  border-color: var(--error);
+  background: #fef2f2;
+  color: #991b1b;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;

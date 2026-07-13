@@ -217,12 +217,30 @@ function initToolDetailView(tool) {
     }
 }
 
+function showConversionNotice(message, type = 'warning') {
+    const notice = document.getElementById('conversion-notice');
+    if (!notice) return;
+
+    notice.className = `conversion-notice ${type}`;
+    notice.innerHTML = `<i data-lucide="${type === 'success' ? 'check-circle' : type === 'error' ? 'alert-circle' : 'alert-triangle'}"></i><span>${message}</span>`;
+    notice.classList.remove('hidden');
+    lucide.createIcons();
+}
+
+function hideConversionNotice() {
+    const notice = document.getElementById('conversion-notice');
+    if (!notice) return;
+    notice.className = 'conversion-notice hidden';
+    notice.innerHTML = '';
+}
+
 function resetWorkspace() {
     document.getElementById('file-list').classList.add('hidden');
     document.getElementById('file-list').innerHTML = '';
     document.getElementById('process-btn').classList.add('hidden');
     document.getElementById('loading-indicator').classList.add('hidden');
     document.getElementById('file-dropzone').classList.remove('hidden');
+    hideConversionNotice();
 }
 
 function setupDropzone() {

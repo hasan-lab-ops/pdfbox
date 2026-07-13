@@ -60,6 +60,7 @@ class PDFToWordConverter {
 
   async convert(file) {
     try {
+      hideConversionNotice();
       showLoading('📄 Extracting text from PDF...');
 
       const arrayBuffer = await this.readFile(file);
@@ -91,7 +92,9 @@ class PDFToWordConverter {
 
       const minimumExpectedCharacters = Math.max(20, pageCount * 20);
       if (extractedCharacterCount < minimumExpectedCharacters) {
-        showToast('Warning: This document consists of scanned images and does not contain editable text for conversion.', 'error');
+        const scannedMessage = 'Warning: This document consists of scanned images and does not contain editable text for conversion.';
+        showConversionNotice(scannedMessage, 'warning');
+        showToast(scannedMessage, 'error');
         hideLoading();
         return null;
       }
@@ -131,6 +134,7 @@ class PDFToWordConverter {
       });
 
       const blob = await docxLib.Packer.toBlob(doc);
+      hideConversionNotice();
       hideLoading();
       return blob;
 
@@ -612,6 +616,7 @@ window.processConversion = async function(currentTool) {
     }
     
     if (blob) {
+      hideConversionNotice();
       hideLoading();
       downloadFile(blob, outputFilename);
       showToast(`✅ Conversion successful! Downloaded: ${outputFilename}`, 'success');
