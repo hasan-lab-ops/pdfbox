@@ -186,16 +186,66 @@ class PDFToWordConverter {
     return (result?.data?.text || '').replace(/\s+/g, ' ').trim();
   }
 
+  // ---------------------------------------------------------------------------
+  // ARABIC TEXT EXTRACTION ENGINE — gap-aware, RTL-safe
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Horizontal gap threshold (in PDF user-space units, ≈ pixels at 1x).
+   * Increase to 6–8 if words still merge; decrease to 2–3 for very tight fonts.
+   */
+  static GAP_THRESHOLD = 4;
+
+  /**
+   * Compute the visual gap between two consecutive text items on the same line.
+   * For RTL text the X axis decreases, so «prevItem» is to the right.
+   *   gap = prevItem.x − (currItem.x + currItem.width)
+   * For LTR text the X axis increases:
+   *   gap = currItem.x − (prevItem.x + prevItem.width)
+   *
+   * A positive value means there is empty space between them.
+   */
+  computeHorizontalGap(prevItem, currItem, isRtl) {
+    if (isRtl) {
+      // prevItem sits to the right of currItem in RTL flow
+      return prevItem.x - (currItem.x + (currItem.width || 0));
+    }
+    return currItem.x - (prevItem.x + (prevItem.width || 0));
+  }
+
+  /**
+   * Clean up the assembled line text:
+   *  - Collapse runs of whitespace to a single space
+   *  - Remove spaces around Arabic-only punctuation
+   *  - Trim edges
+   */
+  normalizeArabicText(text) {
+    return text
+      .replace(/[ \t]+/g, ' ')                    // collapse whitespace
+      .replace(/ ([،؛؟!،])/g, '$1')               // no space before Arabic punct
+      .replace(/([،؛؟!،]) /g, '$1')               // no space after Arabic punct
+      .trim();
+  }
+
   async extractTextFromPage(page) {
-    const textContent = await page.getTextContent({ disableCombineTextItems: true });
+    // disableCombineTextItems: keep every glyph cluster separate so we can
+    // measure inter-word gaps from the transform matrix.
+    const textContent = await page.getTextContent({
+      disableCombineTextItems: true,
+      includeMarkedContent: false
+    });
+
+    // Map raw pdf.js items to a richer structure that preserves coordinates.
     const items = (textContent.items || [])
       .filter((item) => item && typeof item.str === 'string' && item.str.trim())
       .map((item) => ({
-        text: item.str.replace(/\s+/g, ' ').trim(),
-        x: item.transform?.[4] || 0,
-        y: item.transform?.[5] || 0,
-        width: item.width || 0,
-        height: item.height || 0,
+        // Keep the raw string — we will insert spaces ourselves
+        text: item.str,
+        x:    item.transform?.[4] ?? 0,
+        y:    item.transform?.[5] ?? 0,
+        // item.width is the advance width in user-space units
+        width:    item.width  || 0,
+        height:   item.height || 0,
         fontName: item.fontName || ''
       }));
 
@@ -203,12 +253,15 @@ class PDFToWordConverter {
       return { text: '', paragraphs: [] };
     }
 
-    const sortedItems = [...items].sort((a, b) => b.y - a.y || a.x - b.x);
-    const lines = [];
-    const lineTolerance = 5;
-    const paragraphGapThreshold = 16;
+    // ── Step 1: group items into visual lines by Y proximity ──────────────────
+    // Sort descending by Y first so the topmost line comes first.
+    const sortedByY = [...items].sort((a, b) => b.y - a.y || a.x - b.x);
 
-    sortedItems.forEach((item) => {
+    const lineTolerance       = 5;   // px — items within this Y-band are one line
+    const paragraphGapThreshold = 16; // px — Y-gap larger than this starts a new paragraph
+
+    const lines = [];
+    sortedByY.forEach((item) => {
       const currentLine = lines[lines.length - 1];
       if (!currentLine || Math.abs(item.y - currentLine.y) > lineTolerance) {
         lines.push({ y: item.y, items: [item] });
@@ -217,22 +270,20 @@ class PDFToWordConverter {
       }
     });
 
-    const paragraphs = [];
-    let pendingLines = [];
+    // ── Step 2: group lines into paragraphs by Y-gap ──────────────────────────
+    const paragraphs   = [];
+    let pendingLines   = [];
 
-    lines.forEach((line, index) => {
+    lines.forEach((line) => {
       if (!pendingLines.length) {
         pendingLines.push(line);
         return;
       }
-
       const previousLine = pendingLines[pendingLines.length - 1];
       const lineGap = Math.abs(previousLine.y - line.y);
       if (lineGap > paragraphGapThreshold) {
         const paragraph = this.buildParagraphFromLines(pendingLines);
-        if (paragraph) {
-          paragraphs.push(paragraph);
-        }
+        if (paragraph) paragraphs.push(paragraph);
         pendingLines = [line];
       } else {
         pendingLines.push(line);
@@ -241,12 +292,10 @@ class PDFToWordConverter {
 
     if (pendingLines.length) {
       const paragraph = this.buildParagraphFromLines(pendingLines);
-      if (paragraph) {
-        paragraphs.push(paragraph);
-      }
+      if (paragraph) paragraphs.push(paragraph);
     }
 
-    const text = paragraphs.map((paragraph) => paragraph.text).join('\n');
+    const text = paragraphs.map((p) => p.text).join('\n');
     return { text, paragraphs };
   }
 
@@ -255,18 +304,16 @@ class PDFToWordConverter {
       .map((line) => this.formatLine(line.items))
       .filter(Boolean);
 
-    if (!textLines.length) {
-      return null;
-    }
+    if (!textLines.length) return null;
 
     const paragraphText = textLines.join('\n');
-    const direction = this.detectTextDirection(paragraphText);
-    const isRtl = direction === 'rtl';
-    const fontSize = this.estimateFontSize(lines[0]?.items || []);
-    const isBold = (lines[0]?.items || []).some((item) => /bold/i.test(item.fontName || ''));
+    const direction     = this.detectTextDirection(paragraphText);
+    const isRtl         = direction === 'rtl';
+    const fontSize      = this.estimateFontSize(lines[0]?.items || []);
+    const isBold        = (lines[0]?.items || []).some((item) => /bold/i.test(item.fontName || ''));
 
     return {
-      text: paragraphText,
+      text:      paragraphText,
       isRtl,
       alignment: isRtl ? 'right' : 'left',
       fontSize,
@@ -274,17 +321,44 @@ class PDFToWordConverter {
     };
   }
 
+  /**
+   * Assemble a single line's text from its items using geometric gap detection.
+   *
+   * For RTL lines (Arabic): items are sorted right→left (descending X).
+   * For LTR lines:          items are sorted left→right (ascending X).
+   *
+   * A space is injected between consecutive items whenever the visual gap
+   * between them exceeds GAP_THRESHOLD, preventing words from merging.
+   */
   formatLine(items) {
-    const lineItems = [...items];
-    const lineText = lineItems.map((item) => item.text).join(' ');
-    const direction = this.detectTextDirection(lineText);
-    const sortedItems = lineItems.sort((a, b) => (direction === 'rtl' ? b.x - a.x : a.x - b.x));
+    if (!items || !items.length) return '';
 
-    return sortedItems
-      .map((item) => item.text)
-      .join(' ')
-      .replace(/\s+/g, ' ')
-      .trim();
+    // Probe direction on the raw item texts
+    const probeText = items.map((i) => i.text).join('');
+    const isRtl     = this.detectTextDirection(probeText) === 'rtl';
+
+    // Sort items in reading order for this direction
+    const sorted = [...items].sort((a, b) =>
+      isRtl ? b.x - a.x : a.x - b.x
+    );
+
+    // Accumulate text, inserting spaces where geometry demands it
+    let result = sorted[0].text;
+    for (let i = 1; i < sorted.length; i++) {
+      const prev = sorted[i - 1];
+      const curr = sorted[i];
+      const gap  = this.computeHorizontalGap(prev, curr, isRtl);
+
+      // If items overlap or are adjacent — no space needed.
+      // If there is a real gap — force a word space.
+      if (gap > PDFToWordConverter.GAP_THRESHOLD) {
+        result += ' ' + curr.text;
+      } else {
+        result += curr.text;
+      }
+    }
+
+    return this.normalizeArabicText(result);
   }
 
   detectTextDirection(text) {
@@ -331,52 +405,89 @@ class PDFToWordConverter {
   createWordContent(pageContent, docxLib) {
     const children = [];
 
+    // ── Document title ─────────────────────────────────────────────────────────
     children.push(
       new docxLib.Paragraph({
-        text: 'Converted PDF Document',
-        heading: docxLib.HeadingLevel.HEADING_1,
-        spacing: { after: 200 },
-        bold: true,
+        children: [
+          new docxLib.TextRun({
+            text: 'Converted PDF Document',
+            bold: true,
+            size: 32
+          })
+        ],
+        heading:   docxLib.HeadingLevel.HEADING_1,
+        spacing:   { line: 276, lineRule: docxLib.LineRuleType?.AUTO, after: 200 },
         alignment: docxLib.AlignmentType.CENTER
       })
     );
 
     children.push(
       new docxLib.Paragraph({
-        text: `Converted on ${new Date().toLocaleString()}`,
-        italics: true,
-        spacing: { after: 400 },
-        style: 'Normal',
+        children: [
+          new docxLib.TextRun({
+            text: `Converted on ${new Date().toLocaleString()}`,
+            italics: true,
+            size: 20
+          })
+        ],
+        spacing:   { line: 276, lineRule: docxLib.LineRuleType?.AUTO, after: 400 },
         alignment: docxLib.AlignmentType.CENTER
       })
     );
 
+    // ── Page content ───────────────────────────────────────────────────────────
     pageContent.forEach((paragraphs, index) => {
       if (index > 0) {
-        children.push(new docxLib.Paragraph({
-          text: '',
-          pageBreakBefore: true
-        }));
+        children.push(new docxLib.Paragraph({ text: '', pageBreakBefore: true }));
       }
 
       (paragraphs || []).forEach((paragraph) => {
+        const isRtl = Boolean(paragraph.isRtl);
         const lines = (paragraph.text || '').split(/\n+/).filter((line) => line.trim());
+
         lines.forEach((line) => {
-          children.push(
-            new docxLib.Paragraph({
-              children: [
-                new docxLib.TextRun({
-                  text: line,
-                  bold: Boolean(paragraph.isBold),
-                  size: paragraph.fontSize || 22,
-                  italics: false
-                })
-              ],
-              spacing: { after: 100 },
-              alignment: paragraph.isRtl ? docxLib.AlignmentType.RIGHT : docxLib.AlignmentType.LEFT,
-              rightToLeft: Boolean(paragraph.isRtl)
-            })
-          );
+          // ── TextRun: set RTL character direction so shaping is correct ──
+          const run = new docxLib.TextRun({
+            text:          line,
+            bold:          Boolean(paragraph.isBold),
+            // size is in half-points; ensure a sensible minimum
+            size:          Math.max(20, paragraph.fontSize || 24),
+            italics:       false,
+            // rightToLeft on TextRun forces the Unicode BiDi override
+            rightToLeft:   isRtl
+          });
+
+          // ── Paragraph: set direction, alignment, and generous line spacing ──
+          const paragraphProps = {
+            children:  [run],
+            alignment: isRtl
+              ? docxLib.AlignmentType.RIGHT
+              : docxLib.AlignmentType.LEFT,
+            // rightToLeft on Paragraph sets the paragraph-level bidi flag (w:bidi)
+            rightToLeft: isRtl,
+            spacing: isRtl
+              ? {
+                  // 360 twips = 1.5× line height; prevents diacritic/nunation overlap
+                  line:     360,
+                  lineRule: docxLib.LineRuleType?.AUTO ?? 'auto',
+                  after:    200   // 200 twips (~3.5mm) gap between paragraphs
+                }
+              : {
+                  line:     276,
+                  lineRule: docxLib.LineRuleType?.AUTO ?? 'auto',
+                  after:    120
+                }
+          };
+
+          // Inject textDirection if the docx version supports it
+          if (isRtl && docxLib.TextDirection) {
+            paragraphProps.textDirection =
+              docxLib.TextDirection.RIGHT_TO_LEFT_OVERRIDE ||
+              docxLib.TextDirection.RIGHT_TO_LEFT ||
+              'rtl';
+          }
+
+          children.push(new docxLib.Paragraph(paragraphProps));
         });
       });
     });
