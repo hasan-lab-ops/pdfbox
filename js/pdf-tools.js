@@ -66,19 +66,19 @@ class PDFToWordConverter {
       const arrayBuffer = await this.readFile(file);
       this.pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
-      const pageTexts = [];
+      const pageContent = [];
       const pageCount = this.pdfDoc.numPages;
 
       for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
         showLoading(`📖 Processing page ${pageNum} of ${pageCount}...`);
 
         const page = await this.pdfDoc.getPage(pageNum);
-        const extractedText = await this.extractTextFromPage(page, pageNum);
-        console.log(`Extracted text from page ${pageNum}:`, extractedText);
+        const extractedPage = await this.extractTextFromPage(page, pageNum);
+        console.log(`Extracted structured content from page ${pageNum}:`, extractedPage);
 
-        const textLength = (extractedText || '').replace(/\s+/g, '').length;
+        const textLength = (extractedPage?.text || '').replace(/\s+/g, '').length;
         if (textLength >= 10) {
-          pageTexts.push(extractedText);
+          pageContent.push(extractedPage.paragraphs);
           continue;
         }
 
@@ -87,16 +87,16 @@ class PDFToWordConverter {
 
         const ocrText = await this.performOcrOnPage(page, pageNum);
         console.log(`OCR text from page ${pageNum}:`, ocrText);
-        pageTexts.push(ocrText || extractedText || '');
+        pageContent.push(this.buildParagraphsFromText(ocrText, this.detectTextDirection(ocrText)));
       }
 
-      const fullText = pageTexts.join('\n\n');
+      const fullText = pageContent.flat().map((paragraph) => paragraph.text || '').join('\n\n');
       const extractedCharacterCount = fullText.replace(/\s+/g, '').length;
       console.log('Aggregated extracted text:', fullText);
       console.log('Extraction summary:', {
         pageCount,
         extractedCharacterCount,
-        pageTexts
+        pageContent
       });
 
       const minimumExpectedCharacters = Math.max(20, pageCount * 20);
@@ -137,7 +137,7 @@ class PDFToWordConverter {
                 }
               }
             },
-            children: this.createWordContent(pageTexts, docxLib)
+            children: this.createWordContent(pageContent, docxLib)
           }
         ]
       });
@@ -153,7 +153,7 @@ class PDFToWordConverter {
     }
   }
 
-  async performOcrOnPage(page, pageNum) {
+  async performOcrOnPage(page) {
     if (!window.Tesseract || !window.Tesseract.recognize) {
       throw new Error('Tesseract.js failed to load from the CDN.');
     }
@@ -186,95 +186,201 @@ class PDFToWordConverter {
     return (result?.data?.text || '').replace(/\s+/g, ' ').trim();
   }
 
-  async extractTextFromPage(page, pageNum) {
+  async extractTextFromPage(page) {
     const textContent = await page.getTextContent({ disableCombineTextItems: true });
     const items = (textContent.items || [])
       .filter((item) => item && typeof item.str === 'string' && item.str.trim())
       .map((item) => ({
         text: item.str.replace(/\s+/g, ' ').trim(),
         x: item.transform?.[4] || 0,
-        y: item.transform?.[5] || 0
+        y: item.transform?.[5] || 0,
+        width: item.width || 0,
+        height: item.height || 0,
+        fontName: item.fontName || ''
       }));
 
     if (!items.length) {
-      return '';
+      return { text: '', paragraphs: [] };
     }
 
-    items.sort((a, b) => b.y - a.y || a.x - b.x);
-
+    const sortedItems = [...items].sort((a, b) => b.y - a.y || a.x - b.x);
     const lines = [];
-    const lineTolerance = 7;
+    const lineTolerance = 5;
+    const paragraphGapThreshold = 16;
 
-    items.forEach((item) => {
+    sortedItems.forEach((item) => {
       const currentLine = lines[lines.length - 1];
       if (!currentLine || Math.abs(item.y - currentLine.y) > lineTolerance) {
-        lines.push({ y: item.y, words: [item] });
+        lines.push({ y: item.y, items: [item] });
       } else {
-        currentLine.words.push(item);
+        currentLine.items.push(item);
       }
     });
 
-    const orderedLines = lines
-      .map((line) => {
-        const isRtlLine = line.words.some((word) => /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(word.text));
-        const sortedWords = [...line.words].sort((a, b) => (isRtlLine ? b.x - a.x : a.x - b.x));
-        const lineText = sortedWords
-          .map((word) => word.text)
-          .join(' ')
-          .replace(/\s+/g, ' ')
-          .trim();
+    const paragraphs = [];
+    let pendingLines = [];
 
-        return lineText;
-      })
-      .filter(Boolean);
+    lines.forEach((line, index) => {
+      if (!pendingLines.length) {
+        pendingLines.push(line);
+        return;
+      }
 
-    return orderedLines.join('\n');
+      const previousLine = pendingLines[pendingLines.length - 1];
+      const lineGap = Math.abs(previousLine.y - line.y);
+      if (lineGap > paragraphGapThreshold) {
+        const paragraph = this.buildParagraphFromLines(pendingLines);
+        if (paragraph) {
+          paragraphs.push(paragraph);
+        }
+        pendingLines = [line];
+      } else {
+        pendingLines.push(line);
+      }
+    });
+
+    if (pendingLines.length) {
+      const paragraph = this.buildParagraphFromLines(pendingLines);
+      if (paragraph) {
+        paragraphs.push(paragraph);
+      }
+    }
+
+    const text = paragraphs.map((paragraph) => paragraph.text).join('\n');
+    return { text, paragraphs };
   }
 
-  createWordContent(pageTexts, docxLib) {
+  buildParagraphFromLines(lines) {
+    const textLines = lines
+      .map((line) => this.formatLine(line.items))
+      .filter(Boolean);
+
+    if (!textLines.length) {
+      return null;
+    }
+
+    const paragraphText = textLines.join('\n');
+    const direction = this.detectTextDirection(paragraphText);
+    const isRtl = direction === 'rtl';
+    const fontSize = this.estimateFontSize(lines[0]?.items || []);
+    const isBold = (lines[0]?.items || []).some((item) => /bold/i.test(item.fontName || ''));
+
+    return {
+      text: paragraphText,
+      isRtl,
+      alignment: isRtl ? 'right' : 'left',
+      fontSize,
+      isBold
+    };
+  }
+
+  formatLine(items) {
+    const lineItems = [...items];
+    const lineText = lineItems.map((item) => item.text).join(' ');
+    const direction = this.detectTextDirection(lineText);
+    const sortedItems = lineItems.sort((a, b) => (direction === 'rtl' ? b.x - a.x : a.x - b.x));
+
+    return sortedItems
+      .map((item) => item.text)
+      .join(' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  detectTextDirection(text) {
+    const arabicCount = (text.match(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/g) || []).length;
+    const latinCount = (text.match(/[A-Za-z]/g) || []).length;
+    return arabicCount > latinCount ? 'rtl' : 'ltr';
+  }
+
+  isRtlText(text) {
+    return this.detectTextDirection(text) === 'rtl';
+  }
+
+  estimateFontSize(items) {
+    if (!items.length) {
+      return 22;
+    }
+
+    const heights = items
+      .map((item) => Math.abs(item.height || 0))
+      .filter(Boolean);
+
+    const baseSize = heights.length ? Math.max(...heights) : 12;
+    const size = Math.max(18, Math.min(36, Math.round(baseSize * 0.75)));
+    return size * 2;
+  }
+
+  buildParagraphsFromText(text, direction = 'ltr') {
+    const cleanedText = (text || '').replace(/\s+/g, ' ').trim();
+    if (!cleanedText) {
+      return [];
+    }
+
+    return [
+      {
+        text: cleanedText,
+        isRtl: direction === 'rtl',
+        alignment: direction === 'rtl' ? 'right' : 'left',
+        fontSize: 24,
+        isBold: false
+      }
+    ];
+  }
+
+  createWordContent(pageContent, docxLib) {
     const children = [];
-    
-    // Add document title
+
     children.push(
       new docxLib.Paragraph({
         text: 'Converted PDF Document',
         heading: docxLib.HeadingLevel.HEADING_1,
         spacing: { after: 200 },
-        bold: true
+        bold: true,
+        alignment: docxLib.AlignmentType.CENTER
       })
     );
-    
-    // Add metadata
+
     children.push(
       new docxLib.Paragraph({
         text: `Converted on ${new Date().toLocaleString()}`,
         italics: true,
         spacing: { after: 400 },
-        style: 'Normal'
+        style: 'Normal',
+        alignment: docxLib.AlignmentType.CENTER
       })
     );
-    
-    // Add page contents
-    pageTexts.forEach((text, index) => {
+
+    pageContent.forEach((paragraphs, index) => {
       if (index > 0) {
         children.push(new docxLib.Paragraph({
           text: '',
           pageBreakBefore: true
         }));
       }
-      
-      // Split by lines and create paragraphs
-      const paragraphs = text.split(/\n+/).filter(p => p.trim());
-      paragraphs.forEach((para) => {
-        children.push(
-          new docxLib.Paragraph({
-            text: para,
-            spacing: { after: 100 }
-          })
-        );
+
+      (paragraphs || []).forEach((paragraph) => {
+        const lines = (paragraph.text || '').split(/\n+/).filter((line) => line.trim());
+        lines.forEach((line) => {
+          children.push(
+            new docxLib.Paragraph({
+              children: [
+                new docxLib.TextRun({
+                  text: line,
+                  bold: Boolean(paragraph.isBold),
+                  size: paragraph.fontSize || 22,
+                  italics: false
+                })
+              ],
+              spacing: { after: 100 },
+              alignment: paragraph.isRtl ? docxLib.AlignmentType.RIGHT : docxLib.AlignmentType.LEFT,
+              rightToLeft: Boolean(paragraph.isRtl)
+            })
+          );
+        });
       });
     });
-    
+
     return children;
   }
 
@@ -327,70 +433,62 @@ class WordToPDFConverter {
   async convert(file) {
     try {
       showLoading('📄 Reading Word document...');
-      
+
       const arrayBuffer = await this.readFile(file);
       const mammothLib = await this.getMammoth();
       const result = await mammothLib.convertToHtml({ arrayBuffer });
-      
+
       this.wordContent = result.value;
-      
+
       showLoading('🔄 Converting to PDF...');
-      
-      // Create a container for rendering
+
       const container = document.createElement('div');
       container.innerHTML = this.wordContent;
       container.style.cssText = `
-        padding: 40px;
-        font-family: Arial, sans-serif;
+        padding: 16mm;
+        font-family: 'Segoe UI', Arial, Tahoma, 'Noto Naskh Arabic', 'Times New Roman', sans-serif;
         line-height: 1.6;
-        color: #000;
+        color: #111827;
         background: white;
-        width: 800px;
+        width: 210mm;
+        min-height: 297mm;
         box-sizing: border-box;
+        margin: 0 auto;
       `;
-      
+
       document.body.appendChild(container);
-      
-      showLoading('🖼️  Rendering PDF...');
-      
-      // Use html2canvas to convert to image
-      const canvas = await html2canvas(container, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff'
-      });
-      
-      document.body.removeChild(container);
-      
-      // Convert canvas to PDF using jsPDF
-      const { jsPDF } = window.jspdf;
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-      });
-      
-      const imgData = canvas.toDataURL('image/png');
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = pageWidth - 20; // Leave margins
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      
-      let position = 10;
-      let imgHeightLeft = imgHeight;
-      
-      while (imgHeightLeft > 0) {
-        pdf.addImage(imgData, 'PNG', 10, position, imgWidth, imgHeight);
-        imgHeightLeft -= pageHeight - 20;
-        if (imgHeightLeft > 0) {
-          pdf.addPage();
-          position = 10;
-        }
+
+      showLoading('🖼️ Rendering PDF...');
+
+      const options = {
+        margin: [12, 12, 12, 12],
+        filename: 'converted.pdf',
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          logging: false,
+          letterRendering: true,
+          scrollX: 0,
+          scrollY: 0
+        },
+        jsPDF: {
+          unit: 'mm',
+          format: 'a4',
+          orientation: 'portrait'
+        },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+      };
+
+      if (window.html2pdf) {
+        const pdfBlob = await window.html2pdf().set(options).from(container).outputPdf('blob');
+        document.body.removeChild(container);
+        return pdfBlob;
       }
-      
-      return pdf.output('blob');
-      
+
+      document.body.removeChild(container);
+      throw new Error('html2pdf.js failed to load from the CDN.');
+
     } catch (error) {
       throw new Error(`Word to PDF conversion failed: ${error.message}`);
     }
