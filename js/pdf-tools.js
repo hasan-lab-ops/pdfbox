@@ -95,7 +95,24 @@ class PDFToWordConverter {
       const doc = new docxLib.Document({
         sections: [
           {
-            properties: {},
+            properties: {
+              page: {
+                margin: {
+                  top: 1440,
+                  right: 1440,
+                  bottom: 1440,
+                  left: 1440,
+                  header: 720,
+                  footer: 720,
+                  gutter: 0
+                },
+                size: {
+                  orientation: docxLib.PageOrientation.PORTRAIT,
+                  width: 11900,
+                  height: 16840
+                }
+              }
+            },
             children: this.createWordContent(pageTexts, docxLib)
           }
         ]
