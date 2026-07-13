@@ -42,7 +42,16 @@
     </script>
     
     <!-- Mammoth.js: DOCX file reading -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.min.js"></script>
+    <script>
+        window.mammothReady = (async () => {
+            try {
+                window.mammoth = await import('https://cdn.jsdelivr.net/npm/mammoth@1.6.0/+esm');
+            } catch (error) {
+                console.error('Failed to load Mammoth:', error);
+                window.mammothLoadError = error;
+            }
+        })();
+    </script>
 </head>
 <body>
 

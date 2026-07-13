@@ -173,6 +173,44 @@ class PDFToWordConverter {
 class WordToPDFConverter {
   constructor() {
     this.wordContent = null;
+    this.mammothLib = null;
+  }
+
+  async getMammoth() {
+    if (this.mammothLib) {
+      return this.mammothLib;
+    }
+
+    if (globalThis.mammoth) {
+      this.mammothLib = globalThis.mammoth;
+      return this.mammothLib;
+    }
+
+    if (window.mammoth) {
+      this.mammothLib = window.mammoth;
+      return this.mammothLib;
+    }
+
+    if (window.mammothReady) {
+      await window.mammothReady;
+      if (globalThis.mammoth) {
+        this.mammothLib = globalThis.mammoth;
+        return this.mammothLib;
+      }
+      if (window.mammoth) {
+        this.mammothLib = window.mammoth;
+        return this.mammothLib;
+      }
+    }
+
+    try {
+      this.mammothLib = await import('https://cdn.jsdelivr.net/npm/mammoth@1.6.0/+esm');
+      globalThis.mammoth = this.mammothLib;
+      window.mammoth = this.mammothLib;
+      return this.mammothLib;
+    } catch (error) {
+      throw new Error(`Unable to load the Mammoth library: ${error.message}`);
+    }
   }
 
   async convert(file) {
@@ -180,7 +218,8 @@ class WordToPDFConverter {
       showLoading('📄 Reading Word document...');
       
       const arrayBuffer = await this.readFile(file);
-      const result = await mammoth.convertToHtml({ arrayBuffer });
+      const mammothLib = await this.getMammoth();
+      const result = await mammothLib.convertToHtml({ arrayBuffer });
       
       this.wordContent = result.value;
       
