@@ -307,8 +307,8 @@ class PDFEncryptor {
       
       showLoading('🔒 Applying protection...');
 
-      const copiedPages = await this.pdfDoc.copyPages(this.pdfDoc, this.pdfDoc.getPageIndices());
       const newPdf = await PDFDocument.create();
+      const copiedPages = await newPdf.copyPages(this.pdfDoc, this.pdfDoc.getPageIndices());
       copiedPages.forEach((page) => newPdf.addPage(page));
 
       const protectedPdfBytes = await newPdf.save();
