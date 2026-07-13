@@ -18,6 +18,7 @@ const { PDFDocument, PDFName, PDFNumber, degrees, rgb } = PDFLib;
 class PDFToWordConverter {
   constructor() {
     this.pdfDoc = null;
+    this.docxLib = globalThis.docx || window.docx || null;
   }
 
   async convert(file) {
@@ -47,17 +48,21 @@ class PDFToWordConverter {
       
       showLoading('📝 Creating Word document...');
       
-      // Create DOCX using docx library
-      const doc = new docx.Document({
+      if (!this.docxLib) {
+        throw new Error('The docx library failed to load from the CDN.');
+      }
+
+      // Create DOCX using the globally loaded docx library
+      const doc = new this.docxLib.Document({
         sections: [
           {
             properties: {},
-            children: this.createWordContent(pageTexts)
+            children: this.createWordContent(pageTexts, this.docxLib)
           }
         ]
       });
       
-      const blob = await doc.save();
+      const blob = await this.docxLib.Packer.toBlob(doc);
       return blob;
       
     } catch (error) {
@@ -65,14 +70,14 @@ class PDFToWordConverter {
     }
   }
 
-  createWordContent(pageTexts) {
+  createWordContent(pageTexts, docxLib) {
     const children = [];
     
     // Add document title
     children.push(
-      new docx.Paragraph({
+      new docxLib.Paragraph({
         text: 'Converted PDF Document',
-        heading: docx.HeadingLevel.HEADING_1,
+        heading: docxLib.HeadingLevel.HEADING_1,
         spacing: { after: 200 },
         bold: true
       })
@@ -80,7 +85,7 @@ class PDFToWordConverter {
     
     // Add metadata
     children.push(
-      new docx.Paragraph({
+      new docxLib.Paragraph({
         text: `Converted on ${new Date().toLocaleString()}`,
         italics: true,
         spacing: { after: 400 },
@@ -91,7 +96,7 @@ class PDFToWordConverter {
     // Add page contents
     pageTexts.forEach((text, index) => {
       if (index > 0) {
-        children.push(new docx.Paragraph({
+        children.push(new docxLib.Paragraph({
           text: '',
           pageBreakBefore: true
         }));
@@ -101,7 +106,7 @@ class PDFToWordConverter {
       const paragraphs = text.split(/\n+/).filter(p => p.trim());
       paragraphs.forEach((para) => {
         children.push(
-          new docx.Paragraph({
+          new docxLib.Paragraph({
             text: para,
             spacing: { after: 100 }
           })
