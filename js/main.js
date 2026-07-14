@@ -183,6 +183,7 @@ function initToolDetailView(tool) {
                         selectedPageIndices = Array.from({ length: total }, (_, i) => i);
                         renderPagePreviewGrid(currentPreviewFile);
                         updateDeleteCount();
+                        updateDeleteRange();
                     }
                 });
             }
@@ -191,6 +192,7 @@ function initToolDetailView(tool) {
                     selectedPageIndices = [];
                     renderPagePreviewGrid(currentPreviewFile);
                     updateDeleteCount();
+                    updateDeleteRange();
                 });
             }
         }, 0);
@@ -747,6 +749,7 @@ async function renderPagePreviewGrid(file) {
                     }
                     renderPagePreviewGrid(currentPreviewFile);
                     updateDeleteCount();
+                    updateDeleteRange();
                 });
             });
         }
@@ -765,6 +768,22 @@ function updateDeleteCount() {
     } else {
         countEl.textContent = `${selected} page${selected > 1 ? 's' : ''} selected for deletion`;
     }
+}
+
+function updateDeleteRange() {
+    const rangeInput = document.getElementById('tool-range');
+    if (!rangeInput || currentTool?.id !== 'delete') return;
+    
+    if (!currentPreviewFile) return;
+    const total = currentPreviewFile._pageCount || 0;
+    
+    const pagesToDelete = [];
+    for (let i = 0; i < total; i++) {
+        if (!selectedPageIndices.includes(i)) {
+            pagesToDelete.push(i + 1);
+        }
+    }
+    rangeInput.value = pagesToDelete.join(', ');
 }
 
 function updateSplitRange() {

@@ -1511,7 +1511,9 @@ async function watermarkPDF(file, text) {
   const buffer = await fileToBuffer(file);
   const pdf = await PDFDocument.load(buffer);
   const pages = pdf.getPages();
-  const { rgb } = PDFLib;
+  const { rgb, degrees, StandardFonts } = PDFLib;
+
+  const helveticaFont = await pdf.embedFont(StandardFonts.Helvetica);
 
   const fontSize = 50;
   const opacity = 0.3;
@@ -1527,6 +1529,7 @@ async function watermarkPDF(file, text) {
           x,
           y,
           size: fontSize,
+          font: helveticaFont,
           color,
           rotate: degrees(45),
           opacity,
