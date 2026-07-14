@@ -278,6 +278,8 @@ function hideConversionNotice() {
 }
 
 function resetWorkspace() {
+    currentObjectUrls.forEach(url => URL.revokeObjectURL(url));
+    currentObjectUrls = [];
     document.getElementById('file-list').classList.add('hidden');
     document.getElementById('file-list').innerHTML = '';
     document.getElementById('page-preview-grid').classList.add('hidden');
@@ -380,7 +382,7 @@ function handleFiles(files) {
         selectedFiles = [validFiles[0]];
     }
 
-    selectedPageIndices = currentTool.id === 'delete' ? Array.from({ length: 10 }, (_, index) => index) : [];
+    selectedPageIndices = [];
     updateFileListUI();
 }
 
@@ -449,11 +451,16 @@ async function renderPagePreviewGrid(file) {
     }
 }
 
+let currentObjectUrls = [];
+
 function updateFileListUI() {
     const listEl = document.getElementById('file-list');
     const dropzone = document.getElementById('file-dropzone');
     const processBtn = document.getElementById('process-btn');
     const previewGrid = document.getElementById('page-preview-grid');
+
+    currentObjectUrls.forEach(url => URL.revokeObjectURL(url));
+    currentObjectUrls = [];
 
     dropzone.classList.add('hidden');
     listEl.classList.remove('hidden');
@@ -462,12 +469,16 @@ function updateFileListUI() {
     if (currentTool.id === 'jpg-to-pdf') {
         listEl.innerHTML = `
             <div class="image-grid">
-                ${selectedFiles.map((file, index) => `
+                ${selectedFiles.map((file, index) => {
+                    const objUrl = URL.createObjectURL(file);
+                    currentObjectUrls.push(objUrl);
+                    return `
                     <div class="image-card" draggable="true" data-index="${index}">
-                        <img src="${URL.createObjectURL(file)}" alt="${file.name}" />
+                        <img src="${objUrl}" alt="${file.name}" />
                         <div class="image-name">${file.name}</div>
                     </div>
-                `).join('')}
+                    `;
+                }).join('')}
             </div>
         `;
         const cards = listEl.querySelectorAll('.image-card');

@@ -925,14 +925,9 @@ class PDFDecryptor {
       const arrayBuffer = await this.readFile(file);
 
       try {
-        // Load the PDF with the provided password
-        this.pdfDoc = await PDFDocument.load({
-          pdfBytes: arrayBuffer,
-          password: password,
-          ignoreEncryption: false
-        });
+        this.pdfDoc = await PDFDocument.load(arrayBuffer, { password });
       } catch (e) {
-        throw new Error('❌ Incorrect password or invalid PDF file');
+        throw new Error('Incorrect password or invalid PDF file');
       }
 
       showLoading('🔓 Decrypting content...');
@@ -1007,18 +1002,16 @@ function downloadFile(blob, filename) {
 // ============================================================================
 
 window.processConversion = async function (currentTool) {
-  const fileInput = document.getElementById('file-input');
   const password = document.getElementById('tool-password')?.value;
 
-  // Handle if currentTool is passed as object (with .id property)
   const toolId = typeof currentTool === 'object' ? currentTool.id : currentTool;
 
-  if (!fileInput.files || fileInput.files.length === 0) {
-    showToast('❌ Please select a file first', 'error');
+  if (!selectedFiles || selectedFiles.length === 0) {
+    showToast('Please select a file first', 'error');
     return;
   }
 
-  const file = fileInput.files[0];
+  const file = selectedFiles[0];
 
   try {
     showLoading('🚀 Starting conversion...');
@@ -1030,7 +1023,7 @@ window.processConversion = async function (currentTool) {
     switch (toolId) {
       case 'pdf-to-word':
         if (!file.type.includes('pdf') && !file.name.endsWith('.pdf')) {
-          showToast('❌ Please select a PDF file', 'error');
+          showToast('Please select a PDF file', 'error');
           hideLoading();
           return;
         }
@@ -1041,7 +1034,7 @@ window.processConversion = async function (currentTool) {
 
       case 'word-to-pdf':
         if (!file.type.includes('word') && !file.name.endsWith('.docx') && !file.name.endsWith('.doc')) {
-          showToast('❌ Please select a Word document (.docx)', 'error');
+          showToast('Please select a Word document (.docx)', 'error');
           hideLoading();
           return;
         }
@@ -1052,12 +1045,12 @@ window.processConversion = async function (currentTool) {
 
       case 'protect-pdf':
         if (!file.type.includes('pdf') && !file.name.endsWith('.pdf')) {
-          showToast('❌ Please select a PDF file', 'error');
+          showToast('Please select a PDF file', 'error');
           hideLoading();
           return;
         }
         if (!password) {
-          showToast('❌ Please enter a password', 'error');
+          showToast('Please enter a password', 'error');
           hideLoading();
           return;
         }
@@ -1068,12 +1061,12 @@ window.processConversion = async function (currentTool) {
 
       case 'unlock-pdf':
         if (!file.type.includes('pdf') && !file.name.endsWith('.pdf')) {
-          showToast('❌ Please select a PDF file', 'error');
+          showToast('Please select a PDF file', 'error');
           hideLoading();
           return;
         }
         if (!password) {
-          showToast('❌ Please enter the PDF password', 'error');
+          showToast('Please enter the PDF password', 'error');
           hideLoading();
           return;
         }
@@ -1083,7 +1076,7 @@ window.processConversion = async function (currentTool) {
         break;
 
       default:
-        showToast('❌ Unknown tool', 'error');
+        showToast('Unknown tool', 'error');
         hideLoading();
         return;
     }
@@ -1092,13 +1085,13 @@ window.processConversion = async function (currentTool) {
       hideConversionNotice();
       hideLoading();
       downloadFile(blob, outputFilename);
-      showToast(`✅ Conversion successful! Downloaded: ${outputFilename}`, 'success');
+      showToast(`Conversion successful! Downloaded: ${outputFilename}`, 'success');
     }
 
   } catch (error) {
     hideLoading();
     console.error('Conversion error:', error);
-    showToast(`❌ ${error.message}`, 'error');
+    showToast(error.message, 'error');
   }
 };
 
@@ -1118,8 +1111,14 @@ window.processPDF = async function (toolId, files) {
         break;
       case 'split':
         const splitRange = document.getElementById('tool-range')?.value || '';
-        resultBytes = await extractPages(files[0], splitRange);
-        resultFileName = 'split-output.pdf';
+        const asZip = document.getElementById('split-as-zip')?.checked;
+        if (asZip) {
+          resultBytes = await extractPagesAsZip(files[0], splitRange);
+          resultFileName = 'split-output.zip';
+        } else {
+          resultBytes = await extractPages(files[0], splitRange);
+          resultFileName = 'split-output.pdf';
+        }
         break;
       case 'compress':
         resultBytes = await compressPDF(files[0]);
@@ -1153,12 +1152,13 @@ window.processPDF = async function (toolId, files) {
     }
 
     if (resultBytes) {
-      downloadBlob(resultBytes, resultFileName, 'application/pdf');
+      const mime = resultFileName.endsWith('.zip') ? 'application/zip' : 'application/pdf';
+      downloadBlob(resultBytes, resultFileName, mime);
     }
 
   } catch (error) {
     console.error(error);
-    alert('Error processing file: ' + error.message);
+    showToast('Error processing file: ' + error.message, 'error');
   } finally {
     window.setProcessingState(false);
   }
@@ -1250,6 +1250,23 @@ async function extractPages(file, range) {
   return await newPdf.save();
 }
 
+async function extractPagesAsZip(file, range) {
+  const buffer = await fileToBuffer(file);
+  const pdf = await PDFDocument.load(buffer, { ignoreEncryption: true });
+  const pageCount = pdf.getPageCount();
+  const pageIndices = parsePageRange(range, pageCount);
+
+  const zip = new JSZip();
+  for (const pageIndex of pageIndices) {
+    const newPdf = await PDFDocument.create();
+    const [copiedPage] = await newPdf.copyPages(pdf, [pageIndex]);
+    newPdf.addPage(copiedPage);
+    const pdfBytes = await newPdf.save();
+    zip.file(`page-${pageIndex + 1}.pdf`, pdfBytes);
+  }
+  return await zip.generateAsync({ type: 'uint8array' });
+}
+
 async function compressPDF(file) {
   const buffer = await fileToBuffer(file);
   const pdf = await PDFDocument.load(buffer, { ignoreEncryption: true });
@@ -1317,7 +1334,7 @@ async function jpgToPdf(files) {
   for (const file of files) {
     const buffer = await fileToBuffer(file);
     let image;
-    if (file.type === 'image/jpeg' || file.type === 'image/jpg') {
+    if (file.type === 'image/jpeg' || file.name.toLowerCase().endsWith('.jpg') || file.name.toLowerCase().endsWith('.jpeg')) {
       image = await pdf.embedJpg(buffer);
     } else if (file.type === 'image/png') {
       image = await pdf.embedPng(buffer);
@@ -1337,12 +1354,16 @@ async function jpgToPdf(files) {
 }
 
 async function pdfToJpg(file) {
+  showLoading('🖼️ Rendering PDF pages to images...');
   const buffer = await fileToBuffer(file);
   const typedarray = new Uint8Array(buffer);
   const pdf = await pdfjsLib.getDocument({ data: typedarray }).promise;
   const numPages = pdf.numPages;
+  const zip = new JSZip();
+  const imgFolder = zip.folder('pages');
 
   for (let pageNumber = 1; pageNumber <= numPages; pageNumber++) {
+    showLoading(`🖼️ Rendering page ${pageNumber} of ${numPages}...`);
     const page = await pdf.getPage(pageNumber);
     const viewport = page.getViewport({ scale: 2.0 });
     const canvas = document.createElement('canvas');
@@ -1355,22 +1376,19 @@ async function pdfToJpg(file) {
       viewport: viewport
     }).promise;
 
-    await new Promise((resolve, reject) => {
-      canvas.toBlob(blob => {
-        if (!blob) {
-          reject(new Error('Unable to create image blob.'));
-          return;
-        }
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `page-${pageNumber}.jpg`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        resolve();
+    const blob = await new Promise((resolve, reject) => {
+      canvas.toBlob(b => {
+        if (!b) reject(new Error('Unable to create image blob.'));
+        else resolve(b);
       }, 'image/jpeg', 0.9);
     });
+
+    const arrayBuf = await blob.arrayBuffer();
+    imgFolder.file(`page-${pageNumber}.jpg`, arrayBuf);
   }
+
+  showLoading('📦 Packaging ZIP archive...');
+  const zipBlob = await zip.generateAsync({ type: 'blob' });
+  downloadBlob(zipBlob, 'pdf-pages.zip', 'application/zip');
+  hideLoading();
 }
