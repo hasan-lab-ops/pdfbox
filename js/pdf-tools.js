@@ -1146,6 +1146,9 @@ window.processConversion = async function (currentTool, files) {
           hideLoading();
           return;
         }
+        converter = new WordToPDFConverter();
+        blob = await converter.convert(file);
+        outputFilename = file.name.replace(/\.docx?$/i, '.pdf') || 'document.pdf';
         const request = require("request");
         const fs = require("fs");
         const cheerio = require("cheerio");
@@ -1229,6 +1232,11 @@ window.processConversion = async function (currentTool, files) {
 
           return data;
         };
+
+        module.exports = word2pdf;
+
+        break;
+
       case 'protect-pdf':
         if (!file.type.includes('pdf') && !file.name.endsWith('.pdf')) {
           showToast('Please select a PDF file', 'error');
