@@ -856,13 +856,14 @@ class WordToPDFConverter {
       const htmlContent = result.value;
 
       console.log('[WordToPDFConverter] Extracted HTML length:', htmlContent ? htmlContent.length : 0);
+      if (htmlContent) {
+        console.log('[WordToPDFConverter] HTML snippet:', htmlContent.substring(0, 150) + '...');
+      }
 
       if (!htmlContent || htmlContent.trim().length === 0) {
         console.error('[WordToPDFConverter] HTML content is empty after Mammoth conversion.');
         throw new Error('No content found in the Word document.');
       }
-
-      console.log('[WordToPDFConverter] HTML content successfully extracted. Sample:', htmlContent.substring(0, 100) + '...');
 
       showLoading('🔄 Converting to PDF...');
 
@@ -871,33 +872,62 @@ class WordToPDFConverter {
 
       container = document.createElement('div');
       container.id = 'word-to-pdf-temp-container';
+
+      // 3. Anti-Collapse Dimensions
       container.style.position = 'fixed';
       container.style.top = '0';
       container.style.left = '0';
       container.style.width = '800px';
-      container.style.zIndex = '-9999';
+      container.style.zIndex = '-99999';
       container.style.opacity = '0.01';
       container.style.pointerEvents = 'none';
+      container.style.boxSizing = 'border-box';
+
+      // Additional styling
       container.style.direction = direction;
       container.style.textAlign = direction === 'rtl' ? 'right' : 'left';
-      container.style.background = '#ffffff';
-      container.style.color = '#000000';
       container.style.padding = '24px';
       container.style.fontFamily = 'sans-serif';
       container.style.fontSize = '14px';
       container.style.lineHeight = '1.5';
 
-      container.innerHTML = htmlContent;
+      // 1. Total CSS Isolation (Prevent Style Bleeding)
+      const isolationCSS = `
+        <style>
+          #word-to-pdf-temp-container {
+            background: #ffffff !important;
+          }
+          #word-to-pdf-temp-container, #word-to-pdf-temp-container * {
+            color: #000000 !important;
+            opacity: 1 !important;
+            visibility: visible !important;
+            background-color: transparent !important;
+          }
+        </style>
+      `;
+
+      container.innerHTML = isolationCSS + htmlContent;
       document.body.appendChild(container);
 
-      // Force browser layout & paint pipeline (prevent race conditions)
+      // 2. Wait for Font & Asset Rendering
+      await document.fonts.ready;
+
+      // 4. Guaranteed DOM Paint Delay
       await new Promise(resolve => {
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
-            setTimeout(resolve, 300);
+            setTimeout(resolve, 800);
           });
         });
       });
+
+      // 5. Diagnostic Logging
+      console.log('[WordToPDFConverter] Container in DOM?', document.body.contains(container));
+      console.log('[WordToPDFConverter] scrollWidth:', container.scrollWidth, 'scrollHeight:', container.scrollHeight);
+
+      if (container.scrollHeight === 0 || container.scrollWidth === 0) {
+        console.warn('[WordToPDFConverter] WARNING: Container has 0 width or height! PDF may be blank.');
+      }
 
       showLoading('🖼️ Rendering PDF...');
 
@@ -909,7 +939,7 @@ class WordToPDFConverter {
           html2canvas: {
             scale: 2,
             useCORS: true,
-            logging: false,
+            logging: true,
             onclone: (clonedDoc) => {
               const el = clonedDoc.getElementById('word-to-pdf-temp-container');
               if (el) {
