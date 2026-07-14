@@ -25,30 +25,27 @@
     <!-- PDF-Lib: Advanced PDF manipulation with encryption support -->
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 
-    <!-- مكتبة pdf.js لقراءة ملفات الـ PDF (مستقرة) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <!-- pdf.js: PDF text extraction and rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.1.200/pdf.min.js"></script>
     <script>
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.1.200/pdf.worker.min.js';
     </script>
 
-    <!-- jsPDF: PDF generation -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-
-    <!-- html2canvas: HTML to image conversion (used with jsPDF) -->
+    <!-- html2canvas: HTML to image conversion -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
-    <!-- html2pdf.js: high-fidelity HTML to PDF export for Word documents -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- html2pdf.js: HTML to PDF export (bundles jsPDF 4.x internally) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.14.0/html2pdf.bundle.min.js"></script>
 
     <!-- Tesseract.js: OCR for scanned PDFs in the browser -->
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/6.0.1/tesseract.min.js"></script>
 
     <!-- JSZip: bundle multiple converted images/pages into a downloadable archive -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 
     <!-- مكتبة docx المخصصة للمتصفح مباشرة عبر ESM -->
     <script type="module">
-        import * as docxModule from 'https://cdn.jsdelivr.net/npm/docx@7.8.2/+esm';
+        import * as docxModule from 'https://cdn.jsdelivr.net/npm/docx@9.7.1/+esm';
         window.docx = docxModule;
         window.docxReady = Promise.resolve(docxModule);
     </script>

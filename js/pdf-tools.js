@@ -140,7 +140,7 @@ class PDFToWordConverter {
   // ---------------------------------------------------------------------------
 
   async performOcrOnPage(page) {
-    if (!window.Tesseract || !window.Tesseract.recognize) {
+    if (!window.Tesseract || !window.Tesseract.createWorker) {
       throw new Error('Tesseract.js failed to load from the CDN.');
     }
     const viewport = page.getViewport({ scale: 2.0 });
@@ -150,14 +150,16 @@ class PDFToWordConverter {
     canvas.width = viewport.width;
     canvas.height = viewport.height;
     await page.render({ canvasContext: context, viewport }).promise;
-    const result = await window.Tesseract.recognize(canvas, 'ara+eng', {
+    const worker = await window.Tesseract.createWorker('ara+eng', 1, {
       logger: (msg) => {
         if (msg?.status === 'recognizing text' && typeof msg.progress === 'number') {
           showLoading(`🖼️ Reading text from images... ${Math.round(msg.progress * 100)}%`);
         }
       }
     });
-    return (result?.data?.text || '').replace(/\s+/g, ' ').trim();
+    const { data } = await worker.recognize(canvas);
+    await worker.terminate();
+    return (data?.text || '').replace(/\s+/g, ' ').trim();
   }
 
   // ===========================================================================
@@ -542,6 +544,7 @@ class PDFToWordConverter {
       const isScriptBreak = currDir !== prevDir && currentPara.lines.length > 0;
 
       if (isGapBreak || isScriptBreak) {
+        console.log(`  Para break at line ${i}: ${isGapBreak ? 'gap' : 'script-change'} (${prevDir}→${currDir}) gap=${gap.toFixed(1)} threshold=${paraGapThreshold.toFixed(1)}`);
         const built = this.buildParagraphFromLines(currentPara.lines, pageWidth);
         if (built) paragraphs.push(built);
         currentPara = { lines: [currLine] };
@@ -789,16 +792,25 @@ class WordToPDFConverter {
 
       showLoading('🔄 Converting to PDF...');
 
-      // Step 3: Create visible-but-hidden temporary container
+      const html2pdfLib = window.html2pdf;
+      if (!html2pdfLib) {
+        throw new Error('html2pdf.js failed to load from the CDN.');
+      }
+
+      // Step 3: Create off-screen temporary container (fully visible for html2canvas)
       container = document.createElement('div');
       container.style.position = 'fixed';
-      container.style.opacity = '0.01';
-      container.style.zIndex = '-9999';
+      container.style.left = '-9999px';
+      container.style.top = '0';
+      container.style.opacity = '1';
       container.style.width = '800px';
       container.style.direction = 'rtl';
       container.style.textAlign = 'right';
       container.innerHTML = htmlContent;
       document.body.appendChild(container);
+
+      // Allow DOM to fully render before html2canvas capture
+      await new Promise(r => setTimeout(r, 150));
 
       showLoading('🖼️ Rendering PDF...');
 
@@ -811,7 +823,7 @@ class WordToPDFConverter {
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
       };
 
-      const pdfBlob = await window.html2pdf()
+      const pdfBlob = await html2pdfLib()
         .set(options)
         .from(container)
         .outputPdf('blob');
@@ -990,26 +1002,6 @@ function downloadFile(blob, filename) {
   URL.revokeObjectURL(url);
 }
 
-function showToast(message, type = 'success') {
-  const container = document.getElementById('toast-container');
-  if (!container) return;
-
-  const toast = document.createElement('div');
-  toast.className = `toast toast-${type}`;
-  toast.innerHTML = `
-    <i data-lucide="${type === 'success' ? 'check-circle' : 'alert-circle'}"></i>
-    <span>${message}</span>
-  `;
-
-  container.appendChild(toast);
-
-  // Auto-remove after 4 seconds
-  setTimeout(() => {
-    toast.classList.add('toast-removing');
-    setTimeout(() => toast.remove(), 300);
-  }, 4000);
-}
-
 // ============================================================================
 // MAIN CONVERSION ORCHESTRATOR
 // ============================================================================
@@ -1111,7 +1103,6 @@ window.processConversion = async function (currentTool) {
 };
 
 // Legacy function for compatibility
-const { PDFDocument: CompatPDFDocument, rgb: CompatRgb, degrees: CompatDegrees } = PDFLib;
 
 window.processPDF = async function (toolId, files) {
   window.setProcessingState(true);
@@ -1290,22 +1281,6 @@ async function deletePages(file, pagesToDelete) {
   return await pdf.save();
 }
 
-async function protectPDF(file, password) {
-  const buffer = await fileToBuffer(file);
-  // Note: pdf-lib doesn't natively support full RC4/AES encryption in standard build easily
-  // We mock this by saving the file and warning user for this demo.
-  // In a real scenario, this requires node.js backend or specialized wasm library like pdf-lib with crypto
-  alert("Notice: True encryption requires backend/crypto libraries. This is a mockup.");
-  return buffer;
-}
-
-async function unlockPDF(file, password) {
-  const buffer = await fileToBuffer(file);
-  // If the file is encrypted, ignoreEncryption will attempt to load it without enforcing the password.
-  const pdf = await PDFDocument.load(buffer, { ignoreEncryption: true });
-  return await pdf.save();
-}
-
 async function watermarkPDF(file, text) {
   const buffer = await fileToBuffer(file);
   const pdf = await PDFDocument.load(buffer);
@@ -1387,13 +1362,4 @@ async function pdfToJpg(file) {
       }, 'image/jpeg', 0.9);
     });
   }
-}
-
-async function mockConversion(toolId, file) {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      alert(`Mock conversion for ${toolId} completed successfully!`);
-      resolve();
-    }, 2000);
-  });
 }
