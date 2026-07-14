@@ -1659,4 +1659,61 @@ async function pdfToJpg(file) {
   const zipBlob = await zip.generateAsync({ type: 'blob' });
   downloadBlob(zipBlob, 'pdf-pages.zip', 'application/zip');
   hideLoading();
+  /**
+ * تحويل ملف Word (docx) إلى PDF باستخدام Mammoth و html2pdf
+ * @param {ArrayBuffer} arrayBuffer - محتوى ملف الـ Word المرفوع
+ * @returns {Promise<Blob>} - ملف الـ PDF الناتج كـ Blob
+ */
+async function convertWordToPDF(arrayBuffer) {
+    try {
+        // 1. تحويل ملف الـ Word إلى كود HTML نظيف عبر Mammoth
+        const result = await mammoth.convertToHtml({ arrayBuffer: arrayBuffer });
+        const htmlContent = result.value; 
+
+        if (!htmlContent) {
+            throw new Error("لم نتمكن من قراءة محتوى ملف الـ Word، قد يكون الملف فارغاً أو تالفاً.");
+        }
+
+        // 2. إنشاء عنصر وهمي (Container) غير مرئي لعرض وتنسيق الـ HTML
+        const tempContainer = document.createElement('div');
+        tempContainer.style.position = 'absolute';
+        tempContainer.style.opacity = '0.01'; // إخفاء العنصر بدلاً من الشاشة
+        tempContainer.style.zIndex = '-9999';
+        // لا تستخدم left: -9999px أو display: none لأنها تسبب مشكلة ظهور الصفحة بيضاء
+        tempContainer.style.width = '800px';  // حجم تقريبي لعرض صفحة A4 بصرياً
+        tempContainer.style.padding = '40px'; // هوامش افتراضية للمستند
+        tempContainer.style.background = '#ffffff';
+        tempContainer.style.fontFamily = 'Arial, sans-serif';
+        tempContainer.style.lineHeight = '1.6';
+        tempContainer.style.color = '#333333';
+        tempContainer.innerHTML = htmlContent;
+
+        document.body.appendChild(tempContainer);
+
+        // 3. إعدادات مكتبة html2pdf لضمان جودة وأبعاد قياسية للملف الناتج
+        const options = {
+            margin: [15, 15, 15, 15], // الهوامش بالملم (أعلى، أسفل، يسار، يمين)
+            filename: 'converted-document.pdf',
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { 
+                scale: 2,         // زيادة الدقة والوضوح للنصوص والصور
+                useCORS: true, 
+                logging: false 
+            },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } // أبعاد صفحة A4 القياسية
+        };
+
+        // 4. توليد ملف الـ PDF كـ Blob
+        const pdfBlob = await html2pdf().set(options).from(tempContainer).outputPdf('blob');
+
+        // 5. تنظيف المتصفح وحذف العنصر الوهمي بعد الانتهاء
+        document.body.removeChild(tempContainer);
+
+        return pdfBlob;
+
+    } catch (error) {
+        console.error("Error inside convertWordToPDF:", error);
+        throw error;
+    }
+}
 }
