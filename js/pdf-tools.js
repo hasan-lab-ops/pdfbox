@@ -772,10 +772,8 @@ class WordToPDFConverter {
     try {
       showLoading('📄 Reading Word document...');
 
-      // Step 1: Read file as ArrayBuffer
       const arrayBuffer = await this.readFile(file);
 
-      // Step 2: Convert DOCX to HTML using Mammoth
       const mammothLib = window.mammoth || globalThis.mammoth;
       if (!mammothLib) {
         throw new Error('Mammoth.js failed to load from the CDN.');
@@ -788,8 +786,6 @@ class WordToPDFConverter {
         throw new Error('No content found in the Word document.');
       }
 
-      this.wordContent = htmlContent;
-
       showLoading('🔄 Converting to PDF...');
 
       const html2pdfLib = window.html2pdf;
@@ -797,38 +793,33 @@ class WordToPDFConverter {
         throw new Error('html2pdf.js failed to load from the CDN.');
       }
 
-      // Step 3: Create off-screen temporary container (fully visible for html2canvas)
       container = document.createElement('div');
       container.style.position = 'fixed';
-      container.style.left = '-9999px';
-      container.style.top = '0';
-      container.style.opacity = '1';
+      container.style.opacity = '0.01';
+      container.style.zIndex = '-9999';
       container.style.width = '800px';
       container.style.direction = 'rtl';
       container.style.textAlign = 'right';
+      container.style.top = '0';
+      container.style.left = '0';
       container.innerHTML = htmlContent;
       document.body.appendChild(container);
 
-      // Allow DOM to fully render before html2canvas capture
-      await new Promise(r => setTimeout(r, 150));
+      await new Promise(r => setTimeout(r, 200));
 
       showLoading('🖼️ Rendering PDF...');
 
-      // Step 4: Generate PDF with html2pdf.js
-      const options = {
-        margin: 15,
-        filename: 'converted-document.pdf',
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { scale: 2, useCORS: true },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-      };
-
       const pdfBlob = await html2pdfLib()
-        .set(options)
+        .set({
+          margin: 15,
+          filename: 'converted-document.pdf',
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2, useCORS: true },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+        })
         .from(container)
         .outputPdf('blob');
 
-      // Step 5: Remove temporary container immediately
       if (container && container.parentNode) {
         document.body.removeChild(container);
       }
@@ -878,13 +869,22 @@ class PDFEncryptor {
       const pdfBytes = new Uint8Array(arrayBuffer);
       this.pdfDoc = await PDFDocument.load(pdfBytes);
 
-      showLoading('🔒 Applying protection...');
+      showLoading('🔒 Applying password protection & encryption...');
 
-      const newPdf = await PDFDocument.create();
-      const copiedPages = await newPdf.copyPages(this.pdfDoc, this.pdfDoc.getPageIndices());
-      copiedPages.forEach((page) => newPdf.addPage(page));
+      const protectedPdfBytes = await this.pdfDoc.save({
+        userPassword: password,
+        ownerPassword: password,
+        permissions: {
+          printing: 'highResolution',
+          modifying: false,
+          copying: false,
+          annotating: false,
+          fillingForms: false,
+          contentAccessibility: true,
+          documentAssembly: false
+        }
+      });
 
-      const protectedPdfBytes = await newPdf.save();
       const encryptedBlob = new Blob([protectedPdfBytes], { type: 'application/pdf' });
 
       showLoading('✅ Finalizing protected PDF...');
@@ -1285,17 +1285,28 @@ async function watermarkPDF(file, text) {
   const buffer = await fileToBuffer(file);
   const pdf = await PDFDocument.load(buffer);
   const pages = pdf.getPages();
+  const { rgb } = PDFLib;
+
+  const fontSize = 50;
+  const opacity = 0.3;
+  const color = rgb(0.85, 0.1, 0.1);
+  const spacingX = 250;
+  const spacingY = 200;
 
   pages.forEach(page => {
     const { width, height } = page.getSize();
-    page.drawText(text, {
-      x: 50,
-      y: height / 2,
-      size: 50,
-      color: rgb(0.95, 0.1, 0.1),
-      rotate: degrees(45),
-      opacity: 0.3,
-    });
+    for (let x = -width; x < width * 2; x += spacingX) {
+      for (let y = -height; y < height * 2; y += spacingY) {
+        page.drawText(text, {
+          x,
+          y,
+          size: fontSize,
+          color,
+          rotate: degrees(45),
+          opacity,
+        });
+      }
+    }
   });
   return await pdf.save();
 }
