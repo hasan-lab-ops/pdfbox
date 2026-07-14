@@ -1739,54 +1739,109 @@ async function pdfToJpg(file) {
  * @returns {Promise<Blob>} - The resulting PDF Blob
  */
 window.convertWordToPDF = async function convertWordToPDF(arrayBuffer) {
+  let tempContainer = null;
   try {
-    // 1. تحويل ملف الـ Word إلى كود HTML نظيف عبر Mammoth
-    const result = await mammoth.convertToHtml({ arrayBuffer: arrayBuffer });
+    if (typeof showLoading === 'function') showLoading('🔄 Loading dependencies...');
+
+    // 1. Ensure required libraries are loaded
+    const mammothLib = window.mammoth || globalThis.mammoth;
+    if (!mammothLib) throw new Error("Mammoth.js library is missing. Please ensure the CDN is loaded.");
+    
+    const html2pdfLib = window.html2pdf || globalThis.html2pdf;
+    if (!html2pdfLib) throw new Error("html2pdf.js library is missing. Please ensure the CDN is loaded.");
+
+    if (typeof showLoading === 'function') showLoading('🔄 Parsing Word document...');
+
+    // 2. Read the .docx file using mammoth.js and convert to clean HTML
+    const result = await mammothLib.convertToHtml({ arrayBuffer: arrayBuffer });
     const htmlContent = result.value;
 
-    if (!htmlContent) {
-      throw new Error("لم نتمكن من قراءة محتوى ملف الـ Word، قد يكون الملف فارغاً أو تالفاً.");
+    if (!htmlContent || htmlContent.trim() === '') {
+      throw new Error("Could not read Word content. The file might be empty, corrupted, or not a valid .docx document.");
     }
 
-    // 2. إنشاء عنصر وهمي (Container) غير مرئي لعرض وتنسيق الـ HTML
-    const tempContainer = document.createElement('div');
-    tempContainer.style.position = 'absolute';
-    tempContainer.style.opacity = '0.01'; // إخفاء العنصر بدلاً من الشاشة
-    tempContainer.style.zIndex = '-9999';
-    // لا تستخدم left: -9999px أو display: none لأنها تسبب مشكلة ظهور الصفحة بيضاء
-    tempContainer.style.width = '800px';  // حجم تقريبي لعرض صفحة A4 بصرياً
-    tempContainer.style.padding = '40px'; // هوامش افتراضية للمستند
-    tempContainer.style.background = '#ffffff';
-    tempContainer.style.fontFamily = 'Arial, sans-serif';
-    tempContainer.style.lineHeight = '1.6';
-    tempContainer.style.color = '#333333';
-    tempContainer.innerHTML = htmlContent;
+    // 3. Improve Arabic and RTL support
+    // Detect if text contains Arabic/Persian/Hebrew characters
+    const rtlRegex = /[\u0591-\u07FF\uFB1D-\uFDFD\uFE70-\uFEFC]/;
+    const isRTL = rtlRegex.test(htmlContent);
 
+    // 4. Inject the HTML into a temporary DOM container
+    if (typeof showLoading === 'function') showLoading('🖼️ Rendering PDF elements...');
+    tempContainer = document.createElement('div');
+    tempContainer.id = 'word-to-pdf-temp-container';
+    
+    // Use opacity: 0.01 and z-index: -9999 as per project rules (never display: none)
+    tempContainer.style.position = 'absolute';
+    tempContainer.style.top = '0';
+    tempContainer.style.left = '0';
+    tempContainer.style.opacity = '0.01'; 
+    tempContainer.style.zIndex = '-9999';
+    
+    // A4 dimensions simulation for accurate html2canvas rendering
+    tempContainer.style.width = '800px';  
+    tempContainer.style.padding = '40px'; 
+    tempContainer.style.background = '#ffffff';
+    tempContainer.style.color = '#333333';
+    tempContainer.style.lineHeight = '1.6';
+    
+    // Use fonts that support Arabic out of the box
+    tempContainer.style.fontFamily = "'Segoe UI', 'Cairo', 'Amiri', 'Arial', sans-serif";
+    
+    if (isRTL) {
+      tempContainer.dir = 'rtl';
+      tempContainer.style.textAlign = 'right';
+    } else {
+      tempContainer.dir = 'ltr';
+      tempContainer.style.textAlign = 'left';
+    }
+
+    tempContainer.innerHTML = htmlContent;
     document.body.appendChild(tempContainer);
 
-    // 3. إعدادات مكتبة html2pdf لضمان جودة وأبعاد قياسية للملف الناتج
+    // CRITICAL: Wait for browser to paint DOM and load fonts before capturing (prevents empty PDF)
+    await document.fonts.ready;
+    await new Promise(resolve => setTimeout(resolve, 600));
+
+    // 5. Optimize output and configure html2pdf
+    if (typeof showLoading === 'function') showLoading('📦 Generating final PDF...');
     const options = {
-      margin: [15, 15, 15, 15], // الهوامش بالملم (أعلى، أسفل، يسار، يمين)
+      margin: [15, 15, 15, 15], // Proper margins in mm
       filename: 'converted-document.pdf',
       image: { type: 'jpeg', quality: 0.98 },
-      html2canvas: {
-        scale: 2,         // زيادة الدقة والوضوح للنصوص والصور
-        useCORS: true,
-        logging: false
+      html2canvas: { 
+        scale: 2, // High resolution (scale: 2)
+        useCORS: true, 
+        logging: false 
       },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } // أبعاد صفحة A4 القياسية
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } // A4 page size
     };
 
-    // 4. توليد ملف الـ PDF كـ Blob
-    const pdfBlob = await html2pdf().set(options).from(tempContainer).outputPdf('blob');
+    // 6. Convert that HTML into a PDF using html2pdf.js
+    // Fix: Use .output('blob') instead of .outputPdf('blob') to properly generate the Blob
+    const pdfBlob = await html2pdfLib().set(options).from(tempContainer).output('blob');
 
-    // 5. تنظيف المتصفح وحذف العنصر الوهمي بعد الانتهاء
-    document.body.removeChild(tempContainer);
+    if (!pdfBlob || pdfBlob.size === 0) {
+      throw new Error("Generated PDF is empty. Rendering failed.");
+    }
 
+    // 7. Clean up after conversion
+    if (tempContainer && tempContainer.parentNode) {
+      tempContainer.parentNode.removeChild(tempContainer);
+    }
+    
+    if (typeof hideLoading === 'function') hideLoading();
+    
     return pdfBlob;
 
   } catch (error) {
     console.error("Error inside convertWordToPDF:", error);
+    
+    // Ensure cleanup happens even on failure to avoid memory leaks
+    if (tempContainer && tempContainer.parentNode) {
+      tempContainer.parentNode.removeChild(tempContainer);
+    }
+    if (typeof hideLoading === 'function') hideLoading();
+    
     throw error;
   }
 }
