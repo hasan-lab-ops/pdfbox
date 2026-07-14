@@ -52,7 +52,7 @@ function loadScript(src) {
 const CDN = {
   mammoth: 'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js',
   html2canvas: 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
-  html2pdf: 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.14.0/html2pdf.bundle.min.js'
+  html2pdf: 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js'
 };
 
 async function ensureMammothLoaded() {
@@ -849,70 +849,87 @@ class WordToPDFConverter {
     try {
       showLoading('📄 Reading Word document...');
 
+      // Step 1 — Read the uploaded .docx file as an ArrayBuffer
       const arrayBuffer = await this.readFile(file);
 
+      // Step 2 — Use Mammoth.js to convert DOCX → HTML
       const mammothLib = await ensureMammothLoaded();
       const result = await mammothLib.convertToHtml({ arrayBuffer });
       const htmlContent = result.value;
 
-      console.log('[WordToPDFConverter] Extracted HTML length:', htmlContent ? htmlContent.length : 0);
+      console.log('[WordToPDFConverter] Step 2 — Extracted HTML length:', htmlContent ? htmlContent.length : 0);
       if (htmlContent) {
-        console.log('[WordToPDFConverter] HTML snippet:', htmlContent.substring(0, 150) + '...');
+        console.log('[WordToPDFConverter] HTML snippet (first 200 chars):', htmlContent.substring(0, 200));
+      }
+      if (result.messages && result.messages.length) {
+        console.warn('[WordToPDFConverter] Mammoth warnings:', result.messages.map(m => m.message).join('; '));
       }
 
       if (!htmlContent || htmlContent.trim().length === 0) {
-        console.error('[WordToPDFConverter] HTML content is empty after Mammoth conversion.');
-        throw new Error('No content found in the Word document.');
+        throw new Error('Mammoth extracted no content. The .docx file may be empty or corrupted.');
       }
 
-      showLoading('🔄 Converting to PDF...');
-
+      // Step 3 — Ensure html2pdf.js is loaded
+      showLoading('🔄 Preparing renderer...');
       const html2pdfLib = await ensureHtml2PdfLoaded();
       const direction = detectHtmlDirection(htmlContent);
 
+      // Step 4 — Create an off-screen wrapper element with A4-like margins.
+      //          MUST be in the DOM with real dimensions so html2canvas can paint it.
+      //          Using position:fixed + zIndex:-99999 + opacity:0.01 keeps it
+      //          invisible without collapsing its canvas size to 0.
       container = document.createElement('div');
       container.id = 'word-to-pdf-temp-container';
 
-      // 3. Anti-Collapse Dimensions
-      container.style.position = 'fixed';
-      container.style.top = '0';
-      container.style.left = '0';
-      container.style.width = '800px';
-      container.style.zIndex = '-99999';
-      container.style.opacity = '0.01';
-      container.style.pointerEvents = 'none';
-      container.style.boxSizing = 'border-box';
+      // Anti-collapse positioning (never use display:none or left:-9999px)
+      container.style.cssText = [
+        'position: fixed',
+        'top: 0',
+        'left: 0',
+        'width: 794px',          // ~A4 width at 96 dpi
+        'min-height: 1px',
+        'z-index: -99999',
+        'opacity: 0.01',
+        'pointer-events: none',
+        'box-sizing: border-box',
+        // A4 print-friendly inner style
+        'padding: 20mm',
+        'background: #ffffff',
+        `font-family: system-ui, -apple-system, Arial, sans-serif`,
+        'font-size: 14px',
+        'line-height: 1.6',
+        `direction: ${direction}`,
+        `text-align: ${direction === 'rtl' ? 'right' : 'left'}`
+      ].join('; ');
 
-      // Additional styling
-      container.style.direction = direction;
-      container.style.textAlign = direction === 'rtl' ? 'right' : 'left';
-      container.style.padding = '24px';
-      container.style.fontFamily = 'sans-serif';
-      container.style.fontSize = '14px';
-      container.style.lineHeight = '1.5';
-
-      // 1. Total CSS Isolation (Prevent Style Bleeding)
-      const isolationCSS = `
+      // Step 5 — Inject CSS isolation reset + the Mammoth HTML
+      container.innerHTML = `
         <style>
-          #word-to-pdf-temp-container {
-            background: #ffffff !important;
-          }
-          #word-to-pdf-temp-container, #word-to-pdf-temp-container * {
+          #word-to-pdf-temp-container { background: #ffffff !important; }
+          #word-to-pdf-temp-container *,
+          #word-to-pdf-temp-container p,
+          #word-to-pdf-temp-container span,
+          #word-to-pdf-temp-container h1,
+          #word-to-pdf-temp-container h2,
+          #word-to-pdf-temp-container h3,
+          #word-to-pdf-temp-container li,
+          #word-to-pdf-temp-container td,
+          #word-to-pdf-temp-container div {
             color: #000000 !important;
             opacity: 1 !important;
             visibility: visible !important;
             background-color: transparent !important;
           }
+          #word-to-pdf-temp-container table { border-collapse: collapse; width: 100%; }
+          #word-to-pdf-temp-container td, #word-to-pdf-temp-container th { border: 1px solid #ccc; padding: 4px 8px; }
         </style>
-      `;
+      ` + htmlContent;
 
-      container.innerHTML = isolationCSS + htmlContent;
       document.body.appendChild(container);
+      console.log('[WordToPDFConverter] Step 5 — Container appended to DOM.');
 
-      // 2. Wait for Font & Asset Rendering
+      // Step 6 — Wait for fonts and layout to be fully painted
       await document.fonts.ready;
-
-      // 4. Guaranteed DOM Paint Delay
       await new Promise(resolve => {
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
@@ -921,30 +938,29 @@ class WordToPDFConverter {
         });
       });
 
-      // 5. Diagnostic Logging
-      console.log('[WordToPDFConverter] Container in DOM?', document.body.contains(container));
-      console.log('[WordToPDFConverter] scrollWidth:', container.scrollWidth, 'scrollHeight:', container.scrollHeight);
-
+      // Step 7 — Diagnostic size check before rendering
+      console.log('[WordToPDFConverter] Step 7 — Container in DOM:', document.body.contains(container));
+      console.log('[WordToPDFConverter] scrollWidth:', container.scrollWidth, '| scrollHeight:', container.scrollHeight);
       if (container.scrollHeight === 0 || container.scrollWidth === 0) {
-        console.warn('[WordToPDFConverter] WARNING: Container has 0 width or height! PDF may be blank.');
+        console.warn('[WordToPDFConverter] ⚠️ Container dimensions are 0 — PDF will likely be blank!');
       }
 
+      // Step 8 — Render with html2pdf using high-fidelity settings
       showLoading('🖼️ Rendering PDF...');
 
       const pdfBlob = await html2pdfLib()
         .set({
-          margin: 15,
-          filename: 'converted-document.pdf',
-          image: { type: 'jpeg', quality: 0.98 },
+          margin:     [15, 15, 15, 15],  // mm: top, left, bottom, right
+          filename:   'converted.pdf',
+          image:      { type: 'jpeg', quality: 0.98 },
           html2canvas: {
-            scale: 2,
-            useCORS: true,
-            logging: true,
-            onclone: (clonedDoc) => {
+            scale:    2,
+            useCORS:  true,
+            logging:  false,
+            onclone:  (clonedDoc) => {
+              // Restore full opacity in the cloned document so html2canvas captures everything
               const el = clonedDoc.getElementById('word-to-pdf-temp-container');
-              if (el) {
-                el.style.opacity = '1';
-              }
+              if (el) { el.style.opacity = '1'; }
             }
           },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
@@ -952,18 +968,22 @@ class WordToPDFConverter {
         .from(container)
         .outputPdf('blob');
 
+      // Step 9 — Cleanup temp container
       if (container && container.parentNode) {
         document.body.removeChild(container);
       }
+      console.log('[WordToPDFConverter] ✅ Conversion complete. Blob size:', pdfBlob?.size, 'bytes');
 
       hideLoading();
       return pdfBlob;
 
     } catch (error) {
+      // Always clean up DOM even on failure
       if (container && container.parentNode) {
         document.body.removeChild(container);
       }
       hideLoading();
+      console.error('[WordToPDFConverter] ❌ Conversion failed:', error);
       throw new Error(`Word to PDF conversion failed: ${error.message}`);
     }
   }
@@ -1176,9 +1196,15 @@ window.processConversion = async function (currentTool, files) {
           hideLoading();
           return;
         }
-        converter = new WordToPDFConverter();
-        blob = await converter.convert(file);
-        outputFilename = file.name.replace(/\.docx?$/i, '.pdf') || 'document.pdf';
+        try {
+          converter = new WordToPDFConverter();
+          blob = await converter.convert(file);
+          outputFilename = file.name.replace(/\.docx?$/i, '.pdf') || 'converted.pdf';
+        } catch (wordErr) {
+          hideLoading();
+          showToast('Conversion failed: ' + wordErr.message, 'error');
+          return;
+        }
         break;
 
       case 'protect-pdf':
