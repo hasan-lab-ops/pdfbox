@@ -9,28 +9,22 @@ const DIR = 'C:/Users/capy1/Desktop/front end2';
 if (!fs.existsSync(DOWNLOAD_DIR)) fs.mkdirSync(DOWNLOAD_DIR, { recursive: true });
 
 async function goToTool(page, toolId) {
-  // Use evaluate to change hash directly — avoids page.goto race condition
   await page.evaluate((id) => { window.location.hash = `tool?id=${id}`; }, toolId);
   await page.waitForTimeout(600);
-  // Ensure dropzone is visible (tool initialized)
   await page.locator('#file-dropzone').waitFor({ state: 'visible', timeout: 10000 });
 }
 
 async function uploadAndProcess(page, filePath, opts = {}) {
-  // Upload file
   const fileInput = page.locator('#file-input');
   await fileInput.setInputFiles(filePath);
-  // Playwright's setInputFiles doesn't reliably fire 'change' on display:none
-  // inputs after tool processing cycles. Dispatch manually to be safe.
   await page.evaluate(() => {
     const fi = document.getElementById('file-input');
     if (fi && fi.files.length) {
       fi.dispatchEvent(new Event('change', { bubbles: true }));
     }
   });
-  // Wait for process button
   await page.locator('#process-btn').waitFor({ state: 'visible', timeout: 15000 });
-  // Fill optional fields
+
   if (opts.password) {
     await page.locator('#tool-password').fill(opts.password);
   }
@@ -43,13 +37,33 @@ async function uploadAndProcess(page, filePath, opts = {}) {
   if (opts.watermark) {
     await page.locator('#tool-watermark').fill(opts.watermark);
   }
-  // Click process and get download
+
+  // Click process
+  await page.locator('#process-btn').click();
+
+  // Handle pdf-to-jpg specially (no result screen, direct download)
+  if (opts.directDownload) {
+    const [download] = await Promise.all([
+      page.waitForEvent('download', { timeout: opts.timeout || 60000 }),
+    ]);
+    const filename = download.suggestedFilename();
+    await download.saveAs(path.join(DOWNLOAD_DIR, filename));
+    return filename;
+  }
+
+  // Wait for result screen to appear
+  await page.locator('#result-screen').waitFor({ state: 'visible', timeout: opts.timeout || 60000 });
+
+  // Get filename from result screen
+  const filename = await page.locator('#result-filename').textContent();
+
+  // Click download button and get the download
   const [download] = await Promise.all([
-    page.waitForEvent('download', { timeout: opts.timeout || 60000 }),
-    page.locator('#process-btn').click()
+    page.waitForEvent('download', { timeout: 30000 }),
+    page.locator('#result-download-btn').click()
   ]);
-  const filename = download.suggestedFilename();
-  await download.saveAs(path.join(DOWNLOAD_DIR, filename));
+  await download.saveAs(path.join(DOWNLOAD_DIR, download.suggestedFilename()));
+
   return filename;
 }
 
@@ -63,7 +77,6 @@ async function runTest(page, name, fn) {
     console.log(`FAIL - ${e.message.split('\n')[0]}`);
     return 'FAIL';
   } finally {
-    // Go back to home
     await page.evaluate(() => { window.location.hash = 'home'; });
     await page.waitForTimeout(300);
   }
@@ -138,7 +151,7 @@ async function main() {
 
   results['pdf-to-jpg'] = await runTest(page, 'PDF TO JPG', async () => {
     await goToTool(page, 'pdf-to-jpg');
-    return uploadAndProcess(page, `${DIR}/test-sample.pdf`);
+    return uploadAndProcess(page, `${DIR}/test-sample.pdf`, { directDownload: true });
   });
 
   results['jpg-to-pdf'] = await runTest(page, 'JPG TO PDF', async () => {

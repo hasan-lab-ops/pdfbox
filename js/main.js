@@ -103,6 +103,8 @@ let currentPreviewFile = null;
 function initToolDetailView(tool) {
     currentTool = tool;
     selectedFiles = []; // Reset state
+    resetPageRotations();
+    resetSplitPositions();
     
     document.getElementById('tool-detail-title').innerText = tool.title;
     document.getElementById('tool-detail-desc').innerText = tool.desc;
@@ -162,10 +164,36 @@ function initToolDetailView(tool) {
             <div class="form-group" style="max-width: 300px; margin: 0 auto;">
                 <label>Pages to Delete</label>
                 <input type="text" id="tool-range" class="form-control" placeholder="e.g. 2,4-5" />
-                <small style="color: var(--text-muted);">Use commas and ranges to remove pages.</small>
+                <small style="color: var(--text-muted);">Click pages below to select, or type a range above.</small>
+                <div style="display: flex; gap: 8px; margin-top: 10px;">
+                    <button id="delete-select-all" type="button" class="btn btn-outline" style="flex:1; font-size: 0.8rem;">Select All</button>
+                    <button id="delete-deselect-all" type="button" class="btn btn-outline" style="flex:1; font-size: 0.8rem;">Deselect All</button>
+                </div>
+                <div id="delete-count" style="text-align:center; margin-top:8px; font-size:0.85rem; color: var(--primary);"></div>
             </div>
         `;
         optionsContainer.classList.remove('hidden');
+        setTimeout(() => {
+            const selectAllBtn = document.getElementById('delete-select-all');
+            const deselectAllBtn = document.getElementById('delete-deselect-all');
+            if (selectAllBtn) {
+                selectAllBtn.addEventListener('click', () => {
+                    if (currentPreviewFile) {
+                        const total = selectedPageIndices.length || currentPreviewFile._pageCount || 0;
+                        selectedPageIndices = Array.from({ length: total }, (_, i) => i);
+                        renderPagePreviewGrid(currentPreviewFile);
+                        updateDeleteCount();
+                    }
+                });
+            }
+            if (deselectAllBtn) {
+                deselectAllBtn.addEventListener('click', () => {
+                    selectedPageIndices = [];
+                    renderPagePreviewGrid(currentPreviewFile);
+                    updateDeleteCount();
+                });
+            }
+        }, 0);
     } else if (tool.id === 'protect-pdf') {
         optionsContainer.innerHTML = `
             <div class="form-group" style="max-width: 300px; margin: 0 auto;">
@@ -178,6 +206,13 @@ function initToolDetailView(tool) {
     } else if (tool.id === 'unlock-pdf') {
         optionsContainer.innerHTML = `
             <div class="form-group" style="max-width: 300px; margin: 0 auto;">
+                <div id="unlock-encryption-status" style="
+                    padding: 10px 14px; border-radius: 10px; margin-bottom: 12px;
+                    background: rgba(251, 191, 36, 0.08); border: 1px solid rgba(251, 191, 36, 0.25);
+                    display: none; font-size: 0.85rem; text-align: center; color: var(--text-main);
+                ">
+                    🔍 Detecting encryption...
+                </div>
                 <label for="tool-password">🔓 Current Password</label>
                 <input type="password" id="tool-password" class="form-control" placeholder="Enter password to unlock" />
                 <small style="color: var(--text-muted);">Will create a new, unencrypted copy of your PDF.</small>
@@ -186,41 +221,65 @@ function initToolDetailView(tool) {
         optionsContainer.classList.remove('hidden');
     } else if (tool.id === 'pdf-to-word') {
         optionsContainer.innerHTML = `
-            <div class="form-group" style="max-width: 380px; margin: 0 auto; text-align: left;">
-                <label>📄 Convert PDF to Word</label>
-                <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 14px;">
-                    Uses PDF text extraction and automatic OCR fallback for scanned pages.
-                    Arabic documents with broken font mappings are detected and re-read via OCR automatically.
-                </p>
-                <div class="force-ocr-toggle-row" style="
-                    display: flex;
-                    align-items: flex-start;
-                    gap: 12px;
-                    padding: 12px 14px;
-                    background: var(--surface, rgba(255,255,255,0.04));
-                    border: 1px solid var(--border, rgba(255,255,255,0.1));
-                    border-radius: 10px;
-                    cursor: pointer;
-                " onclick="document.getElementById('force-ocr-toggle').click()">
-                    <div style="padding-top: 2px; flex-shrink: 0;">
-                        <input
-                            type="checkbox"
-                            id="force-ocr-toggle"
-                            style="width: 17px; height: 17px; cursor: pointer; accent-color: var(--primary, #6366f1);"
-                            onclick="event.stopPropagation()"
-                        />
-                    </div>
-                    <div>
-                        <strong style="display: block; font-size: 0.9rem; margin-bottom: 2px;">🔍 Force OCR for this file</strong>
-                        <small style="color: var(--text-muted); font-size: 0.8rem; line-height: 1.4;">
-                            Enable when the extracted text looks garbled or mixed up.
-                            All pages will be scanned as images and read by OCR instead of using the PDF text layer.
-                        </small>
-                    </div>
+            <div class="form-group" style="max-width: 400px; margin: 0 auto; text-align: left;">
+                <label>Conversion Mode</label>
+                <div style="display: flex; gap: 12px; margin-top: 8px;">
+                    <label class="pdf-word-mode" style="flex: 1; cursor: pointer;">
+                        <input type="radio" name="pdf-word-mode" value="standard" checked style="display: none;">
+                        <div class="pdf-word-mode-card" style="
+                            padding: 16px 12px;
+                            border: 2px solid var(--primary);
+                            border-radius: 12px;
+                            text-align: center;
+                            background: rgba(14, 165, 233, 0.05);
+                            transition: all 0.2s;
+                        ">
+                            <div style="font-weight: 600; margin-bottom: 4px;">📄 Standard</div>
+                            <div style="font-size: 0.8rem; color: var(--text-muted);">Text extraction</div>
+                        </div>
+                    </label>
+                    <label class="pdf-word-mode" style="flex: 1; cursor: pointer;">
+                        <input type="radio" name="pdf-word-mode" value="ocr" style="display: none;">
+                        <div class="pdf-word-mode-card" style="
+                            padding: 16px 12px;
+                            border: 2px solid var(--border);
+                            border-radius: 12px;
+                            text-align: center;
+                            transition: all 0.2s;
+                        ">
+                            <div style="font-weight: 600; margin-bottom: 4px;">🔍 Advanced OCR</div>
+                            <div style="font-size: 0.8rem; color: var(--text-muted);">Scanned docs</div>
+                        </div>
+                    </label>
                 </div>
+                <p id="pdf-word-mode-desc" style="color: var(--text-muted); font-size: 0.85rem; margin-top: 10px; text-align: center;">
+                    Extracts text layer directly. Best for native PDFs with selectable text.
+                </p>
             </div>
         `;
         optionsContainer.classList.remove('hidden');
+        setTimeout(() => {
+            document.querySelectorAll('.pdf-word-mode').forEach(opt => {
+                opt.addEventListener('click', () => {
+                    document.querySelectorAll('.pdf-word-mode input').forEach(r => r.checked = false);
+                    opt.querySelector('input').checked = true;
+                    document.querySelectorAll('.pdf-word-mode-card').forEach(card => {
+                        card.style.borderColor = 'var(--border)';
+                        card.style.background = 'transparent';
+                    });
+                    const card = opt.querySelector('.pdf-word-mode-card');
+                    card.style.borderColor = 'var(--primary)';
+                    card.style.background = 'rgba(14, 165, 233, 0.05)';
+                    const modeDesc = document.getElementById('pdf-word-mode-desc');
+                    if (modeDesc) {
+                        const val = opt.querySelector('input').value;
+                        modeDesc.textContent = val === 'ocr'
+                            ? 'Forces image-based OCR on every page. Best for scanned documents or garbled text.'
+                            : 'Extracts text layer directly. Best for native PDFs with selectable text.';
+                    }
+                });
+            });
+        }, 0);
     } else if (tool.id === 'word-to-pdf') {
         optionsContainer.innerHTML = `
             <div class="form-group" style="max-width: 300px; margin: 0 auto;">
@@ -231,9 +290,30 @@ function initToolDetailView(tool) {
         optionsContainer.classList.remove('hidden');
     } else if (tool.id === 'jpg-to-pdf') {
         optionsContainer.innerHTML = `
-            <div class="form-group" style="max-width: 320px; margin: 0 auto; text-align: left;">
-                <label>🖼️ Arrange images</label>
-                <p style="color: var(--text-muted); font-size: 0.9rem;">Drag the thumbnails to reorder them before generating a combined PDF.</p>
+            <div class="form-group" style="max-width: 400px; margin: 0 auto; text-align: left;">
+                <label>Image to PDF Options</label>
+                <div style="display: flex; gap: 12px; margin-bottom: 12px;">
+                    <div style="flex: 1;">
+                        <small style="color: var(--text-muted); font-weight: 500;">Page Orientation</small>
+                        <select id="jpg-orientation" class="form-control" style="margin-top: 4px;">
+                            <option value="portrait">Portrait</option>
+                            <option value="landscape">Landscape</option>
+                            <option value="auto">Auto-detect</option>
+                        </select>
+                    </div>
+                    <div style="flex: 1;">
+                        <small style="color: var(--text-muted); font-weight: 500;">Page Size</small>
+                        <select id="jpg-page-size" class="form-control" style="margin-top: 4px;">
+                            <option value="a4">A4</option>
+                            <option value="letter">US Letter</option>
+                            <option value="fit">Fit to image</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-control" style="padding: 12px 14px; display: flex; align-items: center; gap: 10px;">
+                    <input type="checkbox" id="jpg-separate" />
+                    <span>Save each image as a separate PDF</span>
+                </div>
             </div>
         `;
         optionsContainer.classList.remove('hidden');
@@ -245,6 +325,72 @@ function initToolDetailView(tool) {
             </div>
         `;
         optionsContainer.classList.remove('hidden');
+    } else if (tool.id === 'compress') {
+        optionsContainer.innerHTML = `
+            <div class="form-group" style="max-width: 400px; margin: 0 auto; text-align: left;">
+                <label>Compression Level</label>
+                <div class="compress-options" style="display: flex; gap: 12px; margin-top: 8px;">
+                    <label class="compress-option" style="flex: 1; cursor: pointer;">
+                        <input type="radio" name="compress-level" value="low" style="display: none;">
+                        <div class="compress-option-card" style="
+                            padding: 16px 12px;
+                            border: 2px solid var(--border);
+                            border-radius: 12px;
+                            text-align: center;
+                            transition: all 0.2s;
+                        ">
+                            <div style="font-weight: 600; margin-bottom: 4px;">Low</div>
+                            <div style="font-size: 0.8rem; color: var(--text-muted);">High quality</div>
+                        </div>
+                    </label>
+                    <label class="compress-option" style="flex: 1; cursor: pointer;">
+                        <input type="radio" name="compress-level" value="medium" checked style="display: none;">
+                        <div class="compress-option-card" style="
+                            padding: 16px 12px;
+                            border: 2px solid var(--primary);
+                            border-radius: 12px;
+                            text-align: center;
+                            background: rgba(14, 165, 233, 0.05);
+                            transition: all 0.2s;
+                        ">
+                            <div style="font-weight: 600; margin-bottom: 4px;">Medium</div>
+                            <div style="font-size: 0.8rem; color: var(--text-muted);">Recommended</div>
+                        </div>
+                    </label>
+                    <label class="compress-option" style="flex: 1; cursor: pointer;">
+                        <input type="radio" name="compress-level" value="strong" style="display: none;">
+                        <div class="compress-option-card" style="
+                            padding: 16px 12px;
+                            border: 2px solid var(--border);
+                            border-radius: 12px;
+                            text-align: center;
+                            transition: all 0.2s;
+                        ">
+                            <div style="font-weight: 600; margin-bottom: 4px;">Strong</div>
+                            <div style="font-size: 0.8rem; color: var(--text-muted);">Smallest size</div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+        `;
+        optionsContainer.classList.remove('hidden');
+
+        // Add click handlers for compress options
+        setTimeout(() => {
+            document.querySelectorAll('.compress-option').forEach(opt => {
+                opt.addEventListener('click', () => {
+                    document.querySelectorAll('.compress-option input').forEach(r => r.checked = false);
+                    opt.querySelector('input').checked = true;
+                    document.querySelectorAll('.compress-option-card').forEach(card => {
+                        card.style.borderColor = 'var(--border)';
+                        card.style.background = 'transparent';
+                    });
+                    const card = opt.querySelector('.compress-option-card');
+                    card.style.borderColor = 'var(--primary)';
+                    card.style.background = 'rgba(14, 165, 233, 0.05)';
+                });
+            });
+        }, 100);
     } else if (tool.id === 'rotate') {
         optionsContainer.innerHTML = `
             <div class="form-group" style="max-width: 300px; margin: 0 auto;">
@@ -287,8 +433,10 @@ function resetWorkspace() {
     document.getElementById('process-btn').classList.add('hidden');
     document.getElementById('loading-indicator').classList.add('hidden');
     document.getElementById('file-dropzone').classList.remove('hidden');
+    document.getElementById('result-screen').classList.add('hidden');
     selectedPageIndices = [];
     currentPreviewFile = null;
+    resetPageRotations();
     hideConversionNotice();
 }
 
@@ -384,11 +532,74 @@ function handleFiles(files) {
 
     selectedPageIndices = [];
     updateFileListUI();
+
+    // Auto-detect encryption for unlock tool
+    if (currentTool.id === 'unlock-pdf' && selectedFiles[0]) {
+        detectEncryption(selectedFiles[0]);
+    }
+}
+
+async function detectEncryption(file) {
+    const statusEl = document.getElementById('unlock-encryption-status');
+    if (!statusEl) return;
+    statusEl.style.display = 'block';
+    statusEl.innerHTML = '🔍 Detecting encryption...';
+    statusEl.style.background = 'rgba(251, 191, 36, 0.08)';
+    statusEl.style.borderColor = 'rgba(251, 191, 36, 0.25)';
+
+    try {
+        const buffer = await file.arrayBuffer();
+        const uint8 = new Uint8Array(buffer);
+        // Try loading without password first
+        const { PDFDocument } = await import('https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm');
+        let encrypted = false;
+        let passwordNeeded = false;
+        
+        try {
+            // Check if PDF requires password by looking at the encryption dictionary
+            const pdfBytes = new Uint8Array(buffer);
+            const pdfStr = new TextDecoder('latin1').decode(pdfBytes.slice(0, 2048));
+            
+            // Simple heuristic: look for encryption markers in the raw bytes
+            if (pdfStr.includes('/Encrypt') || pdfStr.includes('/U ') || pdfStr.includes('/O ')) {
+                encrypted = true;
+                // Try loading with empty password to confirm
+                try {
+                    const testDoc = await PDFDocument.load(uint8, { ignoreEncryption: false });
+                    // If it loads without error, it's not actually encrypted or has no user password
+                    passwordNeeded = false;
+                } catch (e) {
+                    passwordNeeded = true;
+                }
+            }
+        } catch (e) {
+            // If detection fails, assume not encrypted
+            encrypted = false;
+        }
+
+        if (encrypted && passwordNeeded) {
+            statusEl.innerHTML = '🔒 This PDF is password-protected. Enter the password below to unlock it.';
+            statusEl.style.background = 'rgba(239, 68, 68, 0.08)';
+            statusEl.style.borderColor = 'rgba(239, 68, 68, 0.25)';
+        } else if (encrypted) {
+            statusEl.innerHTML = '🔓 This PDF has encryption but no user password. You can unlock it directly.';
+            statusEl.style.background = 'rgba(14, 165, 233, 0.08)';
+            statusEl.style.borderColor = 'rgba(14, 165, 233, 0.25)';
+        } else {
+            statusEl.innerHTML = '✅ This PDF does not appear to be password-protected.';
+            statusEl.style.background = 'rgba(34, 197, 94, 0.08)';
+            statusEl.style.borderColor = 'rgba(34, 197, 94, 0.25)';
+        }
+    } catch (e) {
+        statusEl.innerHTML = '⚠️ Could not detect encryption status. Try entering the password if you know it.';
+        statusEl.style.background = 'rgba(251, 191, 36, 0.08)';
+        statusEl.style.borderColor = 'rgba(251, 191, 36, 0.25)';
+    }
 }
 
 async function renderPagePreviewGrid(file) {
     const grid = document.getElementById('page-preview-grid');
-    if (!grid || !file || !['split', 'delete', 'compress', 'pdf-to-jpg'].includes(currentTool?.id)) {
+    if (!grid || !file || !['split', 'delete', 'compress', 'pdf-to-jpg', 'rotate'].includes(currentTool?.id)) {
         if (grid) {
             grid.classList.add('hidden');
             grid.innerHTML = '';
@@ -410,10 +621,17 @@ async function renderPagePreviewGrid(file) {
         const arrayBuffer = await file.arrayBuffer();
         const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
         const count = pdfDoc.numPages;
+        file._pageCount = count;
         const cards = [];
 
         if (currentTool.id === 'delete') {
             selectedPageIndices = selectedPageIndices.length ? selectedPageIndices : Array.from({ length: count }, (_, index) => index);
+        }
+
+        if (currentTool.id === 'rotate') {
+            for (let i = 1; i <= count; i++) {
+                if (!(i in pageRotations)) pageRotations[i] = 0;
+            }
         }
 
         for (let pageNumber = 1; pageNumber <= count; pageNumber += 1) {
@@ -425,33 +643,172 @@ async function renderPagePreviewGrid(file) {
             const context = canvas.getContext('2d');
             await page.render({ canvasContext: context, viewport }).promise;
             const active = currentTool.id === 'delete' ? selectedPageIndices.includes(pageNumber - 1) : true;
-            cards.push(`
-                <button class="page-preview-card ${active ? 'active' : ''}" data-page-number="${pageNumber}" type="button">
-                    <div class="page-number">Page ${pageNumber}</div>
-                    <div class="page-thumb"><img src="${canvas.toDataURL('image/png')}" alt="Page ${pageNumber}" /></div>
-                </button>
-            `);
+            
+            if (currentTool.id === 'rotate') {
+                const rot = pageRotations[pageNumber] || 0;
+                cards.push(`
+                    <div class="page-preview-card active" data-page-number="${pageNumber}" style="position: relative;">
+                        <div class="page-number">Page ${pageNumber} <span style="font-size: 0.7rem; color: var(--primary);">(${rot}°)</span></div>
+                        <div class="page-thumb" style="transform: rotate(${rot}deg); transition: transform 0.3s;"><img src="${canvas.toDataURL('image/png')}" alt="Page ${pageNumber}" /></div>
+                        <div class="page-rotate-controls" style="display: flex; justify-content: center; gap: 4px; margin-top: 8px;">
+                            <button class="page-rotate-btn" data-page="${pageNumber}" data-dir="-90" type="button" style="
+                                padding: 4px 8px; font-size: 0.75rem; border: 1px solid var(--border); border-radius: 6px; background: white; cursor: pointer; color: var(--text-main);
+                            " title="Rotate Left">↺</button>
+                            <button class="page-rotate-btn" data-page="${pageNumber}" data-dir="90" type="button" style="
+                                padding: 4px 8px; font-size: 0.75rem; border: 1px solid var(--border); border-radius: 6px; background: white; cursor: pointer; color: var(--text-main);
+                            " title="Rotate Right">↻</button>
+                        </div>
+                    </div>
+                `);
+            } else if (currentTool.id === 'split') {
+                // Split: show scissors between pages
+                cards.push(`
+                    <div class="page-preview-card active" data-page-number="${pageNumber}" style="position: relative;">
+                        <div class="page-number">Page ${pageNumber}</div>
+                        <div class="page-thumb"><img src="${canvas.toDataURL('image/png')}" alt="Page ${pageNumber}" /></div>
+                    </div>
+                `);
+                if (pageNumber < count) {
+                    cards.push(`
+                        <div class="split-scissors" data-after="${pageNumber}" style="
+                            display: flex; align-items: center; justify-content: center;
+                            cursor: pointer; padding: 4px; border-radius: 8px;
+                            transition: all 0.2s; color: var(--text-muted);
+                        " title="Click to split here">
+                            <span style="font-size: 1.2rem;">✂️</span>
+                        </div>
+                    `);
+                }
+            } else {
+                cards.push(`
+                    <button class="page-preview-card ${active ? 'active' : ''}" data-page-number="${pageNumber}" type="button" style="position:relative;">
+                        <div class="page-number">Page ${pageNumber}</div>
+                        <div class="page-thumb"><img src="${canvas.toDataURL('image/png')}" alt="Page ${pageNumber}" /></div>
+                        ${currentTool.id === 'delete' ? `<div class="delete-page-overlay ${active ? '' : 'selected'}" style="
+                            position:absolute; top:0; left:0; right:0; bottom:0;
+                            display:flex; align-items:center; justify-content:center;
+                            border-radius:12px; pointer-events:none;
+                            transition: background 0.2s;
+                            ${active ? 'background: rgba(239,68,68,0.12);' : 'background: rgba(239,68,68,0.25);'}
+                        ">
+                            <span style="font-size:2rem; color:#ef4444; text-shadow: 0 1px 3px rgba(0,0,0,0.2);">${active ? '' : '✕'}</span>
+                        </div>` : ''}
+                    </button>
+                `);
+            }
         }
 
         grid.innerHTML = cards.join('');
-        grid.querySelectorAll('.page-preview-card').forEach((card) => {
-            card.addEventListener('click', () => {
-                if (currentTool.id !== 'delete') return;
-                const pageIndex = Number(card.getAttribute('data-page-number')) - 1;
-                if (selectedPageIndices.includes(pageIndex)) {
-                    selectedPageIndices = selectedPageIndices.filter((item) => item !== pageIndex);
-                } else {
-                    selectedPageIndices.push(pageIndex);
-                }
-                renderPagePreviewGrid(currentPreviewFile);
+        
+        if (currentTool.id === 'rotate') {
+            grid.querySelectorAll('.page-rotate-btn').forEach((btn) => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const pageNum = Number(btn.getAttribute('data-page'));
+                    const dir = Number(btn.getAttribute('data-dir'));
+                    pageRotations[pageNum] = ((pageRotations[pageNum] || 0) + dir + 360) % 360;
+                    renderPagePreviewGrid(currentPreviewFile);
+                });
             });
-        });
+        } else if (currentTool.id === 'split') {
+            grid.querySelectorAll('.split-scissors').forEach((scissors) => {
+                scissors.addEventListener('click', () => {
+                    const afterPage = Number(scissors.getAttribute('data-after'));
+                    if (splitPositions[afterPage]) {
+                        delete splitPositions[afterPage];
+                        scissors.style.background = 'transparent';
+                        scissors.style.color = 'var(--text-muted)';
+                    } else {
+                        splitPositions[afterPage] = true;
+                        scissors.style.background = 'rgba(14, 165, 233, 0.1)';
+                        scissors.style.color = 'var(--primary)';
+                    }
+                    // Update range input based on split positions
+                    updateSplitRange();
+                });
+                scissors.addEventListener('mouseenter', () => {
+                    scissors.style.background = 'rgba(14, 165, 233, 0.05)';
+                });
+                scissors.addEventListener('mouseleave', () => {
+                    if (!splitPositions[scissors.getAttribute('data-after')]) {
+                        scissors.style.background = 'transparent';
+                    }
+                });
+            });
+        } else {
+            grid.querySelectorAll('.page-preview-card').forEach((card) => {
+                card.addEventListener('click', () => {
+                    if (currentTool.id !== 'delete') return;
+                    const pageIndex = Number(card.getAttribute('data-page-number')) - 1;
+                    if (selectedPageIndices.includes(pageIndex)) {
+                        selectedPageIndices = selectedPageIndices.filter((item) => item !== pageIndex);
+                    } else {
+                        selectedPageIndices.push(pageIndex);
+                    }
+                    renderPagePreviewGrid(currentPreviewFile);
+                    updateDeleteCount();
+                });
+            });
+        }
     } catch (error) {
         grid.innerHTML = `<div class="page-preview-card"><div class="page-thumb">Preview unavailable</div></div>`;
     }
 }
 
+function updateDeleteCount() {
+    const countEl = document.getElementById('delete-count');
+    if (!countEl) return;
+    const total = currentPreviewFile?._pageCount || selectedPageIndices.length;
+    const selected = selectedPageIndices.length;
+    if (selected === 0) {
+        countEl.textContent = '';
+    } else {
+        countEl.textContent = `${selected} page${selected > 1 ? 's' : ''} selected for deletion`;
+    }
+}
+
+function updateSplitRange() {
+    const rangeInput = document.getElementById('tool-range');
+    if (!rangeInput) return;
+    
+    const positions = Object.keys(splitPositions).map(Number).sort((a, b) => a - b);
+    if (positions.length === 0) {
+        rangeInput.value = '';
+        return;
+    }
+    
+    // Build range string from split positions
+    const ranges = [];
+    let start = 1;
+    positions.forEach(pos => {
+        if (start <= pos) {
+            ranges.push(start === pos ? `${start}` : `${start}-${pos}`);
+            start = pos + 1;
+        }
+    });
+    // Add remaining pages
+    const totalPages = currentPreviewFile ? parseInt(rangeInput.placeholder?.match(/\d+/)?.[0] || '999') : 999;
+    if (start <= totalPages) {
+        ranges.push(start === totalPages ? `${start}` : `${start}-${totalPages}`);
+    }
+    
+    rangeInput.value = ranges.join(', ');
+}
+
 let currentObjectUrls = [];
+let pageRotations = {};
+let splitPositions = {};
+
+window.pageRotations = pageRotations;
+
+function resetPageRotations() {
+    pageRotations = {};
+    window.pageRotations = pageRotations;
+}
+
+function resetSplitPositions() {
+    splitPositions = {};
+}
 
 function updateFileListUI() {
     const listEl = document.getElementById('file-list');
@@ -537,6 +894,91 @@ window.setProcessingState = function(isProcessing) {
         btn.classList.remove('hidden');
         loader.classList.add('hidden');
     }
+}
+
+// Result Screen functionality
+let currentResultBlob = null;
+let currentResultFilename = '';
+
+function showResultScreen(filename, blob) {
+    const resultScreen = document.getElementById('result-screen');
+    const resultFilename = document.getElementById('result-filename');
+    const resultDownloadBtn = document.getElementById('result-download-btn');
+    const resultDeleteBtn = document.getElementById('result-delete-btn');
+    const resultStartoverBtn = document.getElementById('result-startover-btn');
+    const continueToolsGrid = document.getElementById('continue-tools-grid');
+    
+    currentResultBlob = blob;
+    currentResultFilename = filename;
+    
+    resultFilename.textContent = filename;
+    resultScreen.classList.remove('hidden');
+    
+    // Hide other elements
+    document.getElementById('file-dropzone').classList.add('hidden');
+    document.getElementById('file-list').classList.add('hidden');
+    document.getElementById('tool-options').classList.add('hidden');
+    document.getElementById('page-preview-grid').classList.add('hidden');
+    document.getElementById('process-btn').classList.add('hidden');
+    document.getElementById('loading-indicator').classList.add('hidden');
+    
+    // Populate continue tools
+    continueToolsGrid.innerHTML = '';
+    const relatedTools = getRelatedTools(currentTool?.id);
+    relatedTools.forEach(tool => {
+        const card = document.createElement('a');
+        card.href = `#tool?id=${tool.id}`;
+        card.className = 'continue-tool-card';
+        card.innerHTML = `<i data-lucide="${tool.icon}"></i><span>${tool.title}</span>`;
+        continueToolsGrid.appendChild(card);
+    });
+    lucide.createIcons();
+    
+    // Event listeners
+    resultDownloadBtn.onclick = () => {
+        if (currentResultBlob) {
+            const url = URL.createObjectURL(currentResultBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = currentResultFilename;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+    };
+    
+    resultDeleteBtn.onclick = () => {
+        currentResultBlob = null;
+        currentResultFilename = '';
+        resultScreen.classList.add('hidden');
+        showToast('File deleted', 'success');
+    };
+    
+    resultStartoverBtn.onclick = () => {
+        currentResultBlob = null;
+        currentResultFilename = '';
+        resultScreen.classList.add('hidden');
+        resetWorkspace();
+    };
+}
+
+function getRelatedTools(toolId) {
+    const related = {
+        'merge': ['split', 'compress', 'delete'],
+        'split': ['merge', 'compress', 'delete'],
+        'compress': ['merge', 'split', 'pdf-to-word'],
+        'rotate': ['delete', 'split', 'merge'],
+        'delete': ['split', 'rotate', 'merge'],
+        'watermark': ['protect-pdf', 'merge', 'compress'],
+        'pdf-to-word': ['word-to-pdf', 'compress', 'merge'],
+        'word-to-pdf': ['pdf-to-word', 'merge', 'compress'],
+        'pdf-to-jpg': ['jpg-to-pdf', 'compress', 'merge'],
+        'jpg-to-pdf': ['pdf-to-jpg', 'merge', 'compress'],
+        'protect-pdf': ['unlock-pdf', 'merge', 'watermark'],
+        'unlock-pdf': ['protect-pdf', 'merge', 'watermark']
+    };
+    
+    const ids = related[toolId] || ['merge', 'split', 'compress'];
+    return ids.map(id => tools.find(t => t.id === id)).filter(Boolean);
 }
 
 // Authentication Logic

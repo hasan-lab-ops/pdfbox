@@ -53,9 +53,10 @@ class PDFToWordConverter {
   // Main conversion entry point
   // ---------------------------------------------------------------------------
 
-  async convert(file) {
+  async convert(file, options = {}) {
     try {
       hideConversionNotice();
+      const forceOCR = options.forceOCR || false;
       showLoading('📄 Extracting text from PDF...');
 
       const arrayBuffer = await this.readFile(file);
@@ -68,6 +69,16 @@ class PDFToWordConverter {
         showLoading(`📖 Processing page ${pageNum} of ${pageCount}...`);
 
         const page = await this.pdfDoc.getPage(pageNum);
+        
+        if (forceOCR) {
+          // Force OCR mode - skip text extraction, go straight to OCR
+          showLoading('🖼️ Running advanced OCR on page...');
+          showConversionNotice('Advanced OCR mode: scanning all pages as images for maximum accuracy.', 'warning');
+          const ocrText = await this.performOcrOnPage(page);
+          pageContent.push(this.buildParagraphsFromText(ocrText, this.detectTextDirection(ocrText)));
+          continue;
+        }
+
         const extractedPage = await this.extractTextFromPage(page);
         console.log(`Extracted structured content from page ${pageNum}:`, extractedPage);
 
@@ -1014,7 +1025,7 @@ window.processConversion = async function (currentTool) {
   const file = selectedFiles[0];
 
   try {
-    showLoading('🚀 Starting conversion...');
+    showLoading('Starting conversion...');
 
     let converter = null;
     let outputFilename = '';
@@ -1028,7 +1039,8 @@ window.processConversion = async function (currentTool) {
           return;
         }
         converter = new PDFToWordConverter();
-        blob = await converter.convert(file);
+        const pdfWordMode = document.querySelector('input[name="pdf-word-mode"]:checked')?.value || 'standard';
+        blob = await converter.convert(file, { forceOCR: pdfWordMode === 'ocr' });
         outputFilename = file.name.replace(/\.pdf$/i, '.docx') || 'document.docx';
         break;
 
@@ -1084,8 +1096,7 @@ window.processConversion = async function (currentTool) {
     if (blob) {
       hideConversionNotice();
       hideLoading();
-      downloadFile(blob, outputFilename);
-      showToast(`Conversion successful! Downloaded: ${outputFilename}`, 'success');
+      window.showResultScreen(outputFilename, blob);
     }
 
   } catch (error) {
@@ -1121,7 +1132,8 @@ window.processPDF = async function (toolId, files) {
         }
         break;
       case 'compress':
-        resultBytes = await compressPDF(files[0]);
+        const compressLevel = document.querySelector('input[name="compress-level"]:checked')?.value || 'medium';
+        resultBytes = await compressPDF(files[0], compressLevel);
         resultFileName = 'compressed.pdf';
         break;
       case 'rotate':
@@ -1140,8 +1152,11 @@ window.processPDF = async function (toolId, files) {
         resultFileName = 'watermarked.pdf';
         break;
       case 'jpg-to-pdf':
-        resultBytes = await jpgToPdf(files);
-        resultFileName = 'converted.pdf';
+        const jpgOrientation = document.getElementById('jpg-orientation')?.value || 'auto';
+        const jpgPageSize = document.getElementById('jpg-page-size')?.value || 'a4';
+        const jpgSeparate = document.getElementById('jpg-separate')?.checked || false;
+        resultBytes = await jpgToPdf(files, { orientation: jpgOrientation, pageSize: jpgPageSize, separate: jpgSeparate });
+        resultFileName = jpgSeparate ? 'converted-images.zip' : 'converted.pdf';
         break;
       case 'pdf-to-jpg':
         await pdfToJpg(files[0]);
@@ -1153,7 +1168,8 @@ window.processPDF = async function (toolId, files) {
 
     if (resultBytes) {
       const mime = resultFileName.endsWith('.zip') ? 'application/zip' : 'application/pdf';
-      downloadBlob(resultBytes, resultFileName, mime);
+      const blob = new Blob([resultBytes], { type: mime });
+      window.showResultScreen(resultFileName, blob);
     }
 
   } catch (error) {
@@ -1267,23 +1283,77 @@ async function extractPagesAsZip(file, range) {
   return await zip.generateAsync({ type: 'uint8array' });
 }
 
-async function compressPDF(file) {
+async function compressPDF(file, level = 'medium') {
   const buffer = await fileToBuffer(file);
+  const originalSize = file.size;
+  
   const pdf = await PDFDocument.load(buffer, { ignoreEncryption: true });
   const newPdf = await PDFDocument.create();
   const pages = await newPdf.copyPages(pdf, pdf.getPageIndices());
   pages.forEach((page) => newPdf.addPage(page));
-  return await newPdf.save({ useObjectStreams: true, updateFieldAppearances: false });
+  
+  // Compression options based on level
+  const options = {
+    low: { useObjectStreams: false, updateFieldAppearances: false },
+    medium: { useObjectStreams: true, updateFieldAppearances: false },
+    strong: { useObjectStreams: true, updateFieldAppearances: false }
+  };
+  
+  const resultBytes = await newPdf.save(options[level] || options.medium);
+  const compressedSize = resultBytes.length;
+  const reduction = Math.round((1 - compressedSize / originalSize) * 100);
+  
+  // Show compression result in UI
+  showCompressionResult(originalSize, compressedSize, reduction);
+  
+  return resultBytes;
+}
+
+function showCompressionResult(originalSize, compressedSize, reduction) {
+  const notice = document.getElementById('conversion-notice');
+  if (notice) {
+    const formatSize = (bytes) => {
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+    };
+    
+    notice.innerHTML = `
+      <i data-lucide="check-circle"></i>
+      <span>
+        <strong>Compression Complete!</strong><br>
+        ${formatSize(originalSize)} → ${formatSize(compressedSize)} (${reduction}% smaller)
+      </span>
+    `;
+    notice.className = 'conversion-notice success';
+    notice.classList.remove('hidden');
+    lucide.createIcons();
+  }
 }
 
 async function rotatePDF(file, degreesVal) {
   const buffer = await fileToBuffer(file);
   const pdf = await PDFDocument.load(buffer);
   const pages = pdf.getPages();
-  pages.forEach(page => {
-    const currentRotation = page.getRotation().angle;
-    page.setRotation(degrees(currentRotation + degreesVal));
-  });
+  
+  // Check if we have per-page rotations
+  if (window.pageRotations && Object.keys(window.pageRotations).length > 0) {
+    pages.forEach((page, index) => {
+      const pageNum = index + 1;
+      const perPageRotation = window.pageRotations[pageNum] || 0;
+      if (perPageRotation !== 0) {
+        const currentRotation = page.getRotation().angle;
+        page.setRotation(degrees(currentRotation + perPageRotation));
+      }
+    });
+  } else {
+    // Fallback to global rotation
+    pages.forEach(page => {
+      const currentRotation = page.getRotation().angle;
+      page.setRotation(degrees(currentRotation + degreesVal));
+    });
+  }
+  
   return await pdf.save();
 }
 
@@ -1328,7 +1398,75 @@ async function watermarkPDF(file, text) {
   return await pdf.save();
 }
 
-async function jpgToPdf(files) {
+async function jpgToPdf(files, options = {}) {
+  const { orientation = 'auto', pageSize = 'a4', separate = false } = options;
+  
+  // A4 size in points
+  const pageSizes = {
+    a4: { width: 595.28, height: 841.89 },
+    letter: { width: 612, height: 792 },
+  };
+
+  if (separate) {
+    // Create separate PDFs for each image
+    const zip = new JSZip();
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const buffer = await fileToBuffer(file);
+      let image;
+      if (file.type === 'image/jpeg' || file.name.toLowerCase().endsWith('.jpg') || file.name.toLowerCase().endsWith('.jpeg')) {
+        image = await pdf.embedJpg(buffer);
+      } else if (file.type === 'image/png') {
+        image = await pdf.embedPng(buffer);
+      } else {
+        continue;
+      }
+      
+      const pdf = await PDFDocument.create();
+      let pageWidth, pageHeight;
+      
+      if (pageSize === 'fit') {
+        pageWidth = image.width;
+        pageHeight = image.height;
+      } else {
+        const size = pageSizes[pageSize] || pageSizes.a4;
+        if (orientation === 'landscape') {
+          pageWidth = size.height;
+          pageHeight = size.width;
+        } else if (orientation === 'portrait') {
+          pageWidth = size.width;
+          pageHeight = size.height;
+        } else {
+          // auto
+          if (image.width > image.height) {
+            pageWidth = size.height;
+            pageHeight = size.width;
+          } else {
+            pageWidth = size.width;
+            pageHeight = size.height;
+          }
+        }
+      }
+      
+      const page = pdf.addPage([pageWidth, pageHeight]);
+      // Scale image to fit page
+      const scale = Math.min(pageWidth / image.width, pageHeight / image.height);
+      const drawW = image.width * scale;
+      const drawH = image.height * scale;
+      const x = (pageWidth - drawW) / 2;
+      const y = (pageHeight - drawH) / 2;
+      
+      page.drawImage(image, { x, y, width: drawW, height: drawH });
+      
+      const pdfBytes = await pdf.save();
+      const baseName = file.name.replace(/\.[^/.]+$/, '');
+      zip.file(`${baseName}.pdf`, pdfBytes);
+    }
+    
+    return await zip.generateAsync({ type: 'uint8array' });
+  }
+
+  // Single combined PDF
   const pdf = await PDFDocument.create();
 
   for (const file of files) {
@@ -1342,13 +1480,40 @@ async function jpgToPdf(files) {
       continue;
     }
 
-    const page = pdf.addPage([image.width, image.height]);
-    page.drawImage(image, {
-      x: 0,
-      y: 0,
-      width: image.width,
-      height: image.height,
-    });
+    let pageWidth, pageHeight;
+    
+    if (pageSize === 'fit') {
+      pageWidth = image.width;
+      pageHeight = image.height;
+    } else {
+      const size = pageSizes[pageSize] || pageSizes.a4;
+      if (orientation === 'landscape') {
+        pageWidth = size.height;
+        pageHeight = size.width;
+      } else if (orientation === 'portrait') {
+        pageWidth = size.width;
+        pageHeight = size.height;
+      } else {
+        // auto
+        if (image.width > image.height) {
+          pageWidth = size.height;
+          pageHeight = size.width;
+        } else {
+          pageWidth = size.width;
+          pageHeight = size.height;
+        }
+      }
+    }
+
+    const page = pdf.addPage([pageWidth, pageHeight]);
+    // Scale image to fit page
+    const scale = Math.min(pageWidth / image.width, pageHeight / image.height);
+    const drawW = image.width * scale;
+    const drawH = image.height * scale;
+    const x = (pageWidth - drawW) / 2;
+    const y = (pageHeight - drawH) / 2;
+    
+    page.drawImage(image, { x, y, width: drawW, height: drawH });
   }
   return await pdf.save();
 }

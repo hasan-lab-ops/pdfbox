@@ -169,6 +169,36 @@
                             </div>
                         </div>
                     </div>
+                </div>
+
+                <!-- Result Screen (shown after processing) -->
+                <div id="result-screen" class="result-screen hidden">
+                    <div class="result-card">
+                        <div class="result-icon">
+                            <i data-lucide="check-circle"></i>
+                        </div>
+                        <h2>Your file is ready</h2>
+                        <p id="result-filename" class="result-filename"></p>
+                        <div class="result-actions">
+                            <button id="result-download-btn" class="btn result-download-btn">
+                                <i data-lucide="download"></i> Download File
+                            </button>
+                            <button id="result-delete-btn" class="btn btn-outline result-delete-btn">
+                                <i data-lucide="trash-2"></i> Delete File
+                            </button>
+                            <button id="result-startover-btn" class="btn btn-outline result-startover-btn">
+                                <i data-lucide="rotate-ccw"></i> Start Over
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="continue-in-section">
+                        <h3>Continue in:</h3>
+                        <div class="continue-tools-grid" id="continue-tools-grid">
+                            <!-- Related tools injected here -->
+                        </div>
+                    </div>
+                </div>
 
                     <!-- Dynamic SEO Content injected here -->
                     <div id="tool-detail-article" class="text-page" style="margin-top: 60px;"></div>
