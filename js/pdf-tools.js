@@ -1166,7 +1166,6 @@ window.processConversion = async function (currentTool, files) {
         blob = await converter.encrypt(file, password);
         outputFilename = file.name.replace(/\.pdf$/i, '_protected.pdf') || 'protected.pdf';
         break;
-
       case 'unlock-pdf':
         if (!file.type.includes('pdf') && !file.name.endsWith('.pdf')) {
           showToast('Please select a PDF file', 'error');
