@@ -473,7 +473,7 @@ function setupDropzone() {
 
     document.getElementById("process-btn").addEventListener("click", async () => {
         if (!currentTool) return;
-        
+
         if (!selectedFiles || !selectedFiles.length) {
             if (typeof showConversionNotice === 'function') {
                 showConversionNotice("Please select a file first.", "error");
@@ -520,7 +520,18 @@ function setupDropzone() {
                     if (typeof window.convertWordToPDF !== 'function' && typeof convertWordToPDF !== 'function') {
                         throw new Error('convertWordToPDF function is missing from pdf-tools.js');
                     }
+                    function showLoading(msg) {
+                        const el = document.getElementById("loading-indicator");
+                        const text = document.getElementById("loading-message");
 
+                        if (el) el.classList.remove("hidden");
+                        if (text) text.innerText = msg;
+                    }
+
+                    function hideLoading() {
+                        const el = document.getElementById("loading-indicator");
+                        if (el) el.classList.add("hidden");
+                    }
                     const pdfBlob = typeof convertWordToPDF === 'function'
                         ? await convertWordToPDF(arrayBuffer)
                         : await window.convertWordToPDF(arrayBuffer);

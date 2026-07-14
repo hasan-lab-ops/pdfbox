@@ -1935,4 +1935,114 @@ async function convertWordToPdf(file) {
     showConversionNotice("❌ " + err.message, "error");
   }
 }
+// ================================
+// LOAD LIBRARIES
+// ================================
+
+async function ensureMammothLoaded() {
+  if (window.mammoth) return window.mammoth;
+
+  await new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js";
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+
+  return window.mammoth;
+}
+
+async function ensureHtml2PdfLoaded() {
+  if (window.html2pdf) return window.html2pdf;
+
+  await new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js";
+    script.onload = resolve;
+    script.onerror = reject;
+    document.head.appendChild(script);
+  });
+
+  return window.html2pdf;
+}
+
+// ================================
+// RTL DETECTION
+// ================================
+
+function detectHtmlDirection(html) {
+  const text = html.replace(/<[^>]+>/g, "");
+  const rtl = (text.match(/[\u0600-\u06FF]/g) || []).length;
+  const ltr = (text.match(/[A-Za-z]/g) || []).length;
+  return rtl > ltr ? "rtl" : "ltr";
+}
+
+// ================================
+// WORD → PDF (FIXED)
+// ================================
+
+async function convertWordToPdf(file) {
+  try {
+    if (!file) throw new Error("No file selected");
+
+    showLoading("📄 Reading Word file...");
+
+    const mammoth = await ensureMammothLoaded();
+    const html2pdf = await ensureHtml2PdfLoaded();
+
+    const arrayBuffer = await file.arrayBuffer();
+
+    const result = await mammoth.convertToHtml({ arrayBuffer });
+
+    let html = result.value;
+
+    if (!html || html.trim() === "") {
+      throw new Error("Empty or unsupported document.");
+    }
+
+    // create container
+    const container = document.createElement("div");
+    container.style.padding = "25px";
+    container.style.background = "#fff";
+    container.style.fontFamily = "Arial, sans-serif";
+    container.style.lineHeight = "1.8";
+
+    const dir = detectHtmlDirection(html);
+    container.setAttribute("dir", dir);
+
+    container.innerHTML = `
+      <style>
+        body { font-family: Arial; }
+        img { max-width: 100%; }
+        p { margin: 10px 0; }
+      </style>
+      ${html}
+    `;
+
+    document.body.appendChild(container);
+
+    showLoading("🧾 Generating PDF...");
+
+    await html2pdf()
+      .set({
+        margin: 10,
+        filename: file.name.replace(/\.(docx|doc)$/i, ".pdf"),
+        html2canvas: { scale: 2 },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }
+      })
+      .from(container)
+      .save();
+
+    document.body.removeChild(container);
+
+    hideLoading();
+    showConversionNotice("✅ Done!", "success");
+
+  } catch (err) {
+    hideLoading();
+    console.error(err);
+    showConversionNotice("❌ " + err.message, "error");
+  }
+}
 }
