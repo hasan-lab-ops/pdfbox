@@ -1262,6 +1262,23 @@ window.processPDF = async function (toolId, files) {
         await pdfToJpg(files[0]);
         window.setProcessingState(false);
         return;
+      case 'protect-pdf':
+        const protectPass = document.getElementById('tool-password')?.value;
+        if (!protectPass) throw new Error("Password is required.");
+        resultBytes = await protectPDF(files[0], protectPass);
+        resultFileName = 'protected.pdf';
+        break;
+      case 'unlock-pdf':
+        const unlockPass = document.getElementById('tool-password')?.value;
+        if (!unlockPass) throw new Error("Password is required.");
+        resultBytes = await unlockPDF(files[0], unlockPass);
+        resultFileName = 'unlocked.pdf';
+        break;
+      case 'pdf-to-word':
+        const wordBlob = await pdfToWord(files[0]);
+        window.showResultScreen('extracted.docx', wordBlob);
+        window.setProcessingState(false);
+        return;
       default:
         throw new Error("Tool not implemented yet.");
     }
@@ -1288,6 +1305,61 @@ async function fileToBuffer(file) {
     reader.onerror = reject;
     reader.readAsArrayBuffer(file);
   });
+}
+
+async function protectPDF(file, password) {
+  showLoading('🔐 Encrypting PDF...');
+  const buffer = await fileToBuffer(file);
+  const pdfDoc = await PDFDocument.load(buffer);
+  return await pdfDoc.save({
+    userPassword: password,
+    ownerPassword: password,
+    permissions: { printing: 'highResolution' }
+  });
+}
+
+async function unlockPDF(file, password) {
+  showLoading('🔓 Unlocking PDF...');
+  const buffer = await fileToBuffer(file);
+  try {
+    // Note: If pdf-lib throws on encrypted files, this will gracefully fall to catch block.
+    const pdfDoc = await PDFDocument.load(buffer, { password });
+    return await pdfDoc.save();
+  } catch (e) {
+    throw new Error('Could not decrypt PDF. The password might be incorrect or this library version does not support reading encrypted files.');
+  }
+}
+
+async function pdfToWord(file) {
+  showLoading('📄 Extracting text...');
+  const buffer = await fileToBuffer(file);
+  const typedarray = new Uint8Array(buffer);
+  const pdfDoc = await pdfjsLib.getDocument({ data: typedarray }).promise;
+
+  let fullText = "";
+  for (let i = 1; i <= pdfDoc.numPages; i++) {
+    const page = await pdfDoc.getPage(i);
+    const textContent = await page.getTextContent();
+    const pageText = textContent.items.map(item => item.str).join(' ');
+    fullText += pageText + "\\n";
+  }
+
+  if (!window.docx && window.docxReady) await window.docxReady;
+  if (!window.docx) throw new Error("docx library not loaded from CDN.");
+
+  const { Document, Packer, Paragraph, TextRun } = window.docx;
+
+  const paragraphs = fullText.split('\\n').map(text => {
+    return new Paragraph({
+      children: [new TextRun(text)]
+    });
+  });
+
+  const doc = new Document({
+    sections: [{ properties: {}, children: paragraphs }]
+  });
+
+  return await Packer.toBlob(doc);
 }
 
 function downloadBlob(bytes, filename, type) {
@@ -1659,115 +1731,62 @@ async function pdfToJpg(file) {
   const zipBlob = await zip.generateAsync({ type: 'blob' });
   downloadBlob(zipBlob, 'pdf-pages.zip', 'application/zip');
   hideLoading();
-  /**
- * تحويل ملف Word (docx) إلى PDF باستخدام Mammoth و html2pdf
- * @param {ArrayBuffer} arrayBuffer - محتوى ملف الـ Word المرفوع
- * @returns {Promise<Blob>} - ملف الـ PDF الناتج كـ Blob
+}
+
+/**
+ * convertWordToPDF - Word (docx) to PDF conversion using Mammoth and html2pdf
+ * @param {ArrayBuffer} arrayBuffer - The uploaded Word file ArrayBuffer
+ * @returns {Promise<Blob>} - The resulting PDF Blob
  */
-  async function convertWordToPDF(arrayBuffer) {
-    try {
-      // 1. تحويل ملف الـ Word إلى كود HTML نظيف عبر Mammoth
-      const result = await mammoth.convertToHtml({ arrayBuffer: arrayBuffer });
-      const htmlContent = result.value;
+window.convertWordToPDF = async function convertWordToPDF(arrayBuffer) {
+  try {
+    // 1. تحويل ملف الـ Word إلى كود HTML نظيف عبر Mammoth
+    const result = await mammoth.convertToHtml({ arrayBuffer: arrayBuffer });
+    const htmlContent = result.value;
 
-      if (!htmlContent) {
-        throw new Error("لم نتمكن من قراءة محتوى ملف الـ Word، قد يكون الملف فارغاً أو تالفاً.");
-      }
-
-      // 2. إنشاء عنصر وهمي (Container) غير مرئي لعرض وتنسيق الـ HTML
-      const tempContainer = document.createElement('div');
-      tempContainer.style.position = 'absolute';
-      tempContainer.style.opacity = '0.01'; // إخفاء العنصر بدلاً من الشاشة
-      tempContainer.style.zIndex = '-9999';
-      // لا تستخدم left: -9999px أو display: none لأنها تسبب مشكلة ظهور الصفحة بيضاء
-      tempContainer.style.width = '800px';  // حجم تقريبي لعرض صفحة A4 بصرياً
-      tempContainer.style.padding = '40px'; // هوامش افتراضية للمستند
-      tempContainer.style.background = '#ffffff';
-      tempContainer.style.fontFamily = 'Arial, sans-serif';
-      tempContainer.style.lineHeight = '1.6';
-      tempContainer.style.color = '#333333';
-      tempContainer.innerHTML = htmlContent;
-
-      document.body.appendChild(tempContainer);
-
-      // 3. إعدادات مكتبة html2pdf لضمان جودة وأبعاد قياسية للملف الناتج
-      const options = {
-        margin: [15, 15, 15, 15], // الهوامش بالملم (أعلى، أسفل، يسار، يمين)
-        filename: 'converted-document.pdf',
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: {
-          scale: 2,         // زيادة الدقة والوضوح للنصوص والصور
-          useCORS: true,
-          logging: false
-        },
-        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } // أبعاد صفحة A4 القياسية
-      };
-
-      // 4. توليد ملف الـ PDF كـ Blob
-      const pdfBlob = await html2pdf().set(options).from(tempContainer).outputPdf('blob');
-
-      // 5. تنظيف المتصفح وحذف العنصر الوهمي بعد الانتهاء
-      document.body.removeChild(tempContainer);
-
-      return pdfBlob;
-
-    } catch (error) {
-      console.error("Error inside convertWordToPDF:", error);
-      throw error;
-    }
-    /**
- * تحويل ملف Word (docx) إلى PDF باستخدام Mammoth و html2pdf
- * @param {ArrayBuffer} arrayBuffer - محتوى ملف الـ Word
- * @returns {Promise<Blob>} - ملف الـ PDF الناتج
- */
-    async function convertWordToPDF(arrayBuffer) {
-      try {
-        // 1. تحويل Word إلى HTML باستخدام Mammoth
-        const result = await mammoth.convertToHtml({ arrayBuffer: arrayBuffer });
-        const htmlContent = result.value;
-
-        if (!htmlContent) {
-          throw new Error("ملف الـ Word فارغ أو غير قابل للقراءة.");
-        }
-
-        // 2. إنشاء عنصر وهمي خارج الشاشة لتنسيق الـ HTML كصفحة A4
-        const tempContainer = document.createElement('div');
-        tempContainer.style.position = 'absolute';
-        tempContainer.style.left = '-9999px';
-        tempContainer.style.top = '-9999px';
-        tempContainer.style.width = '800px';
-        tempContainer.style.padding = '40px';
-        tempContainer.style.background = '#ffffff';
-        tempContainer.style.fontFamily = 'Arial, sans-serif';
-        tempContainer.style.lineHeight = '1.6';
-        tempContainer.innerHTML = htmlContent;
-
-        document.body.appendChild(tempContainer);
-
-        // 3. إعدادات مكتبة html2pdf لتوليد ملف PDF عالي الدقة
-        const options = {
-          margin: [15, 15, 15, 15],
-          filename: 'converted.pdf',
-          image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true, logging: false },
-          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-        };
-
-        // 4. توليد الـ PDF كـ Blob
-        const pdfBlob = await html2pdf().set(options).from(tempContainer).outputPdf('blob');
-
-        // 5. تنظيف المتصفح
-        document.body.removeChild(tempContainer);
-
-        return pdfBlob;
-
-      } catch (error) {
-        console.error("خطأ في دالة convertWordToPDF:", error);
-        throw error;
-      }
+    if (!htmlContent) {
+      throw new Error("لم نتمكن من قراءة محتوى ملف الـ Word، قد يكون الملف فارغاً أو تالفاً.");
     }
 
-    // جعل الدالة متاحة عالمياً للملفات الأخرى
-    window.convertWordToPDF = convertWordToPDF;
+    // 2. إنشاء عنصر وهمي (Container) غير مرئي لعرض وتنسيق الـ HTML
+    const tempContainer = document.createElement('div');
+    tempContainer.style.position = 'absolute';
+    tempContainer.style.opacity = '0.01'; // إخفاء العنصر بدلاً من الشاشة
+    tempContainer.style.zIndex = '-9999';
+    // لا تستخدم left: -9999px أو display: none لأنها تسبب مشكلة ظهور الصفحة بيضاء
+    tempContainer.style.width = '800px';  // حجم تقريبي لعرض صفحة A4 بصرياً
+    tempContainer.style.padding = '40px'; // هوامش افتراضية للمستند
+    tempContainer.style.background = '#ffffff';
+    tempContainer.style.fontFamily = 'Arial, sans-serif';
+    tempContainer.style.lineHeight = '1.6';
+    tempContainer.style.color = '#333333';
+    tempContainer.innerHTML = htmlContent;
+
+    document.body.appendChild(tempContainer);
+
+    // 3. إعدادات مكتبة html2pdf لضمان جودة وأبعاد قياسية للملف الناتج
+    const options = {
+      margin: [15, 15, 15, 15], // الهوامش بالملم (أعلى، أسفل، يسار، يمين)
+      filename: 'converted-document.pdf',
+      image: { type: 'jpeg', quality: 0.98 },
+      html2canvas: {
+        scale: 2,         // زيادة الدقة والوضوح للنصوص والصور
+        useCORS: true,
+        logging: false
+      },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' } // أبعاد صفحة A4 القياسية
+    };
+
+    // 4. توليد ملف الـ PDF كـ Blob
+    const pdfBlob = await html2pdf().set(options).from(tempContainer).outputPdf('blob');
+
+    // 5. تنظيف المتصفح وحذف العنصر الوهمي بعد الانتهاء
+    document.body.removeChild(tempContainer);
+
+    return pdfBlob;
+
+  } catch (error) {
+    console.error("Error inside convertWordToPDF:", error);
+    throw error;
   }
 }
