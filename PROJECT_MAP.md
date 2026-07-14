@@ -5,7 +5,7 @@ Generated: 2026-07-14
 
 | Library | CDN Version | Latest Stable (Jul 2026) | Status |
 |---------|------------|--------------------------|--------|
-| pdf.js | 6.1.200 | 6.1.200 | CURRENT |
+| pdf.js | 2.16.105 | 6.1.200 | PINNED — v3+ dropped UMD builds, only ESM (.mjs) remains; vanilla SPA requires UMD |
 | pdf-lib | 1.17.1 | 1.17.1 | CURRENT |
 | jsPDF | REMOVED | 4.2.1 | REMOVED (bundled in html2pdf.js 0.14.0) |
 | html2canvas | 1.4.1 | 1.4.1 | CURRENT |
@@ -89,7 +89,7 @@ pdf-tools.js (1365 lines — SINGLE FILE, all conversion logic)
 - `window.processPDF` legacy orchestrator still used by main.js:329 — could be consolidated with `processConversion`
 
 ### Resolved
-- ~~pdf.js 2.16.105~~ → 6.1.200 ✅
+- ~~pdf.js 2.16.105~~ → 6.1.200 → REVERTED to 2.16.105 (v3+ dropped UMD; SPA requires UMD) ✅
 - ~~jsPDF 2.5.1 standalone CDN~~ → REMOVED (bundled in html2pdf.js 0.14.0) ✅
 - ~~html2pdf.js 0.10.1~~ → 0.14.0 ✅
 - ~~docx 7.8.2~~ → 9.7.1 ✅

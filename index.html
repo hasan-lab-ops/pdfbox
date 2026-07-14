@@ -25,10 +25,10 @@
     <!-- PDF-Lib: Advanced PDF manipulation with encryption support -->
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 
-    <!-- pdf.js: PDF text extraction and rendering -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.1.200/pdf.min.js"></script>
+    <!-- pdf.js: PDF text extraction and rendering (UMD — v3+ dropped UMD builds) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
     <script>
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/6.1.200/pdf.worker.min.js';
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
     </script>
 
     <!-- html2canvas: HTML to image conversion -->
