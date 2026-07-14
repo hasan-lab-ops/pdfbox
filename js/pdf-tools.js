@@ -789,17 +789,14 @@ class WordToPDFConverter {
 
       showLoading('🔄 Converting to PDF...');
 
-      // Step 3: Create off-screen container (not display:none, but positioned off-screen)
+      // Step 3: Create visible-but-hidden temporary container
       container = document.createElement('div');
-      container.style.cssText = 'position: absolute; left: -9999px; top: -9999px; width: 800px; padding: 40px; background: white; font-family: Arial, sans-serif;';
-
-      // Detect if content contains Arabic
-      const hasArabic = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(htmlContent);
-      if (hasArabic) {
-        container.style.direction = 'rtl';
-        container.style.textAlign = 'right';
-      }
-
+      container.style.position = 'fixed';
+      container.style.opacity = '0.01';
+      container.style.zIndex = '-9999';
+      container.style.width = '800px';
+      container.style.direction = 'rtl';
+      container.style.textAlign = 'right';
       container.innerHTML = htmlContent;
       document.body.appendChild(container);
 
@@ -819,7 +816,7 @@ class WordToPDFConverter {
         .from(container)
         .outputPdf('blob');
 
-      // Step 5: Clean up — remove temporary container
+      // Step 5: Remove temporary container immediately
       if (container && container.parentNode) {
         document.body.removeChild(container);
       }
@@ -827,7 +824,6 @@ class WordToPDFConverter {
       return pdfBlob;
 
     } catch (error) {
-      // Clean up on error too
       if (container && container.parentNode) {
         document.body.removeChild(container);
       }
