@@ -471,51 +471,77 @@ function setupDropzone() {
         }
     });
 
-    document.getElementById('process-btn').addEventListener('click', async () => {
-        if (selectedFiles.length > 0 && currentTool) {
+    const processBtn = document.getElementById('process-btn');
+    processBtn?.addEventListener('click', async () => {
+        try {
+            if (!selectedFiles || selectedFiles.length === 0) {
+                if (typeof showToast === 'function') showToast('Please select a file first.', 'error');
+                return;
+            }
+            if (!currentTool) {
+                if (typeof showToast === 'function') showToast('Please select a tool.', 'error');
+                return;
+            }
+
             const file = selectedFiles[0];
+            const isWordFile = file.name.toLowerCase().endsWith('.docx') || file.name.toLowerCase().endsWith('.doc');
+            const isPdfFile = file.name.toLowerCase().endsWith('.pdf') || file.type.includes('pdf');
 
-            // Detect if the uploaded file is a .docx file
-            if (file.name.toLowerCase().endsWith('.docx') || file.name.toLowerCase().endsWith('.doc')) {
-                showLoading('Converting Word to PDF...');
-                try {
-                    // Read file as ArrayBuffer using FileReader
-                    const arrayBuffer = await new Promise((resolve, reject) => {
-                        const reader = new FileReader();
-                        reader.onload = e => resolve(e.target.result);
-                        reader.onerror = () => reject(new Error('Failed to read file'));
-                        reader.readAsArrayBuffer(file);
-                    });
+            // --- PATH A: WORD FILE ---
+            if (isWordFile) {
+                if (typeof showLoading === 'function') showLoading('Converting Word to PDF...');
 
-                    // Pass it to convertWordToPDF
-                    const pdfBlob = await convertWordToPDF(arrayBuffer);
-                    const outputFilename = file.name.replace(/\.docx?$/i, '.pdf') || 'converted.pdf';
+                // Read as ArrayBuffer safely
+                const arrayBuffer = await new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = e => resolve(e.target.result);
+                    reader.onerror = () => reject(new Error('Failed to read the file.'));
+                    reader.readAsArrayBuffer(file);
+                });
 
-                    // Automatically download the resulting PDF
-                    const url = URL.createObjectURL(pdfBlob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = outputFilename;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-
-                    showToast('Conversion successful!', 'success');
-                } catch (error) {
-                    // Include complete error handling with friendly alert
-                    alert('Conversion failed: ' + error.message);
-                } finally {
-                    hideLoading();
+                if (typeof window.convertWordToPDF !== 'function' && typeof convertWordToPDF !== 'function') {
+                    throw new Error('convertWordToPDF function is missing from pdf-tools.js');
                 }
-            } else {
-                // Run the existing PDF processing logic
-                if (['pdf-to-word', 'protect-pdf', 'unlock-pdf'].includes(currentTool.id)) {
-                    window.processConversion(currentTool, selectedFiles);
-                } else {
+
+                // Call the conversion function
+                const pdfBlob = typeof convertWordToPDF === 'function'
+                    ? await convertWordToPDF(arrayBuffer)
+                    : await window.convertWordToPDF(arrayBuffer);
+
+                const outputFilename = file.name.replace(/\.docx?$/i, '.pdf') || 'converted.pdf';
+
+                // Automatically download the file
+                const url = URL.createObjectURL(pdfBlob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = outputFilename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+
+                if (typeof showToast === 'function') showToast('Conversion successful!', 'success');
+            }
+            // --- PATH B: PDF FILE ---
+            else if (isPdfFile || currentTool.id === 'jpg-to-pdf') {
+                if (typeof window.processPDF === 'function') {
                     window.processPDF(currentTool.id, selectedFiles);
+                } else {
+                    throw new Error('window.processPDF is not defined. Ensure legacy PDF logic is intact.');
                 }
             }
+            else {
+                throw new Error('Unsupported file format for the selected tool.');
+            }
+        } catch (error) {
+            console.error('Process Error:', error);
+            if (typeof showToast === 'function') {
+                showToast('Error: ' + error.message, 'error');
+            } else {
+                alert('Error: ' + error.message);
+            }
+        } finally {
+            if (typeof hideLoading === 'function') hideLoading();
         }
     });
 }
