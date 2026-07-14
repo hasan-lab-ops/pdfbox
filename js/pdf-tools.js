@@ -1844,4 +1844,95 @@ window.convertWordToPDF = async function convertWordToPDF(arrayBuffer) {
     
     throw error;
   }
+  // ================================
+// WORD TO PDF CONVERTER (FULL PRO)
+// ================================
+
+async function convertWordToPdf(file) {
+  try {
+    hideConversionNotice();
+
+    if (!file) throw new Error("No file selected");
+
+    showLoading("📄 Reading Word file...");
+
+    // تحميل المكتبات
+    const mammothLib = await ensureMammothLoaded();
+    const html2pdfLib = await ensureHtml2PdfLoaded();
+
+    // قراءة الملف
+    const arrayBuffer = await file.arrayBuffer();
+
+    // DOCX → HTML
+    const result = await mammothLib.convertToHtml({ arrayBuffer });
+
+    if (result.messages?.length) {
+      console.warn("Mammoth messages:", result.messages);
+    }
+
+    let html = result.value;
+
+    if (!html || html.trim() === "") {
+      throw new Error("Empty document or unsupported format.");
+    }
+
+    // إنشاء container
+    const container = document.createElement("div");
+
+    container.style.padding = "25px";
+    container.style.background = "#ffffff";
+    container.style.color = "#000";
+    container.style.fontFamily = "Arial, sans-serif";
+    container.style.lineHeight = "1.8";
+
+    // دعم العربي
+    const direction = detectHtmlDirection(html);
+    container.setAttribute("dir", direction);
+
+    // تحسين التنسيق
+    html = `
+      <style>
+        body { font-family: Arial, sans-serif; }
+        h1,h2,h3 { margin-top: 20px; }
+        p { margin: 10px 0; }
+        img { max-width: 100%; }
+      </style>
+      ${html}
+    `;
+
+    container.innerHTML = html;
+    document.body.appendChild(container);
+
+    showLoading("🧾 Generating PDF...");
+
+    const opt = {
+      margin: [10, 10, 10, 10],
+      filename: file.name.replace(/\.(docx|doc)$/i, ".pdf"),
+      image: { type: "jpeg", quality: 0.98 },
+      html2canvas: {
+        scale: 2,
+        useCORS: true,
+        scrollY: 0
+      },
+      jsPDF: {
+        unit: "mm",
+        format: "a4",
+        orientation: "portrait"
+      }
+    };
+
+    await html2pdfLib().set(opt).from(container).save();
+
+    // تنظيف
+    document.body.removeChild(container);
+
+    hideLoading();
+    showConversionNotice("✅ Conversion successful", "success");
+
+  } catch (err) {
+    console.error(err);
+    hideLoading();
+    showConversionNotice("❌ " + err.message, "error");
+  }
+}
 }

@@ -471,67 +471,81 @@ function setupDropzone() {
         }
     });
 
-    const processBtn = document.getElementById('process-btn');
-    processBtn?.addEventListener('click', async () => {
-        try {
-            if (!selectedFiles || selectedFiles.length === 0) {
-                if (typeof showToast === 'function') showToast('Please select a file first.', 'error');
-                return;
+    document.getElementById("process-btn").addEventListener("click", async () => {
+        if (!currentTool) return;
+        
+        if (!selectedFiles || !selectedFiles.length) {
+            if (typeof showConversionNotice === 'function') {
+                showConversionNotice("Please select a file first.", "error");
+            } else {
+                alert("Please select a file first.");
             }
-            if (!currentTool) {
-                if (typeof showToast === 'function') showToast('Please select a tool.', 'error');
-                return;
-            }
+            return;
+        }
 
+        try {
             const file = selectedFiles[0];
             const isWordFile = file.name.toLowerCase().endsWith('.docx') || file.name.toLowerCase().endsWith('.doc');
             const isPdfFile = file.name.toLowerCase().endsWith('.pdf') || file.type.includes('pdf');
 
-            // --- PATH A: WORD FILE ---
-            if (isWordFile) {
-                if (typeof showLoading === 'function') showLoading('Converting Word to PDF...');
+            const newTools = ['word-to-pdf', 'pdf-to-word', 'protect-pdf', 'unlock-pdf'];
 
-                // Read as ArrayBuffer safely
-                const arrayBuffer = await new Promise((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = e => resolve(e.target.result);
-                    reader.onerror = () => reject(new Error('Failed to read the file.'));
-                    reader.readAsArrayBuffer(file);
-                });
+            if (newTools.includes(currentTool.id)) {
+                if (typeof window.processConversion === 'function') {
+                    await window.processConversion(currentTool, selectedFiles);
+                } else if (currentTool.id === 'word-to-pdf' && typeof window.convertWordToPdf === 'function') {
+                    const blob = await window.convertWordToPdf(file);
+                    if (blob && typeof window.showResultScreen === 'function') {
+                        window.showResultScreen(file.name.replace(/\.docx?$/i, '.pdf') || 'converted.pdf', blob);
+                    } else if (blob) {
+                        const outputFilename = file.name.replace(/\.docx?$/i, '.pdf') || 'converted.pdf';
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = outputFilename;
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    }
+                } else if (currentTool.id === 'word-to-pdf' && isWordFile) {
+                    if (typeof showLoading === 'function') showLoading('Converting Word to PDF...');
+                    const arrayBuffer = await new Promise((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = e => resolve(e.target.result);
+                        reader.onerror = () => reject(new Error('Failed to read the file.'));
+                        reader.readAsArrayBuffer(file);
+                    });
 
-                if (typeof window.convertWordToPDF !== 'function' && typeof convertWordToPDF !== 'function') {
-                    throw new Error('convertWordToPDF function is missing from pdf-tools.js');
+                    if (typeof window.convertWordToPDF !== 'function' && typeof convertWordToPDF !== 'function') {
+                        throw new Error('convertWordToPDF function is missing from pdf-tools.js');
+                    }
+
+                    const pdfBlob = typeof convertWordToPDF === 'function'
+                        ? await convertWordToPDF(arrayBuffer)
+                        : await window.convertWordToPDF(arrayBuffer);
+
+                    const outputFilename = file.name.replace(/\.docx?$/i, '.pdf') || 'converted.pdf';
+                    const url = URL.createObjectURL(pdfBlob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = outputFilename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+
+                    if (typeof showToast === 'function') showToast('Conversion successful!', 'success');
+                } else {
+                    throw new Error(`Tool ${currentTool.id} handler is missing.`);
                 }
-
-                // Call the conversion function
-                const pdfBlob = typeof convertWordToPDF === 'function'
-                    ? await convertWordToPDF(arrayBuffer)
-                    : await window.convertWordToPDF(arrayBuffer);
-
-                const outputFilename = file.name.replace(/\.docx?$/i, '.pdf') || 'converted.pdf';
-
-                // Automatically download the file
-                const url = URL.createObjectURL(pdfBlob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = outputFilename;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                URL.revokeObjectURL(url);
-
-                if (typeof showToast === 'function') showToast('Conversion successful!', 'success');
-            }
-            // --- PATH B: PDF FILE ---
-            else if (isPdfFile || currentTool.id === 'jpg-to-pdf') {
+            } else {
+                // Path B: Legacy PDF Tools
                 if (typeof window.processPDF === 'function') {
-                    window.processPDF(currentTool.id, selectedFiles);
+                    await window.processPDF(currentTool.id, selectedFiles);
                 } else {
                     throw new Error('window.processPDF is not defined. Ensure legacy PDF logic is intact.');
                 }
-            }
-            else {
-                throw new Error('Unsupported file format for the selected tool.');
             }
         } catch (error) {
             console.error('Process Error:', error);
