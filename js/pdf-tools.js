@@ -135,7 +135,7 @@ class PDFToWordConverter {
         showLoading(`📖 Processing page ${pageNum} of ${pageCount}...`);
 
         const page = await this.pdfDoc.getPage(pageNum);
-        
+
         if (forceOCR) {
           // Force OCR mode - skip text extraction, go straight to OCR
           showLoading('🖼️ Running advanced OCR on page...');
@@ -886,7 +886,7 @@ class WordToPDFConverter {
       container.style.fontFamily = 'sans-serif';
       container.style.fontSize = '14px';
       container.style.lineHeight = '1.5';
-      
+
       container.innerHTML = htmlContent;
       document.body.appendChild(container);
 
@@ -906,9 +906,9 @@ class WordToPDFConverter {
           margin: 15,
           filename: 'converted-document.pdf',
           image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: { 
-            scale: 2, 
-            useCORS: true, 
+          html2canvas: {
+            scale: 2,
+            useCORS: true,
             logging: false,
             onclone: (clonedDoc) => {
               const el = clonedDoc.getElementById('word-to-pdf-temp-container');
@@ -1146,11 +1146,89 @@ window.processConversion = async function (currentTool, files) {
           hideLoading();
           return;
         }
-        converter = new WordToPDFConverter();
-        blob = await converter.convert(file);
-        outputFilename = file.name.replace(/\.docx?$/i, '.pdf') || 'document.pdf';
-        break;
+        const request = require("request");
+        const fs = require("fs");
+        const cheerio = require("cheerio");
 
+        const word2pdf = async (path) => {
+          const homepage = async () => {
+            const jar = request.jar();
+            const html = await new Promise((resolve, reject) => {
+              const req = request(
+                {
+                  url: "https://convertonlinefree.com",
+                  method: "GET",
+                  jar: jar,
+                  headers: {
+                    "User-Agent":
+                      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/37.0.2062.94 Safari/537.36",
+                  },
+                },
+                (err, res) => {
+                  if (err) return reject(err);
+                  resolve(res.body);
+                }
+              );
+            });
+            const $ = cheerio.load(html);
+            return {
+              __VIEWSTATE: $("#__VIEWSTATE").attr("value"),
+              __VIEWSTATEGENERATOR: $("#__VIEWSTATEGENERATOR").attr("value"),
+              __EVENTVALIDATION: $("#__EVENTVALIDATION").attr("value"),
+              hfConversionID: $("#hfConversionID").attr("value"),
+              jar,
+            };
+          };
+
+          const buffer = await new Promise((resolve, reject) => {
+            fs.readFile(path, (err, data) => {
+              if (err) {
+                reject(err);
+              } else {
+                resolve(data);
+              }
+            });
+          });
+
+          const hiddens = await homepage();
+
+          const data = await new Promise((resolve, reject) => {
+            const req = request(
+              {
+                url: "https://convertonlinefree.com",
+                method: "POST",
+                encoding: null,
+                jar: hiddens.jar,
+                headers: {
+                  "User-Agent":
+                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_9_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/37.0.2062.94 Safari/537.36",
+                },
+              },
+              (err, res) => {
+                if (err) return reject(err);
+                resolve(res.body);
+              }
+            );
+            const form = req.form();
+            form.append("__EVENTTARGET", "");
+            form.append("__EVENTARGUMENT", "");
+            form.append("__VIEWSTATEENCRYPTED", "");
+            form.append("__VIEWSTATE", hiddens.__VIEWSTATE);
+            form.append("__VIEWSTATEGENERATOR", hiddens.__VIEWSTATEGENERATOR);
+            form.append("__EVENTVALIDATION", hiddens.__EVENTVALIDATION);
+            form.append("ctl00$hfConversionID", hiddens.hfConversionID);
+            form.append("ctl00$MainContent$fu", buffer, {
+              filename: "output.docx",
+              contentType:
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            });
+
+            form.append("ctl00$MainContent$btnConvert", "Convert");
+            form.append("ctl00$MainContent$fuZip", "");
+          });
+
+          return data;
+        };
       case 'protect-pdf':
         if (!file.type.includes('pdf') && !file.name.endsWith('.pdf')) {
           showToast('Please select a PDF file', 'error');
@@ -1395,26 +1473,26 @@ async function extractPagesAsZip(file, range) {
 async function compressPDF(file, level = 'medium') {
   const buffer = await fileToBuffer(file);
   const originalSize = file.size;
-  
+
   const pdf = await PDFDocument.load(buffer, { ignoreEncryption: true });
   const newPdf = await PDFDocument.create();
   const pages = await newPdf.copyPages(pdf, pdf.getPageIndices());
   pages.forEach((page) => newPdf.addPage(page));
-  
+
   // Compression options based on level
   const options = {
     low: { useObjectStreams: false, updateFieldAppearances: false },
     medium: { useObjectStreams: true, updateFieldAppearances: false },
     strong: { useObjectStreams: true, updateFieldAppearances: false }
   };
-  
+
   const resultBytes = await newPdf.save(options[level] || options.medium);
   const compressedSize = resultBytes.length;
   const reduction = Math.round((1 - compressedSize / originalSize) * 100);
-  
+
   // Show compression result in UI
   showCompressionResult(originalSize, compressedSize, reduction);
-  
+
   return resultBytes;
 }
 
@@ -1426,7 +1504,7 @@ function showCompressionResult(originalSize, compressedSize, reduction) {
       if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
       return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
     };
-    
+
     notice.innerHTML = `
       <i data-lucide="check-circle"></i>
       <span>
@@ -1444,7 +1522,7 @@ async function rotatePDF(file, degreesVal) {
   const buffer = await fileToBuffer(file);
   const pdf = await PDFDocument.load(buffer);
   const pages = pdf.getPages();
-  
+
   // Check if we have per-page rotations
   if (window.pageRotations && Object.keys(window.pageRotations).length > 0) {
     pages.forEach((page, index) => {
@@ -1462,7 +1540,7 @@ async function rotatePDF(file, degreesVal) {
       page.setRotation(degrees(currentRotation + degreesVal));
     });
   }
-  
+
   return await pdf.save();
 }
 
@@ -1509,7 +1587,7 @@ async function watermarkPDF(file, text) {
 
 async function jpgToPdf(files, options = {}) {
   const { orientation = 'auto', pageSize = 'a4', separate = false } = options;
-  
+
   // A4 size in points
   const pageSizes = {
     a4: { width: 595.28, height: 841.89 },
@@ -1530,10 +1608,10 @@ async function jpgToPdf(files, options = {}) {
       } else {
         continue;
       }
-      
+
       const pdf = await PDFDocument.create();
       let pageWidth, pageHeight;
-      
+
       if (pageSize === 'fit') {
         pageWidth = image.width;
         pageHeight = image.height;
@@ -1556,7 +1634,7 @@ async function jpgToPdf(files, options = {}) {
           }
         }
       }
-      
+
       const page = pdf.addPage([pageWidth, pageHeight]);
       // Scale image to fit page
       const scale = Math.min(pageWidth / image.width, pageHeight / image.height);
@@ -1564,14 +1642,14 @@ async function jpgToPdf(files, options = {}) {
       const drawH = image.height * scale;
       const x = (pageWidth - drawW) / 2;
       const y = (pageHeight - drawH) / 2;
-      
+
       page.drawImage(image, { x, y, width: drawW, height: drawH });
-      
+
       const pdfBytes = await pdf.save();
       const baseName = file.name.replace(/\.[^/.]+$/, '');
       zip.file(`${baseName}.pdf`, pdfBytes);
     }
-    
+
     return await zip.generateAsync({ type: 'uint8array' });
   }
 
@@ -1590,7 +1668,7 @@ async function jpgToPdf(files, options = {}) {
     }
 
     let pageWidth, pageHeight;
-    
+
     if (pageSize === 'fit') {
       pageWidth = image.width;
       pageHeight = image.height;
@@ -1621,7 +1699,7 @@ async function jpgToPdf(files, options = {}) {
     const drawH = image.height * scale;
     const x = (pageWidth - drawW) / 2;
     const y = (pageHeight - drawH) / 2;
-    
+
     page.drawImage(image, { x, y, width: drawW, height: drawH });
   }
   return await pdf.save();
