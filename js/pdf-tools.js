@@ -865,6 +865,7 @@ class WordToPDFConverter {
       const direction = detectHtmlDirection(htmlContent);
 
       container = document.createElement('div');
+      container.id = 'word-to-pdf-temp-container';
       container.style.position = 'fixed';
       container.style.opacity = '0.01';
       container.style.zIndex = '-9999';
@@ -890,7 +891,17 @@ class WordToPDFConverter {
           margin: 15,
           filename: 'converted-document.pdf',
           image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true, logging: false },
+          html2canvas: { 
+            scale: 2, 
+            useCORS: true, 
+            logging: false,
+            onclone: (clonedDoc) => {
+              const el = clonedDoc.getElementById('word-to-pdf-temp-container');
+              if (el) {
+                el.style.opacity = '1';
+              }
+            }
+          },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         })
         .from(container)
