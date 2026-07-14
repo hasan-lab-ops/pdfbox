@@ -473,7 +473,7 @@ function setupDropzone() {
         if (selectedFiles.length > 0 && currentTool) {
             // Use new conversion handler for document converters and encryption tools
             if (['pdf-to-word', 'word-to-pdf', 'protect-pdf', 'unlock-pdf'].includes(currentTool.id)) {
-                window.processConversion(currentTool);
+                window.processConversion(currentTool, selectedFiles);
             } else {
                 // Use legacy PDF processor for other tools
                 window.processPDF(currentTool.id, selectedFiles);
@@ -900,7 +900,7 @@ window.setProcessingState = function(isProcessing) {
 let currentResultBlob = null;
 let currentResultFilename = '';
 
-function showResultScreen(filename, blob) {
+window.showResultScreen = function showResultScreen(filename, blob) {
     const resultScreen = document.getElementById('result-screen');
     const resultFilename = document.getElementById('result-filename');
     const resultDownloadBtn = document.getElementById('result-download-btn');

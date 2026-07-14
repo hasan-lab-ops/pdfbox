@@ -12,6 +12,72 @@
 const { PDFDocument, PDFName, PDFNumber, degrees, rgb } = PDFLib;
 
 // ============================================================================
+// Dynamic CDN script loader (deduplicates concurrent requests)
+// ============================================================================
+
+const _scriptLoadPromises = new Map();
+
+function loadScript(src) {
+  if (_scriptLoadPromises.has(src)) {
+    return _scriptLoadPromises.get(src);
+  }
+
+  const promise = new Promise((resolve, reject) => {
+    const existing = document.querySelector(`script[src="${src}"]`);
+    if (existing) {
+      if (existing.dataset.loaded === 'true') {
+        resolve();
+        return;
+      }
+      existing.addEventListener('load', () => resolve(), { once: true });
+      existing.addEventListener('error', () => reject(new Error(`Failed to load ${src}`)), { once: true });
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = true;
+    script.onload = () => {
+      script.dataset.loaded = 'true';
+      resolve();
+    };
+    script.onerror = () => reject(new Error(`Failed to load ${src}`));
+    document.head.appendChild(script);
+  });
+
+  _scriptLoadPromises.set(src, promise);
+  return promise;
+}
+
+const CDN = {
+  mammoth: 'https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js',
+  html2canvas: 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
+  html2pdf: 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.14.0/html2pdf.bundle.min.js'
+};
+
+async function ensureMammothLoaded() {
+  if (window.mammoth || globalThis.mammoth) return window.mammoth || globalThis.mammoth;
+  await loadScript(CDN.mammoth);
+  if (!window.mammoth) throw new Error('Mammoth.js failed to load from the CDN.');
+  return window.mammoth;
+}
+
+async function ensureHtml2PdfLoaded() {
+  if (window.html2pdf) return window.html2pdf;
+  if (!window.html2canvas) await loadScript(CDN.html2canvas);
+  await loadScript(CDN.html2pdf);
+  if (!window.html2pdf) throw new Error('html2pdf.js failed to load from the CDN.');
+  return window.html2pdf;
+}
+
+function detectHtmlDirection(html) {
+  const plain = (html || '').replace(/<[^>]+>/g, ' ');
+  const rtlCount = (plain.match(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/g) || []).length;
+  const ltrCount = (plain.match(/[A-Za-z0-9]/g) || []).length;
+  return rtlCount > ltrCount ? 'rtl' : 'ltr';
+}
+
+// ============================================================================
 // 1. PDF TO WORD CONVERTER — Intelligent Layout-Preserving Engine
 // ============================================================================
 
@@ -785,11 +851,7 @@ class WordToPDFConverter {
 
       const arrayBuffer = await this.readFile(file);
 
-      const mammothLib = window.mammoth || globalThis.mammoth;
-      if (!mammothLib) {
-        throw new Error('Mammoth.js failed to load from the CDN.');
-      }
-
+      const mammothLib = await ensureMammothLoaded();
       const result = await mammothLib.convertToHtml({ arrayBuffer });
       const htmlContent = result.value;
 
@@ -799,20 +861,23 @@ class WordToPDFConverter {
 
       showLoading('🔄 Converting to PDF...');
 
-      const html2pdfLib = window.html2pdf;
-      if (!html2pdfLib) {
-        throw new Error('html2pdf.js failed to load from the CDN.');
-      }
+      const html2pdfLib = await ensureHtml2PdfLoaded();
+      const direction = detectHtmlDirection(htmlContent);
 
       container = document.createElement('div');
       container.style.position = 'fixed';
       container.style.opacity = '0.01';
       container.style.zIndex = '-9999';
       container.style.width = '800px';
-      container.style.direction = 'rtl';
-      container.style.textAlign = 'right';
+      container.style.direction = direction;
+      container.style.textAlign = direction === 'rtl' ? 'right' : 'left';
       container.style.top = '0';
       container.style.left = '0';
+      container.style.background = '#ffffff';
+      container.style.color = '#000000';
+      container.style.padding = '24px';
+      container.style.fontFamily = 'Arial, sans-serif';
+      container.style.lineHeight = '1.5';
       container.innerHTML = htmlContent;
       document.body.appendChild(container);
 
@@ -825,7 +890,7 @@ class WordToPDFConverter {
           margin: 15,
           filename: 'converted-document.pdf',
           image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true },
+          html2canvas: { scale: 2, useCORS: true, logging: false },
           jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
         })
         .from(container)
@@ -835,12 +900,14 @@ class WordToPDFConverter {
         document.body.removeChild(container);
       }
 
+      hideLoading();
       return pdfBlob;
 
     } catch (error) {
       if (container && container.parentNode) {
         document.body.removeChild(container);
       }
+      hideLoading();
       throw new Error(`Word to PDF conversion failed: ${error.message}`);
     }
   }
@@ -1012,10 +1079,11 @@ function downloadFile(blob, filename) {
 // MAIN CONVERSION ORCHESTRATOR
 // ============================================================================
 
-window.processConversion = async function (currentTool) {
+window.processConversion = async function (currentTool, files) {
   const password = document.getElementById('tool-password')?.value;
 
   const toolId = typeof currentTool === 'object' ? currentTool.id : currentTool;
+  const selectedFiles = files || [];
 
   if (!selectedFiles || selectedFiles.length === 0) {
     showToast('Please select a file first', 'error');
@@ -1023,6 +1091,8 @@ window.processConversion = async function (currentTool) {
   }
 
   const file = selectedFiles[0];
+
+  if (window.setProcessingState) window.setProcessingState(true);
 
   try {
     showLoading('Starting conversion...');
@@ -1103,7 +1173,21 @@ window.processConversion = async function (currentTool) {
     hideLoading();
     console.error('Conversion error:', error);
     showToast(error.message, 'error');
+  } finally {
+    if (window.setProcessingState) window.setProcessingState(false);
   }
+};
+
+/** Standalone Word → PDF entry point (uses fixed mammoth + html2pdf pipeline) */
+window.convertWordToPdf = async function convertWordToPdf(file) {
+  const converter = new WordToPDFConverter();
+  return converter.convert(file);
+};
+
+/** Standalone PDF → Word entry point (pdf.js text extraction + docx export) */
+window.convertPdfToWord = async function convertPdfToWord(file, options = {}) {
+  const converter = new PDFToWordConverter();
+  return converter.convert(file, options);
 };
 
 // Legacy function for compatibility
