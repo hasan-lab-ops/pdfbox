@@ -1,1590 +1,1380 @@
-/**
- * PDF & Document Conversion Toolkit
- * Complete solutions for:
- * 1. PDF to Word Converter
- * 2. Word to PDF Converter
- * 3. Protect PDF (Password Encryption)
- * 4. Unlock PDF (Decrypt Protected Files)
- * 
- * All processing occurs client-side for maximum security and privacy
- */
+const tools = [
+    { id: 'merge', title: 'Merge PDF', icon: 'files', desc: 'Combine multiple PDFs into one unified document.' },
+    { id: 'split', title: 'Split PDF', icon: 'file-minus', desc: 'Separate one page or a whole set for easy conversion into independent PDF files.' },
+    { id: 'compress', title: 'Compress PDF', icon: 'minimize', desc: 'Reduce file size while optimizing for maximal PDF quality.' },
+    { id: 'pdf-to-word', title: 'PDF to Word', icon: 'file-text', desc: '🔄 Convert PDF to editable Word (.docx) format with text extraction.' },
+    { id: 'word-to-pdf', title: 'Word to PDF', icon: 'file', desc: '🔄 Convert Word (.docx) documents to professional PDF files.' },
+    { id: 'pdf-to-jpg', title: 'PDF to JPG', icon: 'image', desc: 'Convert each PDF page into a JPG image.' },
+    { id: 'jpg-to-pdf', title: 'JPG to PDF', icon: 'image', desc: 'Convert JPG images to PDF in seconds.' },
+    { id: 'rotate', title: 'Rotate PDF', icon: 'rotate-cw', desc: 'Rotate your PDFs the way you need them.' },
+    { id: 'delete', title: 'Delete Pages', icon: 'trash-2', desc: 'Remove pages from a PDF document.' },
+    { id: 'protect-pdf', title: 'Protect PDF', icon: 'lock', desc: '🔐 Add password protection & 128-bit encryption to PDFs.' },
+    { id: 'unlock-pdf', title: 'Unlock PDF', icon: 'unlock', desc: '🔓 Remove password protection and decrypt PDF files.' },
+    { id: 'watermark', title: 'Watermark', icon: 'droplet', desc: 'Stamp an image or text over your PDF.' }
+];
 
-const { PDFDocument, PDFName, PDFNumber, degrees, rgb } = PDFLib;
+document.addEventListener('DOMContentLoaded', () => {
+    initAuth();
+    lucide.createIcons();
+    initRouter();
+    renderToolsGrid();
+    setupDropzone();
+});
 
-// ============================================================================
-// 1. PDF TO WORD CONVERTER — Intelligent Layout-Preserving Engine
-// ============================================================================
-
-class PDFToWordConverter {
-  constructor() {
-    this.pdfDoc = null;
-    this.docxLib = globalThis.docx || window.docx || null;
-    this.docxReadyPromise = null;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Library loader
-  // ---------------------------------------------------------------------------
-
-  async getDocxLib() {
-    if (this.docxLib) return this.docxLib;
-    if (this.docxReadyPromise) {
-      this.docxLib = await this.docxReadyPromise;
-      return this.docxLib;
-    }
-    this.docxReadyPromise = (async () => {
-      if (globalThis.docx) { this.docxLib = globalThis.docx; return this.docxLib; }
-      if (window.docx) { this.docxLib = window.docx; return this.docxLib; }
-      try {
-        const module = await import('https://cdn.jsdelivr.net/npm/docx@7.8.2/+esm');
-        this.docxLib = module;
-        globalThis.docx = module;
-        window.docx = module;
-        return this.docxLib;
-      } catch (error) {
-        throw new Error(`Unable to load the DOCX library: ${error.message}`);
-      }
-    })();
-    this.docxLib = await this.docxReadyPromise;
-    return this.docxLib;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Main conversion entry point
-  // ---------------------------------------------------------------------------
-
-  async convert(file, options = {}) {
-    try {
-      hideConversionNotice();
-      const forceOCR = options.forceOCR || false;
-      showLoading('📄 Extracting text from PDF...');
-
-      const arrayBuffer = await this.readFile(file);
-      this.pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-
-      const pageContent = [];
-      const pageCount = this.pdfDoc.numPages;
-
-      for (let pageNum = 1; pageNum <= pageCount; pageNum++) {
-        showLoading(`📖 Processing page ${pageNum} of ${pageCount}...`);
-
-        const page = await this.pdfDoc.getPage(pageNum);
+function initRouter() {
+    const handleHashChange = () => {
+        const hash = window.location.hash || '#home';
+        const [path, query] = hash.split('?');
         
-        if (forceOCR) {
-          // Force OCR mode - skip text extraction, go straight to OCR
-          showLoading('🖼️ Running advanced OCR on page...');
-          showConversionNotice('Advanced OCR mode: scanning all pages as images for maximum accuracy.', 'warning');
-          const ocrText = await this.performOcrOnPage(page);
-          pageContent.push(this.buildParagraphsFromText(ocrText, this.detectTextDirection(ocrText)));
-          continue;
+        if (path === '#auth' && currentUser) {
+            window.location.hash = '#home';
+            return;
         }
+        
+        // Hide all views
+        document.querySelectorAll('.view-section').forEach(el => el.classList.add('hidden'));
 
-        const extractedPage = await this.extractTextFromPage(page);
-        console.log(`Extracted structured content from page ${pageNum}:`, extractedPage);
-
-        const textLength = (extractedPage?.text || '').replace(/\s+/g, '').length;
-        const textIsSuspect = this.isArabicTextSuspect(extractedPage?.text || '');
-
-        if (textLength >= 10 && !textIsSuspect) {
-          pageContent.push(extractedPage.paragraphs);
-          continue;
-        }
-
-        showLoading('🖼️ Reading text from images, please wait...');
-        showConversionNotice(
-          textIsSuspect
-            ? `Page ${pageNum}'s embedded Arabic text appears to be encoded incorrectly. Running OCR in your browser to read it directly from the page image instead.`
-            : 'The document appears to contain scanned images. OCR is running in your browser to extract text.',
-          'warning'
-        );
-
-        const ocrText = await this.performOcrOnPage(page);
-        console.log(`OCR text from page ${pageNum}:`, ocrText);
-        pageContent.push(this.buildParagraphsFromText(ocrText, this.detectTextDirection(ocrText)));
-      }
-
-      const fullText = pageContent.flat().map((p) => p.text || '').join('\n\n');
-      const extractedCharacterCount = fullText.replace(/\s+/g, '').length;
-      console.log('Aggregated extracted text:', fullText);
-      console.log('Extraction summary:', { pageCount, extractedCharacterCount, pageContent });
-
-      const minimumExpectedCharacters = Math.max(20, pageCount * 20);
-      if (extractedCharacterCount < minimumExpectedCharacters) {
-        const msg = 'Warning: This document consists of scanned images and does not contain editable text for conversion.';
-        showConversionNotice(msg, 'warning');
-        showToast(msg, 'error');
-        hideLoading();
-        return null;
-      }
-
-      showLoading('📝 Creating Word document...');
-      const docxLib = await this.getDocxLib();
-      if (!docxLib || !docxLib.Document || !docxLib.Packer) {
-        throw new Error('The docx library failed to load from the CDN.');
-      }
-
-      const doc = new docxLib.Document({
-        sections: [{
-          properties: {
-            page: {
-              margin: { top: 1440, right: 1440, bottom: 1440, left: 1440, header: 720, footer: 720, gutter: 0 },
-              size: { orientation: docxLib.PageOrientation.PORTRAIT, width: 11900, height: 16840 }
+        if (path === '#tool' && query) {
+            const params = new URLSearchParams(query);
+            const toolId = params.get('id');
+            const tool = tools.find(t => t.id === toolId);
+            
+            if (tool) {
+                const toolView = document.getElementById('view-tool-detail');
+                toolView.classList.remove('hidden');
+                toolView.classList.remove('view-animate-enter');
+                void toolView.offsetWidth;
+                toolView.classList.add('view-animate-enter');
+                const cleanup = () => {
+                    toolView.classList.remove('view-animate-enter');
+                    toolView.removeEventListener('animationend', cleanup);
+                };
+                toolView.addEventListener('animationend', cleanup);
+                initToolDetailView(tool);
+            } else {
+                window.location.hash = '#home';
             }
-          },
-          children: this.createWordContent(pageContent, docxLib)
-        }]
-      });
-
-      const blob = await docxLib.Packer.toBlob(doc);
-      hideConversionNotice();
-      hideLoading();
-      return blob;
-
-    } catch (error) {
-      hideLoading();
-      throw new Error(`PDF to Word conversion failed: ${error.message}`);
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // OCR fallback
-  // ---------------------------------------------------------------------------
-
-  async performOcrOnPage(page) {
-    if (!window.Tesseract || !window.Tesseract.createWorker) {
-      throw new Error('Tesseract.js failed to load from the CDN.');
-    }
-    const viewport = page.getViewport({ scale: 2.0 });
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
-    if (!context) throw new Error('Unable to create an image canvas for OCR.');
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    await page.render({ canvasContext: context, viewport }).promise;
-    const worker = await window.Tesseract.createWorker('ara+eng', 1, {
-      logger: (msg) => {
-        if (msg?.status === 'recognizing text' && typeof msg.progress === 'number') {
-          showLoading(`🖼️ Reading text from images... ${Math.round(msg.progress * 100)}%`);
-        }
-      }
-    });
-    const { data } = await worker.recognize(canvas);
-    await worker.terminate();
-    return (data?.text || '').replace(/\s+/g, ' ').trim();
-  }
-
-  // ===========================================================================
-  // INTELLIGENT TEXT EXTRACTION ENGINE
-  // ===========================================================================
-
-  // --- Unicode ranges ---
-  static RTL_RANGE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/g;
-  static ARABIC_CORE = /[\u0621-\u063A\u0640-\u064A\u064B-\u0652]/;
-  static ARABIC_SUSPECT_MIN = 8;
-  static ARABIC_SUSPECT_RATIO = 0.12;
-
-  // -----------------------------------------------------------------------
-  // detectTextDirection — returns 'rtl' or 'ltr'
-  // -----------------------------------------------------------------------
-
-  detectTextDirection(text) {
-    const rtlCount = (text.match(PDFToWordConverter.RTL_RANGE) || []).length;
-    const ltrCount = (text.match(/[A-Za-z0-9]/g) || []).length;
-    return rtlCount > ltrCount ? 'rtl' : 'ltr';
-  }
-
-  isRtlText(text) { return this.detectTextDirection(text) === 'rtl'; }
-
-  // -----------------------------------------------------------------------
-  // isArabicTextSuspect — broken ToUnicode mapping detector
-  // -----------------------------------------------------------------------
-
-  isArabicTextSuspect(text) {
-    const chars = (text || '').match(PDFToWordConverter.RTL_RANGE) || [];
-    if (chars.length < PDFToWordConverter.ARABIC_SUSPECT_MIN) return false;
-    const core = chars.filter((c) => PDFToWordConverter.ARABIC_CORE.test(c)).length;
-    return (1 - core / chars.length) > PDFToWordConverter.ARABIC_SUSPECT_RATIO;
-  }
-
-  // -----------------------------------------------------------------------
-  // Extract raw items from a pdf.js page with enriched metadata
-  // -----------------------------------------------------------------------
-
-  extractRawItems(textContent) {
-    return (textContent.items || [])
-      .filter((item) => item && typeof item.str === 'string' && item.str.trim())
-      .map((item) => {
-        const t = item.transform || [1, 0, 0, 1, 0, 0];
-        // Font size from the transform matrix: sqrt(a^2 + b^2) where [a,b] is the
-        // horizontal scale vector.  For rotated text use the vertical vector [c,d].
-        const hScale = Math.sqrt(t[0] * t[0] + t[1] * t[1]);
-        const vScale = Math.sqrt(t[2] * t[2] + t[3] * t[3]);
-        const rawFontSize = Math.max(hScale, vScale);
-
-        return {
-          text: item.str,
-          x: t[4] ?? 0,
-          y: t[5] ?? 0,
-          width: item.width || 0,
-          height: item.height || 0,
-          fontName: item.fontName || '',
-          rawFontSize,
-          hasEOL: !!item.hasEOL
-        };
-      });
-  }
-
-  // -----------------------------------------------------------------------
-  // Compute median of a numeric array
-  // -----------------------------------------------------------------------
-
-  median(nums) {
-    if (!nums.length) return 0;
-    const sorted = [...nums].sort((a, b) => a - b);
-    const mid = Math.floor(sorted.length / 2);
-    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-  }
-
-  // -----------------------------------------------------------------------
-  // detectColumns — cluster items by X position into column groups
-  // Returns an array of column objects: { centerX, items[] }
-  // -----------------------------------------------------------------------
-
-  detectColumns(items, pageWidth) {
-    if (items.length <= 1) return [{ centerX: items[0]?.x ?? 0, items }];
-
-    // Build X-position histogram with bins of 10 units
-    const bins = new Map();
-    items.forEach((item) => {
-      const bin = Math.round(item.x / 10) * 10;
-      bins.set(bin, (bins.get(bin) || 0) + 1);
-    });
-
-    // Find peaks (column centers) — bins with count > 5% of total items
-    const threshold = Math.max(2, items.length * 0.05);
-    const peakBins = [...bins.entries()]
-      .filter(([, count]) => count >= threshold)
-      .sort((a, b) => a[0] - b[0]);
-
-    // Merge nearby peaks (within 40 units) into single columns
-    const columnCenters = [];
-    for (const [bin] of peakBins) {
-      if (columnCenters.length && bin - columnCenters[columnCenters.length - 1] < 40) {
-        // Merge: weighted average
-        const prev = columnCenters[columnCenters.length - 1];
-        columnCenters[columnCenters.length - 1] = (prev + bin) / 2;
-      } else {
-        columnCenters.push(bin);
-      }
-    }
-
-    // If only one column detected (or page is narrow), treat as single column
-    if (columnCenters.length <= 1 || pageWidth < 500) {
-      return [{ centerX: pageWidth / 2, items }];
-    }
-
-    // Assign items to nearest column center
-    const columns = columnCenters.map((cx) => ({ centerX: cx, items: [] }));
-    items.forEach((item) => {
-      let minDist = Infinity;
-      let bestCol = 0;
-      columnCenters.forEach((cx, idx) => {
-        const dist = Math.abs(item.x - cx);
-        if (dist < minDist) { minDist = dist; bestCol = idx; }
-      });
-      columns[bestCol].items.push(item);
-    });
-
-    return columns.filter((c) => c.items.length > 0);
-  }
-
-  // -----------------------------------------------------------------------
-  // groupIntoLines — group items on the same vertical band into lines
-  // Uses hasEOL flag from pdf.js as primary line-break signal, with
-  // adaptive Y-proximity as fallback.
-  // -----------------------------------------------------------------------
-
-  groupIntoLines(items) {
-    if (!items.length) return [];
-
-    const heights = items.map((i) => Math.abs(i.height)).filter(Boolean);
-    const medianH = this.median(heights) || 12;
-    const lineTolerance = Math.max(3, medianH * 0.35);
-
-    // Sort top-to-bottom (descending Y), then left-to-right
-    const sorted = [...items].sort((a, b) => b.y - a.y || a.x - b.x);
-
-    const lines = [];
-    let currentLine = null;
-
-    sorted.forEach((item) => {
-      // New line if:
-      //  1. No current line yet
-      //  2. Previous item on this line had hasEOL (explicit line break in PDF)
-      //  3. Y distance exceeds tolerance (items are on different visual lines)
-      const prevHadEOL = currentLine && currentLine.lastHasEOL;
-      const yDist = currentLine ? Math.abs(item.y - currentLine.y) : Infinity;
-      const needsNewLine = !currentLine || prevHadEOL || yDist > lineTolerance;
-
-      if (needsNewLine) {
-        currentLine = {
-          y: item.y,
-          items: [item],
-          heights: [Math.abs(item.height || medianH)],
-          lastHasEOL: !!item.hasEOL
-        };
-        lines.push(currentLine);
-      } else {
-        currentLine.items.push(item);
-        if (item.height) currentLine.heights.push(Math.abs(item.height));
-        currentLine.lastHasEOL = !!item.hasEOL;
-        // Running average Y for more accurate gap measurement
-        const n = currentLine.items.length;
-        currentLine.y = currentLine.y + (item.y - currentLine.y) / n;
-      }
-    });
-
-    // Compute average height per line
-    lines.forEach((l) => {
-      l.avgHeight = this.median(l.heights) || medianH;
-    });
-
-    return lines;
-  }
-
-  // -----------------------------------------------------------------------
-  // sortLineItems — sort items within a line, handling mixed RTL/LTR
-  // Returns segments: [{ direction, items[] }] in reading order
-  // -----------------------------------------------------------------------
-
-  sortLineItems(items) {
-    if (!items.length) return [];
-
-    // First: sort by X ascending to get spatial order
-    const byX = [...items].sort((a, b) => a.x - b.x);
-
-    // Detect directional segments by scanning for script changes
-    const segments = [];
-    let currentSeg = { direction: null, items: [] };
-
-    byX.forEach((item) => {
-      const itemDir = this.detectTextDirection(item.text);
-      if (!currentSeg.direction) {
-        currentSeg.direction = itemDir;
-        currentSeg.items.push(item);
-      } else if (itemDir === currentSeg.direction) {
-        currentSeg.items.push(item);
-      } else {
-        // Direction change — start new segment
-        if (currentSeg.items.length) segments.push(currentSeg);
-        currentSeg = { direction: itemDir, items: [item] };
-      }
-    });
-    if (currentSeg.items.length) segments.push(currentSeg);
-
-    // If only one segment, that's the line direction
-    if (segments.length === 1) {
-      const dir = segments[0].direction;
-      segments[0].items.sort((a, b) => dir === 'rtl' ? b.x - a.x : a.x - b.x);
-      return segments;
-    }
-
-    // Multiple segments: sort items within each segment by their direction
-    segments.forEach((seg) => {
-      seg.items.sort((a, b) => seg.direction === 'rtl' ? b.x - a.x : a.x - b.x);
-    });
-
-    return segments;
-  }
-
-  // -----------------------------------------------------------------------
-  // computeGap — adaptive gap between two consecutive items
-  // -----------------------------------------------------------------------
-
-  computeGap(prev, curr, isRtl) {
-    if (isRtl) {
-      return (prev.x - (prev.width || 0)) - curr.x;
-    }
-    return curr.x - (prev.x + (prev.width || 0));
-  }
-
-  // -----------------------------------------------------------------------
-  // formatLine — assemble a single line's text with proper spacing
-  // -----------------------------------------------------------------------
-
-  formatLine(items) {
-    if (!items || !items.length) return '';
-
-    const segments = this.sortLineItems(items);
-    if (!segments.length) return '';
-
-    // Compute adaptive gap threshold from this line's character widths
-    const widths = items.map((i) => i.width / Math.max(1, i.text.length)).filter(Boolean);
-    const medianCharWidth = this.median(widths) || 4;
-    const gapThreshold = Math.max(1.5, medianCharWidth * 0.3);
-
-    const lineParts = [];
-
-    segments.forEach((seg) => {
-      const dir = seg.direction;
-      let partText = seg.items[0].text;
-      for (let i = 1; i < seg.items.length; i++) {
-        const gap = this.computeGap(seg.items[i - 1], seg.items[i], dir === 'rtl');
-        if (gap > gapThreshold) {
-          partText += ' ' + seg.items[i].text;
         } else {
-          partText += seg.items[i].text;
-        }
-      }
-      lineParts.push({ text: partText, direction: dir });
-    });
-
-    // For a single-direction line, return directly
-    if (lineParts.length === 1) {
-      return this.normalizeText(lineParts[0].text, lineParts[0].direction);
-    }
-
-    // For mixed-direction lines: LTR parts read left-to-right, RTL parts right-to-left
-    // Place LTR parts first (they appear on the left visually), then RTL parts
-    const ltrParts = lineParts.filter((p) => p.direction === 'ltr');
-    const rtlParts = lineParts.filter((p) => p.direction === 'rtl');
-    const ordered = [...ltrParts, ...rtlParts];
-    return this.normalizeText(ordered.map((p) => p.text).join(' '), 'auto');
-  }
-
-  // -----------------------------------------------------------------------
-  // normalizeText — collapse whitespace, fix Arabic punctuation spacing
-  // -----------------------------------------------------------------------
-
-  normalizeText(text, _direction) {
-    return text
-      .replace(/[ \t]+/g, ' ')
-      .replace(/ ([،؛؟!،])/g, '$1')
-      .replace(/([،؛؟!،]) /g, '$1')
-      .trim();
-  }
-
-  // -----------------------------------------------------------------------
-  // estimateFontSize — accurate size from transform matrix data
-  // -----------------------------------------------------------------------
-
-  estimateFontSize(items) {
-    if (!items.length) return 24;
-    const sizes = items.map((i) => i.rawFontSize).filter((s) => s > 0);
-    if (!sizes.length) return 24;
-    const med = this.median(sizes);
-    // Convert PDF points to half-points for docx (1 pt = 2 half-points)
-    // Typical body text is 10-12pt → 20-24 half-points
-    const halfPoints = Math.round(med * 2);
-    return Math.max(16, Math.min(72, halfPoints));
-  }
-
-  // -----------------------------------------------------------------------
-  // detectParagraphAlignment — determine alignment from line edges
-  // -----------------------------------------------------------------------
-
-  detectParagraphAlignment(lines, pageWidth) {
-    if (lines.length < 2) {
-      const dir = this.detectTextDirection(lines.map((l) => l.items.map((i) => i.text).join('')).join(''));
-      return dir === 'rtl' ? 'right' : 'left';
-    }
-
-    const leftEdges = lines.map((l) => Math.min(...l.items.map((i) => i.x)));
-    const rightEdges = lines.map((l) => Math.max(...l.items.map((i) => i.x + (i.width || 0))));
-
-    const leftVariance = this.median(leftEdges.map((e) => Math.abs(e - leftEdges[0])));
-    const rightVariance = this.median(rightEdges.map((e) => Math.abs(e - rightEdges[0])));
-    const centerX = pageWidth / 2;
-    const avgCenter = this.median(lines.map((l) => {
-      const min = Math.min(...l.items.map((i) => i.x));
-      const max = Math.max(...l.items.map((i) => i.x + (i.width || 0)));
-      return (min + max) / 2;
-    }));
-
-    // Check if all lines are roughly centered
-    if (Math.abs(avgCenter - centerX) < pageWidth * 0.1 && leftVariance < 20 && rightVariance < 20) {
-      return 'center';
-    }
-
-    // Check if lines have consistent left edge (left-aligned)
-    if (leftVariance < 15) return 'left';
-
-    // Check if lines have consistent right edge (right-aligned)
-    if (rightVariance < 15) return 'right';
-
-    // Otherwise: justified
-    return 'justify';
-  }
-
-  // -----------------------------------------------------------------------
-  // groupLinesIntoParagraphs — detect paragraph breaks by:
-  //   1. Large vertical gaps between lines
-  //   2. Script changes (English → Arabic or vice versa)
-  // This prevents bilingual documents from merging English+Arabic into one paragraph.
-  // -----------------------------------------------------------------------
-
-  groupLinesIntoParagraphs(lines, pageWidth) {
-    if (!lines.length) return [];
-
-    const heights = lines.map((l) => l.avgHeight).filter(Boolean);
-    const medianH = this.median(heights) || 12;
-    // Tighter gap threshold: 1.0× median height (was 1.35×)
-    const paraGapThreshold = medianH * 1.0;
-
-    const paragraphs = [];
-    let currentPara = { lines: [lines[0]] };
-
-    // Helper: get dominant script direction of a line's items
-    const lineDirection = (line) => {
-      const text = line.items.map((i) => i.text).join('');
-      return this.detectTextDirection(text);
-    };
-
-    let prevDir = lineDirection(lines[0]);
-
-    for (let i = 1; i < lines.length; i++) {
-      const prevLine = lines[i - 1];
-      const currLine = lines[i];
-      const gap = Math.abs(prevLine.y - currLine.y);
-      const currDir = lineDirection(currLine);
-
-      // Paragraph break when:
-      //  1. Large vertical gap (bigger than threshold), OR
-      //  2. Script changes between consecutive lines (English→Arabic or Arabic→English)
-      const isGapBreak = gap > paraGapThreshold;
-      const isScriptBreak = currDir !== prevDir && currentPara.lines.length > 0;
-
-      if (isGapBreak || isScriptBreak) {
-        console.log(`  Para break at line ${i}: ${isGapBreak ? 'gap' : 'script-change'} (${prevDir}→${currDir}) gap=${gap.toFixed(1)} threshold=${paraGapThreshold.toFixed(1)}`);
-        const built = this.buildParagraphFromLines(currentPara.lines, pageWidth);
-        if (built) paragraphs.push(built);
-        currentPara = { lines: [currLine] };
-      } else {
-        currentPara.lines.push(currLine);
-      }
-
-      prevDir = currDir;
-    }
-
-    // Finalize last paragraph
-    const built = this.buildParagraphFromLines(currentPara.lines, pageWidth);
-    if (built) paragraphs.push(built);
-
-    return paragraphs;
-  }
-
-  // -----------------------------------------------------------------------
-  // buildParagraphFromLines — create paragraph object from grouped lines
-  // -----------------------------------------------------------------------
-
-  buildParagraphFromLines(lines, pageWidth) {
-    if (!lines.length) return null;
-
-    const textLines = lines.map((line) => this.formatLine(line.items)).filter(Boolean);
-    if (!textLines.length) return null;
-
-    const paragraphText = textLines.join('\n');
-    const direction = this.detectTextDirection(paragraphText);
-    const isRtl = direction === 'rtl';
-
-    // Font size: use median across ALL items in the paragraph (not just first line)
-    const allItems = lines.flatMap((l) => l.items);
-    const fontSize = this.estimateFontSize(allItems);
-
-    // Bold: check if ANY item in the paragraph has a bold font name
-    const isBold = allItems.some((item) => /bold|heavy|black|semibold/i.test(item.fontName || ''));
-
-    // Italic: check font names for italic/oblique
-    const isItalic = allItems.some((item) => /italic|oblique|slant/i.test(item.fontName || ''));
-
-    // Alignment: detect from line edges
-    const alignment = this.detectParagraphAlignment(lines, pageWidth);
-
-    return {
-      text: paragraphText,
-      isRtl,
-      alignment,
-      fontSize,
-      isBold,
-      isItalic
-    };
-  }
-
-  // -----------------------------------------------------------------------
-  // extractTextFromPage — main page-level extraction pipeline
-  // -----------------------------------------------------------------------
-
-  async extractTextFromPage(page) {
-    const textContent = await page.getTextContent({
-      disableCombineTextItems: false,
-      includeMarkedContent: false
-    });
-
-    const items = this.extractRawItems(textContent);
-    if (!items.length) return { text: '', paragraphs: [] };
-
-    const viewport = page.getViewport({ scale: 1.0 });
-    const pageWidth = viewport.width;
-
-    // Step 1: Detect columns
-    const columns = this.detectColumns(items, pageWidth);
-
-    // Step 2: For each column, group into lines, then paragraphs
-    const allParagraphs = [];
-
-    // Sort columns in reading order (LTR: left→right, RTL: right→left)
-    const pageDir = this.detectTextDirection(items.map((i) => i.text).join(''));
-    columns.sort((a, b) => pageDir === 'rtl' ? b.centerX - a.centerX : a.centerX - b.centerX);
-
-    for (const column of columns) {
-      const lines = this.groupIntoLines(column.items);
-      const paragraphs = this.groupLinesIntoParagraphs(lines, pageWidth);
-      allParagraphs.push(...paragraphs);
-    }
-
-    console.log(`Page extraction: ${items.length} items, ${columns.length} column(s), ${allParagraphs.length} paragraphs`);
-    allParagraphs.forEach((p, i) => {
-      console.log(`  Para ${i} [${p.isRtl ? 'RTL' : 'LTR'}] align=${p.alignment} size=${p.fontSize}: "${p.text.substring(0, 80)}..."`);
-    });
-
-    const text = allParagraphs.map((p) => p.text).join('\n');
-    return { text, paragraphs: allParagraphs };
-  }
-
-  // -----------------------------------------------------------------------
-  // buildParagraphsFromText — fallback for OCR text
-  // -----------------------------------------------------------------------
-
-  buildParagraphsFromText(text, direction = 'ltr') {
-    const cleanedText = (text || '').replace(/\s+/g, ' ').trim();
-    if (!cleanedText) return [];
-    // Split OCR text into paragraphs on double newlines or sentence boundaries
-    const rawParagraphs = cleanedText.split(/\n{2,}|\.\s+(?=[A-Z\u0621-\u064A])/);
-    return rawParagraphs
-      .map((p) => p.trim())
-      .filter(Boolean)
-      .map((p) => ({
-        text: p,
-        isRtl: direction === 'rtl',
-        alignment: direction === 'rtl' ? 'right' : 'left',
-        fontSize: 24,
-        isBold: false,
-        isItalic: false
-      }));
-  }
-
-  // ===========================================================================
-  // DOCX OUTPUT GENERATION
-  // ===========================================================================
-
-  createWordContent(pageContent, docxLib) {
-    const children = [];
-
-    // ── Document title ─────────────────────────────────────────────────────────
-    children.push(
-      new docxLib.Paragraph({
-        children: [new docxLib.TextRun({ text: 'Converted PDF Document', bold: true, size: 32 })],
-        heading: docxLib.HeadingLevel.HEADING_1,
-        spacing: { line: 276, lineRule: docxLib.LineRuleType?.AUTO, after: 200 },
-        alignment: docxLib.AlignmentType.CENTER
-      })
-    );
-    children.push(
-      new docxLib.Paragraph({
-        children: [new docxLib.TextRun({ text: `Converted on ${new Date().toLocaleString()}`, italics: true, size: 20 })],
-        spacing: { line: 276, lineRule: docxLib.LineRuleType?.AUTO, after: 400 },
-        alignment: docxLib.AlignmentType.CENTER
-      })
-    );
-
-    // ── Page content ───────────────────────────────────────────────────────────
-    const alignmentMap = {
-      left: docxLib.AlignmentType.LEFT,
-      right: docxLib.AlignmentType.RIGHT,
-      center: docxLib.AlignmentType.CENTER,
-      justify: docxLib.AlignmentType.JUSTIFIED
-    };
-
-    pageContent.forEach((paragraphs, index) => {
-      if (index > 0) {
-        children.push(new docxLib.Paragraph({ text: '', pageBreakBefore: true }));
-      }
-
-      (paragraphs || []).forEach((paragraph) => {
-        const isRtl = Boolean(paragraph.isRtl);
-        const lines = (paragraph.text || '').split(/\n+/).filter((l) => l.trim());
-        const docxAlignment = alignmentMap[paragraph.alignment] || (isRtl ? docxLib.AlignmentType.RIGHT : docxLib.AlignmentType.LEFT);
-
-        lines.forEach((line) => {
-          const runProps = {
-            text: line,
-            bold: Boolean(paragraph.isBold),
-            italics: Boolean(paragraph.isItalic),
-            size: Math.max(16, paragraph.fontSize || 24),
-            rightToLeft: isRtl
-          };
-
-          const paragraphProps = {
-            children: [new docxLib.TextRun(runProps)],
-            alignment: docxAlignment,
-            bidirectional: isRtl,
-            rightToLeft: isRtl,
-            spacing: {
-              line: isRtl ? 360 : 276,
-              lineRule: docxLib.LineRuleType?.AUTO ?? 'auto',
-              after: isRtl ? 200 : 120
+            const viewId = `view-${path.substring(1)}`;
+            const viewEl = document.getElementById(viewId);
+            if (viewEl) {
+                viewEl.classList.remove('hidden');
+            } else {
+                document.getElementById('view-home').classList.remove('hidden');
             }
-          };
-
-          if (isRtl && docxLib.TextDirection) {
-            paragraphProps.textDirection =
-              docxLib.TextDirection.RIGHT_TO_LEFT_OVERRIDE ||
-              docxLib.TextDirection.RIGHT_TO_LEFT ||
-              'rtl';
-          }
-
-          children.push(new docxLib.Paragraph(paragraphProps));
-        });
-      });
-    });
-
-    return children;
-  }
-
-  // -----------------------------------------------------------------------
-  // Utility
-  // -----------------------------------------------------------------------
-
-  readFile(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target.result);
-      reader.onerror = () => reject(new Error('Failed to read file'));
-      reader.readAsArrayBuffer(file);
-    });
-  }
-}
-
-// ============================================================================
-// 2. WORD TO PDF CONVERTER
-// ============================================================================
-
-class WordToPDFConverter {
-  constructor() {
-    this.wordContent = null;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Main conversion entry point (FIXED)
-  // ---------------------------------------------------------------------------
-
-  async convert(file) {
-    let container = null;
-    try {
-      showLoading('📄 Reading Word document...');
-
-      const arrayBuffer = await this.readFile(file);
-
-      const mammothLib = window.mammoth || globalThis.mammoth;
-      if (!mammothLib) {
-        throw new Error('Mammoth.js failed to load from the CDN.');
-      }
-
-      const result = await mammothLib.convertToHtml({ arrayBuffer });
-      const htmlContent = result.value;
-
-      if (!htmlContent || htmlContent.trim().length === 0) {
-        throw new Error('No content found in the Word document.');
-      }
-
-      showLoading('🔄 Converting to PDF...');
-
-      const html2pdfLib = window.html2pdf;
-      if (!html2pdfLib) {
-        throw new Error('html2pdf.js failed to load from the CDN.');
-      }
-
-      // Create off-screen container with explicit dimensions and visibility
-      container = document.createElement('div');
-      Object.assign(container.style, {
-        position: 'absolute',
-        left: '-9999px',
-        top: '0',
-        width: '800px',
-        height: 'auto',
-        overflow: 'hidden',
-        padding: '20px',
-        background: 'white',
-        boxSizing: 'border-box'
-      });
-      container.innerHTML = htmlContent;
-      document.body.appendChild(container);
-
-      // Allow fonts and images to load
-      await new Promise(r => setTimeout(r, 300));
-
-      showLoading('🖼️ Rendering PDF...');
-
-      const pdfBlob = await html2pdfLib()
-        .set({
-          margin: 15,
-          filename: 'converted-document.pdf',
-          image: { type: 'jpeg', quality: 0.98 },
-          html2canvas: {
-            scale: 2,
-            useCORS: true,
-            scrollY: 0,
-            scrollX: 0,
-            width: 800,
-            height: container.scrollHeight,
-          },
-          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-        })
-        .from(container)
-        .outputPdf('blob');
-
-      if (pdfBlob.size < 100) {
-        throw new Error('Generated PDF is empty – possibly a rendering issue.');
-      }
-
-      return pdfBlob;
-
-    } catch (error) {
-      console.error('WordToPDF error:', error);
-      throw error;
-    } finally {
-      if (container && container.parentNode) {
-        document.body.removeChild(container);
-      }
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Utility
-  // ---------------------------------------------------------------------------
-
-  readFile(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target.result);
-      reader.onerror = () => reject(new Error('Failed to read file'));
-      reader.readAsArrayBuffer(file);
-    });
-  }
-}
-
-// ============================================================================
-// 3. PDF ENCRYPTION (Protect PDF with Password)
-// ============================================================================
-
-class PDFEncryptor {
-  constructor() {
-    this.pdfDoc = null;
-  }
-
-  async encrypt(file, password) {
-    try {
-      if (!password || password.length < 4) {
-        throw new Error('Password must be at least 4 characters long');
-      }
-
-      showLoading('🔐 Loading PDF file...');
-
-      const arrayBuffer = await this.readFile(file);
-      const pdfBytes = new Uint8Array(arrayBuffer);
-      this.pdfDoc = await PDFDocument.load(pdfBytes);
-
-      showLoading('🔒 Applying password protection & encryption...');
-
-      const protectedPdfBytes = await this.pdfDoc.save({
-        userPassword: password,
-        ownerPassword: password,
-        permissions: {
-          printing: 'highResolution',
-          modifying: false,
-          copying: false,
-          annotating: false,
-          fillingForms: false,
-          contentAccessibility: true,
-          documentAssembly: false
         }
-      });
-
-      const encryptedBlob = new Blob([protectedPdfBytes], { type: 'application/pdf' });
-
-      showLoading('✅ Finalizing protected PDF...');
-      return encryptedBlob;
-
-    } catch (error) {
-      throw new Error(`PDF encryption failed: ${error.message}`);
-    }
-  }
-
-  readFile(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target.result);
-      reader.onerror = () => reject(new Error('Failed to read file'));
-      reader.readAsArrayBuffer(file);
-    });
-  }
-}
-
-// ============================================================================
-// 4. PDF DECRYPTION (Unlock PDF and Remove Password)
-// ============================================================================
-
-class PDFDecryptor {
-  constructor() {
-    this.pdfDoc = null;
-  }
-
-  async decrypt(file, password) {
-    try {
-      if (!password) {
-        throw new Error('Password is required to decrypt the file');
-      }
-
-      showLoading('🔍 Loading encrypted PDF...');
-
-      const arrayBuffer = await this.readFile(file);
-
-      try {
-        this.pdfDoc = await PDFDocument.load(arrayBuffer, { password });
-      } catch (e) {
-        throw new Error('Incorrect password or invalid PDF file');
-      }
-
-      showLoading('🔓 Decrypting content...');
-
-      // Create a new PDF document without encryption
-      const newPdf = await PDFDocument.create();
-
-      // Copy all pages from the decrypted document
-      const pages = await newPdf.copyPages(
-        this.pdfDoc,
-        this.pdfDoc.getPageIndices()
-      );
-
-      pages.forEach(page => {
-        newPdf.addPage(page);
-      });
-
-      showLoading('💾 Saving decrypted copy...');
-
-      // Save without any encryption
-      const decryptedPDF = await newPdf.save();
-      return new Blob([decryptedPDF], { type: 'application/pdf' });
-
-    } catch (error) {
-      throw new Error(`PDF decryption failed: ${error.message}`);
-    }
-  }
-
-  readFile(file) {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target.result);
-      reader.onerror = () => reject(new Error('Failed to read file'));
-      reader.readAsArrayBuffer(file);
-    });
-  }
-}
-
-// ============================================================================
-// UI HELPER FUNCTIONS
-// ============================================================================
-
-function showLoading(message = 'Processing...') {
-  const loader = document.getElementById('loading-indicator');
-  if (loader) {
-    loader.classList.remove('hidden');
-    const text = loader.querySelector('strong');
-    if (text) text.textContent = message;
-  }
-}
-
-function hideLoading() {
-  const loader = document.getElementById('loading-indicator');
-  if (loader) {
-    loader.classList.add('hidden');
-  }
-}
-
-function downloadFile(blob, filename) {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-}
-
-// ============================================================================
-// MAIN CONVERSION ORCHESTRATOR
-// ============================================================================
-
-window.processConversion = async function (currentTool) {
-  const password = document.getElementById('tool-password')?.value;
-
-  const toolId = typeof currentTool === 'object' ? currentTool.id : currentTool;
-
-  if (!selectedFiles || selectedFiles.length === 0) {
-    showToast('Please select a file first', 'error');
-    return;
-  }
-
-  const file = selectedFiles[0];
-
-  try {
-    showLoading('Starting conversion...');
-
-    let converter = null;
-    let outputFilename = '';
-    let blob = null;
-
-    switch (toolId) {
-      case 'pdf-to-word':
-        if (!file.type.includes('pdf') && !file.name.endsWith('.pdf')) {
-          showToast('Please select a PDF file', 'error');
-          hideLoading();
-          return;
-        }
-        converter = new PDFToWordConverter();
-        const pdfWordMode = document.querySelector('input[name="pdf-word-mode"]:checked')?.value || 'standard';
-        blob = await converter.convert(file, { forceOCR: pdfWordMode === 'ocr' });
-        outputFilename = file.name.replace(/\.pdf$/i, '.docx') || 'document.docx';
-        break;
-
-      case 'word-to-pdf':
-        if (!file.type.includes('word') && !file.name.endsWith('.docx') && !file.name.endsWith('.doc')) {
-          showToast('Please select a Word document (.docx)', 'error');
-          hideLoading();
-          return;
-        }
-        converter = new WordToPDFConverter();
-        blob = await converter.convert(file);
-        outputFilename = file.name.replace(/\.docx?$/i, '.pdf') || 'document.pdf';
-        break;
-
-      case 'protect-pdf':
-        if (!file.type.includes('pdf') && !file.name.endsWith('.pdf')) {
-          showToast('Please select a PDF file', 'error');
-          hideLoading();
-          return;
-        }
-        if (!password) {
-          showToast('Please enter a password', 'error');
-          hideLoading();
-          return;
-        }
-        converter = new PDFEncryptor();
-        blob = await converter.encrypt(file, password);
-        outputFilename = file.name.replace(/\.pdf$/i, '_protected.pdf') || 'protected.pdf';
-        break;
-
-      case 'unlock-pdf':
-        if (!file.type.includes('pdf') && !file.name.endsWith('.pdf')) {
-          showToast('Please select a PDF file', 'error');
-          hideLoading();
-          return;
-        }
-        if (!password) {
-          showToast('Please enter the PDF password', 'error');
-          hideLoading();
-          return;
-        }
-        converter = new PDFDecryptor();
-        blob = await converter.decrypt(file, password);
-        outputFilename = file.name.replace(/\.pdf$/i, '_decrypted.pdf') || 'decrypted.pdf';
-        break;
-
-      default:
-        showToast('Unknown tool', 'error');
-        hideLoading();
-        return;
-    }
-
-    if (blob) {
-      hideConversionNotice();
-      hideLoading();
-      window.showResultScreen(outputFilename, blob);
-    }
-
-  } catch (error) {
-    hideLoading();
-    console.error('Conversion error:', error);
-    showToast(error.message, 'error');
-  }
-};
-
-// Legacy function for compatibility
-
-window.processPDF = async function (toolId, files) {
-  window.setProcessingState(true);
-
-  try {
-    let resultBytes = null;
-    let resultFileName = 'output.pdf';
-
-    switch (toolId) {
-      case 'merge':
-        resultBytes = await mergePDFs(files);
-        resultFileName = 'merged.pdf';
-        break;
-      case 'split':
-        const splitRange = document.getElementById('tool-range')?.value || '';
-        const asZip = document.getElementById('split-as-zip')?.checked;
-        if (asZip) {
-          resultBytes = await extractPagesAsZip(files[0], splitRange);
-          resultFileName = 'split-output.zip';
-        } else {
-          resultBytes = await extractPages(files[0], splitRange);
-          resultFileName = 'split-output.pdf';
-        }
-        break;
-      case 'compress':
-        const compressLevel = document.querySelector('input[name="compress-level"]:checked')?.value || 'medium';
-        resultBytes = await compressPDF(files[0], compressLevel);
-        resultFileName = 'compressed.pdf';
-        break;
-      case 'rotate':
-        const rotation = document.getElementById('tool-rotation')?.value || 90;
-        resultBytes = await rotatePDF(files[0], parseInt(rotation));
-        resultFileName = 'rotated.pdf';
-        break;
-      case 'delete':
-        const deleteRange = document.getElementById('tool-range')?.value || '';
-        resultBytes = await deletePages(files[0], deleteRange);
-        resultFileName = 'deleted-pages.pdf';
-        break;
-      case 'watermark':
-        const text = document.getElementById('tool-watermark')?.value || 'CONFIDENTIAL';
-        resultBytes = await watermarkPDF(files[0], text);
-        resultFileName = 'watermarked.pdf';
-        break;
-      case 'jpg-to-pdf':
-        const jpgOrientation = document.getElementById('jpg-orientation')?.value || 'auto';
-        const jpgPageSize = document.getElementById('jpg-page-size')?.value || 'a4';
-        const jpgSeparate = document.getElementById('jpg-separate')?.checked || false;
-        resultBytes = await jpgToPdf(files, { orientation: jpgOrientation, pageSize: jpgPageSize, separate: jpgSeparate });
-        resultFileName = jpgSeparate ? 'converted-images.zip' : 'converted.pdf';
-        break;
-      case 'pdf-to-jpg':
-        await pdfToJpg(files[0]);
-        window.setProcessingState(false);
-        return;
-      default:
-        throw new Error("Tool not implemented yet.");
-    }
-
-    if (resultBytes) {
-      const mime = resultFileName.endsWith('.zip') ? 'application/zip' : 'application/pdf';
-      const blob = new Blob([resultBytes], { type: mime });
-      window.showResultScreen(resultFileName, blob);
-    }
-
-  } catch (error) {
-    console.error(error);
-    showToast('Error processing file: ' + error.message, 'error');
-  } finally {
-    window.setProcessingState(false);
-  }
-};
-
-// --- Helper Functions ---
-async function fileToBuffer(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = reject;
-    reader.readAsArrayBuffer(file);
-  });
-}
-
-function downloadBlob(bytes, filename, type) {
-  const blob = new Blob([bytes], { type });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-}
-
-// --- PDF Logic Implementations ---
-
-async function mergePDFs(files) {
-  const mergedPdf = await PDFDocument.create();
-  for (const file of files) {
-    const buffer = await fileToBuffer(file);
-    const pdf = await PDFDocument.load(buffer);
-    const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
-    copiedPages.forEach((page) => mergedPdf.addPage(page));
-  }
-  return await mergedPdf.save();
-}
-
-function parsePageRange(rangeInput, pageCount) {
-  if (!rangeInput || !rangeInput.trim()) {
-    return Array.from({ length: pageCount }, (_, index) => index);
-  }
-
-  const pages = new Set();
-  const tokens = rangeInput.split(',').map(token => token.trim()).filter(Boolean);
-
-  for (const token of tokens) {
-    const rangeMatch = token.match(/^(\d+)\s*-\s*(\d+)$/);
-    if (rangeMatch) {
-      let start = parseInt(rangeMatch[1], 10);
-      let end = parseInt(rangeMatch[2], 10);
-      if (start > end) [start, end] = [end, start];
-      for (let page = start; page <= end; page++) {
-        if (page < 1 || page > pageCount) {
-          throw new Error(`Invalid page range: ${page} is outside document bounds.`);
-        }
-        pages.add(page - 1);
-      }
-      continue;
-    }
-
-    const singleMatch = token.match(/^(\d+)$/);
-    if (singleMatch) {
-      const page = parseInt(singleMatch[1], 10);
-      if (page < 1 || page > pageCount) {
-        throw new Error(`Invalid page number: ${page} is outside document bounds.`);
-      }
-      pages.add(page - 1);
-      continue;
-    }
-
-    throw new Error(`Invalid page range format: '${token}'. Use formats like 1-3,5.`);
-  }
-
-  return Array.from(pages).sort((a, b) => a - b);
-}
-
-async function extractPages(file, range) {
-  const buffer = await fileToBuffer(file);
-  const pdf = await PDFDocument.load(buffer, { ignoreEncryption: true });
-  const pageCount = pdf.getPageCount();
-  const pageIndices = parsePageRange(range, pageCount);
-
-  const newPdf = await PDFDocument.create();
-  const pages = await newPdf.copyPages(pdf, pageIndices);
-  pages.forEach((page) => newPdf.addPage(page));
-  return await newPdf.save();
-}
-
-async function extractPagesAsZip(file, range) {
-  const buffer = await fileToBuffer(file);
-  const pdf = await PDFDocument.load(buffer, { ignoreEncryption: true });
-  const pageCount = pdf.getPageCount();
-  const pageIndices = parsePageRange(range, pageCount);
-
-  const zip = new JSZip();
-  for (const pageIndex of pageIndices) {
-    const newPdf = await PDFDocument.create();
-    const [copiedPage] = await newPdf.copyPages(pdf, [pageIndex]);
-    newPdf.addPage(copiedPage);
-    const pdfBytes = await newPdf.save();
-    zip.file(`page-${pageIndex + 1}.pdf`, pdfBytes);
-  }
-  return await zip.generateAsync({ type: 'uint8array' });
-}
-
-async function compressPDF(file, level = 'medium') {
-  const buffer = await fileToBuffer(file);
-  const originalSize = file.size;
-  
-  const pdf = await PDFDocument.load(buffer, { ignoreEncryption: true });
-  const newPdf = await PDFDocument.create();
-  const pages = await newPdf.copyPages(pdf, pdf.getPageIndices());
-  pages.forEach((page) => newPdf.addPage(page));
-  
-  // Compression options based on level
-  const options = {
-    low: { useObjectStreams: false, updateFieldAppearances: false },
-    medium: { useObjectStreams: true, updateFieldAppearances: false },
-    strong: { useObjectStreams: true, updateFieldAppearances: false }
-  };
-  
-  const resultBytes = await newPdf.save(options[level] || options.medium);
-  const compressedSize = resultBytes.length;
-  const reduction = Math.round((1 - compressedSize / originalSize) * 100);
-  
-  // Show compression result in UI
-  showCompressionResult(originalSize, compressedSize, reduction);
-  
-  return resultBytes;
-}
-
-function showCompressionResult(originalSize, compressedSize, reduction) {
-  const notice = document.getElementById('conversion-notice');
-  if (notice) {
-    const formatSize = (bytes) => {
-      if (bytes < 1024) return bytes + ' B';
-      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-      return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+        
+        // Scroll to top on navigation
+        window.scrollTo(0, 0);
     };
+
+    window.addEventListener('hashchange', handleHashChange);
+    handleHashChange(); // Trigger on initial load
+}
+
+function renderToolsGrid() {
+    const homeGrid = document.getElementById('home-tools-grid');
+    const allGrid = document.getElementById('all-tools-grid');
     
-    notice.innerHTML = `
-      <i data-lucide="check-circle"></i>
-      <span>
-        <strong>Compression Complete!</strong><br>
-        ${formatSize(originalSize)} → ${formatSize(compressedSize)} (${reduction}% smaller)
-      </span>
-    `;
-    notice.className = 'conversion-notice success';
+    let html = '';
+    tools.forEach(tool => {
+        html += `
+            <a href="#tool?id=${tool.id}" class="tool-card">
+                <div class="tool-icon">
+                    <i data-lucide="${tool.icon}"></i>
+                </div>
+                <h3>${tool.title}</h3>
+                <p>${tool.desc}</p>
+            </a>
+        `;
+    });
+    
+    if (homeGrid) homeGrid.innerHTML = html; // In a real app we might only show top 6, but showing all for now
+    if (allGrid) allGrid.innerHTML = html;
+    
+    lucide.createIcons();
+}
+
+let currentTool = null;
+let selectedFiles = [];
+let selectedPageIndices = [];
+let currentPreviewFile = null;
+
+function initToolDetailView(tool) {
+    currentTool = tool;
+    selectedFiles = []; // Reset state
+    resetPageRotations();
+    resetSplitPositions();
+    
+    document.getElementById('tool-detail-title').innerText = tool.title;
+    document.getElementById('tool-detail-desc').innerText = tool.desc;
+    document.getElementById('tool-detail-icon').innerHTML = `<i data-lucide="${tool.icon}"></i>`;
+    lucide.createIcons();
+    
+    resetWorkspace();
+    
+    const fileInput = document.getElementById('file-input');
+    if (fileInput) {
+        if (tool.id === 'jpg-to-pdf') {
+            fileInput.accept = 'image/*';
+            fileInput.multiple = true;
+        } else if (tool.id === 'merge') {
+            fileInput.accept = '.pdf';
+            fileInput.multiple = true;
+        } else if (tool.id === 'word-to-pdf') {
+            fileInput.accept = '.docx,.doc';
+            fileInput.multiple = false;
+        } else if (tool.id === 'pdf-to-word') {
+            fileInput.accept = '.pdf';
+            fileInput.multiple = false;
+        } else {
+            fileInput.accept = '.pdf';
+            fileInput.multiple = false;
+        }
+    }
+    
+    // Inject dynamic SEO article
+    const articleContainer = document.getElementById('tool-detail-article');
+    if (articleContainer && window.toolArticles && window.toolArticles[tool.id]) {
+        articleContainer.innerHTML = window.toolArticles[tool.id];
+    } else if (articleContainer) {
+        articleContainer.innerHTML = '';
+    }
+    
+    // Inject dynamic options based on tool
+    const optionsContainer = document.getElementById('tool-options');
+    optionsContainer.innerHTML = '';
+    optionsContainer.classList.add('hidden');
+    
+    if (tool.id === 'split') {
+        optionsContainer.innerHTML = `
+            <div class="form-group" style="max-width: 380px; margin: 0 auto; text-align: left;">
+                <label>Split mode</label>
+                <div class="form-control" style="padding: 12px 14px; display: flex; align-items: center; gap: 10px;">
+                    <input type="checkbox" id="split-as-zip" />
+                    <span>Extract every page into a ZIP archive</span>
+                </div>
+                <input type="text" id="tool-range" class="form-control" style="margin-top: 10px;" placeholder="e.g. 2-5" />
+                <small style="color: var(--text-muted);">Leave blank to split the full document or enter a custom range.</small>
+            </div>
+        `;
+        optionsContainer.classList.remove('hidden');
+    } else if (tool.id === 'delete') {
+        optionsContainer.innerHTML = `
+            <div class="form-group" style="max-width: 300px; margin: 0 auto;">
+                <label>Pages to Delete</label>
+                <input type="text" id="tool-range" class="form-control" placeholder="e.g. 2,4-5" />
+                <small style="color: var(--text-muted);">Click pages below to select, or type a range above.</small>
+                <div style="display: flex; gap: 8px; margin-top: 10px;">
+                    <button id="delete-select-all" type="button" class="btn btn-outline" style="flex:1; font-size: 0.8rem;">Select All</button>
+                    <button id="delete-deselect-all" type="button" class="btn btn-outline" style="flex:1; font-size: 0.8rem;">Deselect All</button>
+                </div>
+                <div id="delete-count" style="text-align:center; margin-top:8px; font-size:0.85rem; color: var(--primary);"></div>
+            </div>
+        `;
+        optionsContainer.classList.remove('hidden');
+        setTimeout(() => {
+            const selectAllBtn = document.getElementById('delete-select-all');
+            const deselectAllBtn = document.getElementById('delete-deselect-all');
+            if (selectAllBtn) {
+                selectAllBtn.addEventListener('click', () => {
+                    if (currentPreviewFile) {
+                        const total = selectedPageIndices.length || currentPreviewFile._pageCount || 0;
+                        selectedPageIndices = Array.from({ length: total }, (_, i) => i);
+                        renderPagePreviewGrid(currentPreviewFile);
+                        updateDeleteCount();
+                    }
+                });
+            }
+            if (deselectAllBtn) {
+                deselectAllBtn.addEventListener('click', () => {
+                    selectedPageIndices = [];
+                    renderPagePreviewGrid(currentPreviewFile);
+                    updateDeleteCount();
+                });
+            }
+        }, 0);
+    } else if (tool.id === 'protect-pdf') {
+        optionsContainer.innerHTML = `
+            <div class="form-group" style="max-width: 300px; margin: 0 auto;">
+                <label for="tool-password">🔐 Set Password</label>
+                <input type="password" id="tool-password" class="form-control" placeholder="Enter secure password (min 4 chars)" />
+                <small style="color: var(--text-muted);">Your PDF will require this password to open on all devices.</small>
+            </div>
+        `;
+        optionsContainer.classList.remove('hidden');
+    } else if (tool.id === 'unlock-pdf') {
+        optionsContainer.innerHTML = `
+            <div class="form-group" style="max-width: 300px; margin: 0 auto;">
+                <div id="unlock-encryption-status" style="
+                    padding: 10px 14px; border-radius: 10px; margin-bottom: 12px;
+                    background: rgba(251, 191, 36, 0.08); border: 1px solid rgba(251, 191, 36, 0.25);
+                    display: none; font-size: 0.85rem; text-align: center; color: var(--text-main);
+                ">
+                    🔍 Detecting encryption...
+                </div>
+                <label for="tool-password">🔓 Current Password</label>
+                <input type="password" id="tool-password" class="form-control" placeholder="Enter password to unlock" />
+                <small style="color: var(--text-muted);">Will create a new, unencrypted copy of your PDF.</small>
+            </div>
+        `;
+        optionsContainer.classList.remove('hidden');
+    } else if (tool.id === 'pdf-to-word') {
+        optionsContainer.innerHTML = `
+            <div class="form-group" style="max-width: 400px; margin: 0 auto; text-align: left;">
+                <label>Conversion Mode</label>
+                <div style="display: flex; gap: 12px; margin-top: 8px;">
+                    <label class="pdf-word-mode" style="flex: 1; cursor: pointer;">
+                        <input type="radio" name="pdf-word-mode" value="standard" checked style="display: none;">
+                        <div class="pdf-word-mode-card" style="
+                            padding: 16px 12px;
+                            border: 2px solid var(--primary);
+                            border-radius: 12px;
+                            text-align: center;
+                            background: rgba(14, 165, 233, 0.05);
+                            transition: all 0.2s;
+                        ">
+                            <div style="font-weight: 600; margin-bottom: 4px;">📄 Standard</div>
+                            <div style="font-size: 0.8rem; color: var(--text-muted);">Text extraction</div>
+                        </div>
+                    </label>
+                    <label class="pdf-word-mode" style="flex: 1; cursor: pointer;">
+                        <input type="radio" name="pdf-word-mode" value="ocr" style="display: none;">
+                        <div class="pdf-word-mode-card" style="
+                            padding: 16px 12px;
+                            border: 2px solid var(--border);
+                            border-radius: 12px;
+                            text-align: center;
+                            transition: all 0.2s;
+                        ">
+                            <div style="font-weight: 600; margin-bottom: 4px;">🔍 Advanced OCR</div>
+                            <div style="font-size: 0.8rem; color: var(--text-muted);">Scanned docs</div>
+                        </div>
+                    </label>
+                </div>
+                <p id="pdf-word-mode-desc" style="color: var(--text-muted); font-size: 0.85rem; margin-top: 10px; text-align: center;">
+                    Extracts text layer directly. Best for native PDFs with selectable text.
+                </p>
+            </div>
+        `;
+        optionsContainer.classList.remove('hidden');
+        setTimeout(() => {
+            document.querySelectorAll('.pdf-word-mode').forEach(opt => {
+                opt.addEventListener('click', () => {
+                    document.querySelectorAll('.pdf-word-mode input').forEach(r => r.checked = false);
+                    opt.querySelector('input').checked = true;
+                    document.querySelectorAll('.pdf-word-mode-card').forEach(card => {
+                        card.style.borderColor = 'var(--border)';
+                        card.style.background = 'transparent';
+                    });
+                    const card = opt.querySelector('.pdf-word-mode-card');
+                    card.style.borderColor = 'var(--primary)';
+                    card.style.background = 'rgba(14, 165, 233, 0.05)';
+                    const modeDesc = document.getElementById('pdf-word-mode-desc');
+                    if (modeDesc) {
+                        const val = opt.querySelector('input').value;
+                        modeDesc.textContent = val === 'ocr'
+                            ? 'Forces image-based OCR on every page. Best for scanned documents or garbled text.'
+                            : 'Extracts text layer directly. Best for native PDFs with selectable text.';
+                    }
+                });
+            });
+        }, 0);
+    } else if (tool.id === 'word-to-pdf') {
+        optionsContainer.innerHTML = `
+            <div class="form-group" style="max-width: 300px; margin: 0 auto;">
+                <label>📝 Convert Word to PDF</label>
+                <p style="color: var(--text-muted); font-size: 0.9rem;">Converts your .docx document to professional PDF format</p>
+            </div>
+        `;
+        optionsContainer.classList.remove('hidden');
+    } else if (tool.id === 'jpg-to-pdf') {
+        optionsContainer.innerHTML = `
+            <div class="form-group" style="max-width: 400px; margin: 0 auto; text-align: left;">
+                <label>Image to PDF Options</label>
+                <div style="display: flex; gap: 12px; margin-bottom: 12px;">
+                    <div style="flex: 1;">
+                        <small style="color: var(--text-muted); font-weight: 500;">Page Orientation</small>
+                        <select id="jpg-orientation" class="form-control" style="margin-top: 4px;">
+                            <option value="portrait">Portrait</option>
+                            <option value="landscape">Landscape</option>
+                            <option value="auto">Auto-detect</option>
+                        </select>
+                    </div>
+                    <div style="flex: 1;">
+                        <small style="color: var(--text-muted); font-weight: 500;">Page Size</small>
+                        <select id="jpg-page-size" class="form-control" style="margin-top: 4px;">
+                            <option value="a4">A4</option>
+                            <option value="letter">US Letter</option>
+                            <option value="fit">Fit to image</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-control" style="padding: 12px 14px; display: flex; align-items: center; gap: 10px;">
+                    <input type="checkbox" id="jpg-separate" />
+                    <span>Save each image as a separate PDF</span>
+                </div>
+            </div>
+        `;
+        optionsContainer.classList.remove('hidden');
+    } else if (tool.id === 'watermark') {
+        optionsContainer.innerHTML = `
+            <div class="form-group" style="max-width: 300px; margin: 0 auto;">
+                <label>Watermark Text</label>
+                <input type="text" id="tool-watermark" class="form-control" placeholder="CONFIDENTIAL" value="CONFIDENTIAL">
+            </div>
+        `;
+        optionsContainer.classList.remove('hidden');
+    } else if (tool.id === 'compress') {
+        optionsContainer.innerHTML = `
+            <div class="form-group" style="max-width: 400px; margin: 0 auto; text-align: left;">
+                <label>Compression Level</label>
+                <div class="compress-options" style="display: flex; gap: 12px; margin-top: 8px;">
+                    <label class="compress-option" style="flex: 1; cursor: pointer;">
+                        <input type="radio" name="compress-level" value="low" style="display: none;">
+                        <div class="compress-option-card" style="
+                            padding: 16px 12px;
+                            border: 2px solid var(--border);
+                            border-radius: 12px;
+                            text-align: center;
+                            transition: all 0.2s;
+                        ">
+                            <div style="font-weight: 600; margin-bottom: 4px;">Low</div>
+                            <div style="font-size: 0.8rem; color: var(--text-muted);">High quality</div>
+                        </div>
+                    </label>
+                    <label class="compress-option" style="flex: 1; cursor: pointer;">
+                        <input type="radio" name="compress-level" value="medium" checked style="display: none;">
+                        <div class="compress-option-card" style="
+                            padding: 16px 12px;
+                            border: 2px solid var(--primary);
+                            border-radius: 12px;
+                            text-align: center;
+                            background: rgba(14, 165, 233, 0.05);
+                            transition: all 0.2s;
+                        ">
+                            <div style="font-weight: 600; margin-bottom: 4px;">Medium</div>
+                            <div style="font-size: 0.8rem; color: var(--text-muted);">Recommended</div>
+                        </div>
+                    </label>
+                    <label class="compress-option" style="flex: 1; cursor: pointer;">
+                        <input type="radio" name="compress-level" value="strong" style="display: none;">
+                        <div class="compress-option-card" style="
+                            padding: 16px 12px;
+                            border: 2px solid var(--border);
+                            border-radius: 12px;
+                            text-align: center;
+                            transition: all 0.2s;
+                        ">
+                            <div style="font-weight: 600; margin-bottom: 4px;">Strong</div>
+                            <div style="font-size: 0.8rem; color: var(--text-muted);">Smallest size</div>
+                        </div>
+                    </label>
+                </div>
+            </div>
+        `;
+        optionsContainer.classList.remove('hidden');
+
+        // Add click handlers for compress options
+        setTimeout(() => {
+            document.querySelectorAll('.compress-option').forEach(opt => {
+                opt.addEventListener('click', () => {
+                    document.querySelectorAll('.compress-option input').forEach(r => r.checked = false);
+                    opt.querySelector('input').checked = true;
+                    document.querySelectorAll('.compress-option-card').forEach(card => {
+                        card.style.borderColor = 'var(--border)';
+                        card.style.background = 'transparent';
+                    });
+                    const card = opt.querySelector('.compress-option-card');
+                    card.style.borderColor = 'var(--primary)';
+                    card.style.background = 'rgba(14, 165, 233, 0.05)';
+                });
+            });
+        }, 100);
+    } else if (tool.id === 'rotate') {
+        optionsContainer.innerHTML = `
+            <div class="form-group" style="max-width: 300px; margin: 0 auto;">
+                <label>Rotation Degrees</label>
+                <select id="tool-rotation" class="form-control">
+                    <option value="90">90° Clockwise</option>
+                    <option value="180">180°</option>
+                    <option value="270">90° Counter-Clockwise</option>
+                </select>
+            </div>
+        `;
+        optionsContainer.classList.remove('hidden');
+    }
+}
+
+function showConversionNotice(message, type = 'warning') {
+    const notice = document.getElementById('conversion-notice');
+    if (!notice) return;
+
+    notice.className = `conversion-notice ${type}`;
+    notice.innerHTML = `<i data-lucide="${type === 'success' ? 'check-circle' : type === 'error' ? 'alert-circle' : 'alert-triangle'}"></i><span>${message}</span>`;
     notice.classList.remove('hidden');
     lucide.createIcons();
-  }
 }
 
-async function rotatePDF(file, degreesVal) {
-  const buffer = await fileToBuffer(file);
-  const pdf = await PDFDocument.load(buffer);
-  const pages = pdf.getPages();
-  
-  // Check if we have per-page rotations
-  if (window.pageRotations && Object.keys(window.pageRotations).length > 0) {
-    pages.forEach((page, index) => {
-      const pageNum = index + 1;
-      const perPageRotation = window.pageRotations[pageNum] || 0;
-      if (perPageRotation !== 0) {
-        const currentRotation = page.getRotation().angle;
-        page.setRotation(degrees(currentRotation + perPageRotation));
-      }
+function hideConversionNotice() {
+    const notice = document.getElementById('conversion-notice');
+    if (!notice) return;
+    notice.className = 'conversion-notice hidden';
+    notice.innerHTML = '';
+}
+
+function resetWorkspace() {
+    currentObjectUrls.forEach(url => URL.revokeObjectURL(url));
+    currentObjectUrls = [];
+    document.getElementById('file-list').classList.add('hidden');
+    document.getElementById('file-list').innerHTML = '';
+    document.getElementById('page-preview-grid').classList.add('hidden');
+    document.getElementById('page-preview-grid').innerHTML = '';
+    document.getElementById('process-btn').classList.add('hidden');
+    document.getElementById('loading-indicator').classList.add('hidden');
+    document.getElementById('file-dropzone').classList.remove('hidden');
+    document.getElementById('result-screen').classList.add('hidden');
+    selectedPageIndices = [];
+    currentPreviewFile = null;
+    resetPageRotations();
+    hideConversionNotice();
+}
+
+function setupDropzone() {
+    const dropzone = document.getElementById('file-dropzone');
+    const fileInput = document.getElementById('file-input');
+    
+    dropzone.addEventListener('click', () => fileInput.click());
+    
+    dropzone.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        dropzone.classList.add('dragover');
     });
-  } else {
-    // Fallback to global rotation
-    pages.forEach(page => {
-      const currentRotation = page.getRotation().angle;
-      page.setRotation(degrees(currentRotation + degreesVal));
+    
+    dropzone.addEventListener('dragleave', () => {
+        dropzone.classList.remove('dragover');
     });
-  }
-  
-  return await pdf.save();
+    
+    dropzone.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropzone.classList.remove('dragover');
+        if (e.dataTransfer.files.length) {
+            handleFiles(e.dataTransfer.files);
+        }
+    });
+    
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length) {
+            handleFiles(e.target.files);
+        }
+    });
+
+    document.getElementById('process-btn').addEventListener('click', () => {
+        if (selectedFiles.length > 0 && currentTool) {
+            // Use new conversion handler for document converters and encryption tools
+            if (['pdf-to-word', 'word-to-pdf', 'protect-pdf', 'unlock-pdf'].includes(currentTool.id)) {
+                window.processConversion(currentTool);
+            } else {
+                // Use legacy PDF processor for other tools
+                window.processPDF(currentTool.id, selectedFiles);
+            }
+        }
+    });
 }
 
-async function deletePages(file, pagesToDelete) {
-  const buffer = await fileToBuffer(file);
-  const pdf = await PDFDocument.load(buffer, { ignoreEncryption: true });
-  const count = pdf.getPageCount();
-  const pageIndices = parsePageRange(pagesToDelete, count);
-
-  // Remove pages in reverse order to keep indexes stable
-  pageIndices.reverse().forEach(index => pdf.removePage(index));
-  return await pdf.save();
+function getFileTypeIcon(file) {
+    const name = (file?.name || '').toLowerCase();
+    if (name.endsWith('.pdf')) return 'file-text';
+    if (name.endsWith('.docx') || name.endsWith('.doc')) return 'file-plus-2';
+    if (file?.type?.startsWith('image/')) return 'image';
+    return 'file';
 }
 
-async function watermarkPDF(file, text) {
-  const buffer = await fileToBuffer(file);
-  const pdf = await PDFDocument.load(buffer);
-  const pages = pdf.getPages();
-  const { rgb } = PDFLib;
+function formatFileSize(size) {
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+    return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+}
 
-  const fontSize = 50;
-  const opacity = 0.3;
-  const color = rgb(0.85, 0.1, 0.1);
-  const spacingX = 250;
-  const spacingY = 200;
+function handleFiles(files) {
+    if (!currentTool) {
+        alert('Please select a tool before uploading files.');
+        return;
+    }
 
-  pages.forEach(page => {
-    const { width, height } = page.getSize();
-    for (let x = -width; x < width * 2; x += spacingX) {
-      for (let y = -height; y < height * 2; y += spacingY) {
-        page.drawText(text, {
-          x,
-          y,
-          size: fontSize,
-          color,
-          rotate: degrees(45),
-          opacity,
+    let validFiles = [];
+
+    if (currentTool.id === 'jpg-to-pdf') {
+        validFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
+    } else if (currentTool.id === 'word-to-pdf') {
+        validFiles = Array.from(files).filter(file =>
+            file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+            file.type === 'application/msword' ||
+            file.name.endsWith('.docx') ||
+            file.name.endsWith('.doc')
+        );
+    } else if (currentTool.id === 'pdf-to-word' || currentTool.id === 'protect-pdf' || currentTool.id === 'unlock-pdf' || currentTool.id === 'merge') {
+        validFiles = Array.from(files).filter(file => file.type === 'application/pdf' || file.name.endsWith('.pdf'));
+    } else {
+        validFiles = Array.from(files).filter(file => file.type === 'application/pdf' || file.name.endsWith('.pdf'));
+    }
+
+    if (validFiles.length === 0) {
+        alert('Please upload a valid file format for this tool.');
+        return;
+    }
+
+    if (currentTool.id === 'merge' || currentTool.id === 'jpg-to-pdf') {
+        selectedFiles = validFiles;
+    } else {
+        selectedFiles = [validFiles[0]];
+    }
+
+    selectedPageIndices = [];
+    updateFileListUI();
+
+    // Auto-detect encryption for unlock tool
+    if (currentTool.id === 'unlock-pdf' && selectedFiles[0]) {
+        detectEncryption(selectedFiles[0]);
+    }
+}
+
+async function detectEncryption(file) {
+    const statusEl = document.getElementById('unlock-encryption-status');
+    if (!statusEl) return;
+    statusEl.style.display = 'block';
+    statusEl.innerHTML = '🔍 Detecting encryption...';
+    statusEl.style.background = 'rgba(251, 191, 36, 0.08)';
+    statusEl.style.borderColor = 'rgba(251, 191, 36, 0.25)';
+
+    try {
+        const buffer = await file.arrayBuffer();
+        const uint8 = new Uint8Array(buffer);
+        // Try loading without password first
+        const { PDFDocument } = await import('https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm');
+        let encrypted = false;
+        let passwordNeeded = false;
+        
+        try {
+            // Check if PDF requires password by looking at the encryption dictionary
+            const pdfBytes = new Uint8Array(buffer);
+            const pdfStr = new TextDecoder('latin1').decode(pdfBytes.slice(0, 2048));
+            
+            // Simple heuristic: look for encryption markers in the raw bytes
+            if (pdfStr.includes('/Encrypt') || pdfStr.includes('/U ') || pdfStr.includes('/O ')) {
+                encrypted = true;
+                // Try loading with empty password to confirm
+                try {
+                    const testDoc = await PDFDocument.load(uint8, { ignoreEncryption: false });
+                    // If it loads without error, it's not actually encrypted or has no user password
+                    passwordNeeded = false;
+                } catch (e) {
+                    passwordNeeded = true;
+                }
+            }
+        } catch (e) {
+            // If detection fails, assume not encrypted
+            encrypted = false;
+        }
+
+        if (encrypted && passwordNeeded) {
+            statusEl.innerHTML = '🔒 This PDF is password-protected. Enter the password below to unlock it.';
+            statusEl.style.background = 'rgba(239, 68, 68, 0.08)';
+            statusEl.style.borderColor = 'rgba(239, 68, 68, 0.25)';
+        } else if (encrypted) {
+            statusEl.innerHTML = '🔓 This PDF has encryption but no user password. You can unlock it directly.';
+            statusEl.style.background = 'rgba(14, 165, 233, 0.08)';
+            statusEl.style.borderColor = 'rgba(14, 165, 233, 0.25)';
+        } else {
+            statusEl.innerHTML = '✅ This PDF does not appear to be password-protected.';
+            statusEl.style.background = 'rgba(34, 197, 94, 0.08)';
+            statusEl.style.borderColor = 'rgba(34, 197, 94, 0.25)';
+        }
+    } catch (e) {
+        statusEl.innerHTML = '⚠️ Could not detect encryption status. Try entering the password if you know it.';
+        statusEl.style.background = 'rgba(251, 191, 36, 0.08)';
+        statusEl.style.borderColor = 'rgba(251, 191, 36, 0.25)';
+    }
+}
+
+async function renderPagePreviewGrid(file) {
+    const grid = document.getElementById('page-preview-grid');
+    if (!grid || !file || !['split', 'delete', 'compress', 'pdf-to-jpg', 'rotate'].includes(currentTool?.id)) {
+        if (grid) {
+            grid.classList.add('hidden');
+            grid.innerHTML = '';
+        }
+        return;
+    }
+
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+        grid.classList.add('hidden');
+        grid.innerHTML = '';
+        return;
+    }
+
+    grid.classList.remove('hidden');
+    grid.innerHTML = '<div class="page-preview-card"><div class="page-thumb">Loading…</div></div>';
+    currentPreviewFile = file;
+
+    try {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const count = pdfDoc.numPages;
+        file._pageCount = count;
+        const cards = [];
+
+        if (currentTool.id === 'delete') {
+            selectedPageIndices = selectedPageIndices.length ? selectedPageIndices : Array.from({ length: count }, (_, index) => index);
+        }
+
+        if (currentTool.id === 'rotate') {
+            for (let i = 1; i <= count; i++) {
+                if (!(i in pageRotations)) pageRotations[i] = 0;
+            }
+        }
+
+        for (let pageNumber = 1; pageNumber <= count; pageNumber += 1) {
+            const page = await pdfDoc.getPage(pageNumber);
+            const viewport = page.getViewport({ scale: 0.22 });
+            const canvas = document.createElement('canvas');
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            const context = canvas.getContext('2d');
+            await page.render({ canvasContext: context, viewport }).promise;
+            const active = currentTool.id === 'delete' ? selectedPageIndices.includes(pageNumber - 1) : true;
+            
+            if (currentTool.id === 'rotate') {
+                const rot = pageRotations[pageNumber] || 0;
+                cards.push(`
+                    <div class="page-preview-card active" data-page-number="${pageNumber}" style="position: relative;">
+                        <div class="page-number">Page ${pageNumber} <span style="font-size: 0.7rem; color: var(--primary);">(${rot}°)</span></div>
+                        <div class="page-thumb" style="transform: rotate(${rot}deg); transition: transform 0.3s;"><img src="${canvas.toDataURL('image/png')}" alt="Page ${pageNumber}" /></div>
+                        <div class="page-rotate-controls" style="display: flex; justify-content: center; gap: 4px; margin-top: 8px;">
+                            <button class="page-rotate-btn" data-page="${pageNumber}" data-dir="-90" type="button" style="
+                                padding: 4px 8px; font-size: 0.75rem; border: 1px solid var(--border); border-radius: 6px; background: white; cursor: pointer; color: var(--text-main);
+                            " title="Rotate Left">↺</button>
+                            <button class="page-rotate-btn" data-page="${pageNumber}" data-dir="90" type="button" style="
+                                padding: 4px 8px; font-size: 0.75rem; border: 1px solid var(--border); border-radius: 6px; background: white; cursor: pointer; color: var(--text-main);
+                            " title="Rotate Right">↻</button>
+                        </div>
+                    </div>
+                `);
+            } else if (currentTool.id === 'split') {
+                // Split: show scissors between pages
+                cards.push(`
+                    <div class="page-preview-card active" data-page-number="${pageNumber}" style="position: relative;">
+                        <div class="page-number">Page ${pageNumber}</div>
+                        <div class="page-thumb"><img src="${canvas.toDataURL('image/png')}" alt="Page ${pageNumber}" /></div>
+                    </div>
+                `);
+                if (pageNumber < count) {
+                    cards.push(`
+                        <div class="split-scissors" data-after="${pageNumber}" style="
+                            display: flex; align-items: center; justify-content: center;
+                            cursor: pointer; padding: 4px; border-radius: 8px;
+                            transition: all 0.2s; color: var(--text-muted);
+                        " title="Click to split here">
+                            <span style="font-size: 1.2rem;">✂️</span>
+                        </div>
+                    `);
+                }
+            } else {
+                cards.push(`
+                    <button class="page-preview-card ${active ? 'active' : ''}" data-page-number="${pageNumber}" type="button" style="position:relative;">
+                        <div class="page-number">Page ${pageNumber}</div>
+                        <div class="page-thumb"><img src="${canvas.toDataURL('image/png')}" alt="Page ${pageNumber}" /></div>
+                        ${currentTool.id === 'delete' ? `<div class="delete-page-overlay ${active ? '' : 'selected'}" style="
+                            position:absolute; top:0; left:0; right:0; bottom:0;
+                            display:flex; align-items:center; justify-content:center;
+                            border-radius:12px; pointer-events:none;
+                            transition: background 0.2s;
+                            ${active ? 'background: rgba(239,68,68,0.12);' : 'background: rgba(239,68,68,0.25);'}
+                        ">
+                            <span style="font-size:2rem; color:#ef4444; text-shadow: 0 1px 3px rgba(0,0,0,0.2);">${active ? '' : '✕'}</span>
+                        </div>` : ''}
+                    </button>
+                `);
+            }
+        }
+
+        grid.innerHTML = cards.join('');
+        
+        if (currentTool.id === 'rotate') {
+            grid.querySelectorAll('.page-rotate-btn').forEach((btn) => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const pageNum = Number(btn.getAttribute('data-page'));
+                    const dir = Number(btn.getAttribute('data-dir'));
+                    pageRotations[pageNum] = ((pageRotations[pageNum] || 0) + dir + 360) % 360;
+                    renderPagePreviewGrid(currentPreviewFile);
+                });
+            });
+        } else if (currentTool.id === 'split') {
+            grid.querySelectorAll('.split-scissors').forEach((scissors) => {
+                scissors.addEventListener('click', () => {
+                    const afterPage = Number(scissors.getAttribute('data-after'));
+                    if (splitPositions[afterPage]) {
+                        delete splitPositions[afterPage];
+                        scissors.style.background = 'transparent';
+                        scissors.style.color = 'var(--text-muted)';
+                    } else {
+                        splitPositions[afterPage] = true;
+                        scissors.style.background = 'rgba(14, 165, 233, 0.1)';
+                        scissors.style.color = 'var(--primary)';
+                    }
+                    // Update range input based on split positions
+                    updateSplitRange();
+                });
+                scissors.addEventListener('mouseenter', () => {
+                    scissors.style.background = 'rgba(14, 165, 233, 0.05)';
+                });
+                scissors.addEventListener('mouseleave', () => {
+                    if (!splitPositions[scissors.getAttribute('data-after')]) {
+                        scissors.style.background = 'transparent';
+                    }
+                });
+            });
+        } else {
+            grid.querySelectorAll('.page-preview-card').forEach((card) => {
+                card.addEventListener('click', () => {
+                    if (currentTool.id !== 'delete') return;
+                    const pageIndex = Number(card.getAttribute('data-page-number')) - 1;
+                    if (selectedPageIndices.includes(pageIndex)) {
+                        selectedPageIndices = selectedPageIndices.filter((item) => item !== pageIndex);
+                    } else {
+                        selectedPageIndices.push(pageIndex);
+                    }
+                    renderPagePreviewGrid(currentPreviewFile);
+                    updateDeleteCount();
+                });
+            });
+        }
+    } catch (error) {
+        grid.innerHTML = `<div class="page-preview-card"><div class="page-thumb">Preview unavailable</div></div>`;
+    }
+}
+
+function updateDeleteCount() {
+    const countEl = document.getElementById('delete-count');
+    if (!countEl) return;
+    const total = currentPreviewFile?._pageCount || selectedPageIndices.length;
+    const selected = selectedPageIndices.length;
+    if (selected === 0) {
+        countEl.textContent = '';
+    } else {
+        countEl.textContent = `${selected} page${selected > 1 ? 's' : ''} selected for deletion`;
+    }
+}
+
+function updateSplitRange() {
+    const rangeInput = document.getElementById('tool-range');
+    if (!rangeInput) return;
+    
+    const positions = Object.keys(splitPositions).map(Number).sort((a, b) => a - b);
+    if (positions.length === 0) {
+        rangeInput.value = '';
+        return;
+    }
+    
+    // Build range string from split positions
+    const ranges = [];
+    let start = 1;
+    positions.forEach(pos => {
+        if (start <= pos) {
+            ranges.push(start === pos ? `${start}` : `${start}-${pos}`);
+            start = pos + 1;
+        }
+    });
+    // Add remaining pages
+    const totalPages = currentPreviewFile ? parseInt(rangeInput.placeholder?.match(/\d+/)?.[0] || '999') : 999;
+    if (start <= totalPages) {
+        ranges.push(start === totalPages ? `${start}` : `${start}-${totalPages}`);
+    }
+    
+    rangeInput.value = ranges.join(', ');
+}
+
+let currentObjectUrls = [];
+let pageRotations = {};
+let splitPositions = {};
+
+window.pageRotations = pageRotations;
+
+function resetPageRotations() {
+    pageRotations = {};
+    window.pageRotations = pageRotations;
+}
+
+function resetSplitPositions() {
+    splitPositions = {};
+}
+
+function updateFileListUI() {
+    const listEl = document.getElementById('file-list');
+    const dropzone = document.getElementById('file-dropzone');
+    const processBtn = document.getElementById('process-btn');
+    const previewGrid = document.getElementById('page-preview-grid');
+
+    currentObjectUrls.forEach(url => URL.revokeObjectURL(url));
+    currentObjectUrls = [];
+
+    dropzone.classList.add('hidden');
+    listEl.classList.remove('hidden');
+    processBtn.classList.remove('hidden');
+
+    if (currentTool.id === 'jpg-to-pdf') {
+        listEl.innerHTML = `
+            <div class="image-grid">
+                ${selectedFiles.map((file, index) => {
+                    const objUrl = URL.createObjectURL(file);
+                    currentObjectUrls.push(objUrl);
+                    return `
+                    <div class="image-card" draggable="true" data-index="${index}">
+                        <img src="${objUrl}" alt="${file.name}" />
+                        <div class="image-name">${file.name}</div>
+                    </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+        const cards = listEl.querySelectorAll('.image-card');
+        let dragIndex = null;
+        cards.forEach((card) => {
+            card.addEventListener('dragstart', (event) => {
+                dragIndex = Number(event.currentTarget.getAttribute('data-index'));
+            });
+            card.addEventListener('dragover', (event) => event.preventDefault());
+            card.addEventListener('drop', (event) => {
+                event.preventDefault();
+                const targetIndex = Number(event.currentTarget.getAttribute('data-index'));
+                if (dragIndex === null || dragIndex === targetIndex) return;
+                const reordered = [...selectedFiles];
+                const [moved] = reordered.splice(dragIndex, 1);
+                reordered.splice(targetIndex, 0, moved);
+                selectedFiles = reordered;
+                updateFileListUI();
+            });
         });
-      }
+        lucide.createIcons();
+        return;
     }
-  });
-  return await pdf.save();
+
+    const html = selectedFiles.map((file, index) => `
+        <div class="file-pill">
+            <i data-lucide="${getFileTypeIcon(file)}" style="color: var(--primary);"></i>
+            <div style="flex: 1;">
+                <strong>${file.name}</strong>
+                <small>${formatFileSize(file.size)}</small>
+            </div>
+            <span class="status-pill">${index + 1}</span>
+        </div>
+    `).join('');
+
+    listEl.innerHTML = html;
+    lucide.createIcons();
+
+    if (selectedFiles[0]) {
+        renderPagePreviewGrid(selectedFiles[0]);
+    } else {
+        previewGrid.classList.add('hidden');
+        previewGrid.innerHTML = '';
+    }
 }
 
-// ============================================================================
-// JPG TO PDF (FIXED)
-// ============================================================================
-
-async function jpgToPdf(files, options = {}) {
-  const { orientation = 'auto', pageSize = 'a4', separate = false } = options;
-  
-  // A4 size in points
-  const pageSizes = {
-    a4: { width: 595.28, height: 841.89 },
-    letter: { width: 612, height: 792 },
-  };
-
-  if (separate) {
-    // Create separate PDFs for each image
-    const zip = new JSZip();
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      const buffer = await fileToBuffer(file);
-      const pdf = await PDFDocument.create(); // Create PDF first
-      let image;
-      if (file.type === 'image/jpeg' || file.name.toLowerCase().endsWith('.jpg') || file.name.toLowerCase().endsWith('.jpeg')) {
-        image = await pdf.embedJpg(buffer);
-      } else if (file.type === 'image/png') {
-        image = await pdf.embedPng(buffer);
-      } else {
-        continue;
-      }
-      
-      let pageWidth, pageHeight;
-      
-      if (pageSize === 'fit') {
-        pageWidth = image.width;
-        pageHeight = image.height;
-      } else {
-        const size = pageSizes[pageSize] || pageSizes.a4;
-        if (orientation === 'landscape') {
-          pageWidth = size.height;
-          pageHeight = size.width;
-        } else if (orientation === 'portrait') {
-          pageWidth = size.width;
-          pageHeight = size.height;
-        } else {
-          // auto
-          if (image.width > image.height) {
-            pageWidth = size.height;
-            pageHeight = size.width;
-          } else {
-            pageWidth = size.width;
-            pageHeight = size.height;
-          }
-        }
-      }
-      
-      const page = pdf.addPage([pageWidth, pageHeight]);
-      // Scale image to fit page
-      const scale = Math.min(pageWidth / image.width, pageHeight / image.height);
-      const drawW = image.width * scale;
-      const drawH = image.height * scale;
-      const x = (pageWidth - drawW) / 2;
-      const y = (pageHeight - drawH) / 2;
-      
-      page.drawImage(image, { x, y, width: drawW, height: drawH });
-      
-      const pdfBytes = await pdf.save();
-      const baseName = file.name.replace(/\.[^/.]+$/, '');
-      zip.file(`${baseName}.pdf`, pdfBytes);
-    }
+// Expose UI functions for pdf-tools.js to use
+window.setProcessingState = function(isProcessing) {
+    const btn = document.getElementById('process-btn');
+    const loader = document.getElementById('loading-indicator');
     
-    return await zip.generateAsync({ type: 'uint8array' });
-  }
-
-  // Single combined PDF
-  const pdf = await PDFDocument.create();
-
-  for (const file of files) {
-    const buffer = await fileToBuffer(file);
-    let image;
-    if (file.type === 'image/jpeg' || file.name.toLowerCase().endsWith('.jpg') || file.name.toLowerCase().endsWith('.jpeg')) {
-      image = await pdf.embedJpg(buffer);
-    } else if (file.type === 'image/png') {
-      image = await pdf.embedPng(buffer);
+    if (isProcessing) {
+        btn.classList.add('hidden');
+        loader.classList.remove('hidden');
     } else {
-      continue;
+        btn.classList.remove('hidden');
+        loader.classList.add('hidden');
     }
-
-    let pageWidth, pageHeight;
-    
-    if (pageSize === 'fit') {
-      pageWidth = image.width;
-      pageHeight = image.height;
-    } else {
-      const size = pageSizes[pageSize] || pageSizes.a4;
-      if (orientation === 'landscape') {
-        pageWidth = size.height;
-        pageHeight = size.width;
-      } else if (orientation === 'portrait') {
-        pageWidth = size.width;
-        pageHeight = size.height;
-      } else {
-        // auto
-        if (image.width > image.height) {
-          pageWidth = size.height;
-          pageHeight = size.width;
-        } else {
-          pageWidth = size.width;
-          pageHeight = size.height;
-        }
-      }
-    }
-
-    const page = pdf.addPage([pageWidth, pageHeight]);
-    // Scale image to fit page
-    const scale = Math.min(pageWidth / image.width, pageHeight / image.height);
-    const drawW = image.width * scale;
-    const drawH = image.height * scale;
-    const x = (pageWidth - drawW) / 2;
-    const y = (pageHeight - drawH) / 2;
-    
-    page.drawImage(image, { x, y, width: drawW, height: drawH });
-  }
-  return await pdf.save();
 }
 
-// ============================================================================
-// PDF TO JPG (FIXED)
-// ============================================================================
+// Result Screen functionality
+let currentResultBlob = null;
+let currentResultFilename = '';
 
-async function pdfToJpg(file) {
-  showLoading('🖼️ Rendering PDF pages to images...');
-  const buffer = await fileToBuffer(file);
-  const typedarray = new Uint8Array(buffer);
-  const pdf = await pdfjsLib.getDocument({ data: typedarray }).promise;
-  const numPages = pdf.numPages;
-  const zip = new JSZip();
-  const imgFolder = zip.folder('pages');
-
-  for (let pageNumber = 1; pageNumber <= numPages; pageNumber++) {
-    showLoading(`🖼️ Rendering page ${pageNumber} of ${numPages}...`);
-    const page = await pdf.getPage(pageNumber);
-    const viewport = page.getViewport({ scale: 2.0 });
-    const canvas = document.createElement('canvas');
-    const context = canvas.getContext('2d');
-    canvas.height = viewport.height;
-    canvas.width = viewport.width;
-
-    await page.render({
-      canvasContext: context,
-      viewport: viewport
-    }).promise;
-
-    const blob = await new Promise((resolve, reject) => {
-      canvas.toBlob(b => {
-        if (!b) reject(new Error('Unable to create image blob.'));
-        else resolve(b);
-      }, 'image/jpeg', 0.9);
+function showResultScreen(filename, blob) {
+    const resultScreen = document.getElementById('result-screen');
+    const resultFilename = document.getElementById('result-filename');
+    const resultDownloadBtn = document.getElementById('result-download-btn');
+    const resultDeleteBtn = document.getElementById('result-delete-btn');
+    const resultStartoverBtn = document.getElementById('result-startover-btn');
+    const continueToolsGrid = document.getElementById('continue-tools-grid');
+    
+    currentResultBlob = blob;
+    currentResultFilename = filename;
+    
+    resultFilename.textContent = filename;
+    resultScreen.classList.remove('hidden');
+    
+    // Hide other elements
+    document.getElementById('file-dropzone').classList.add('hidden');
+    document.getElementById('file-list').classList.add('hidden');
+    document.getElementById('tool-options').classList.add('hidden');
+    document.getElementById('page-preview-grid').classList.add('hidden');
+    document.getElementById('process-btn').classList.add('hidden');
+    document.getElementById('loading-indicator').classList.add('hidden');
+    
+    // Populate continue tools
+    continueToolsGrid.innerHTML = '';
+    const relatedTools = getRelatedTools(currentTool?.id);
+    relatedTools.forEach(tool => {
+        const card = document.createElement('a');
+        card.href = `#tool?id=${tool.id}`;
+        card.className = 'continue-tool-card';
+        card.innerHTML = `<i data-lucide="${tool.icon}"></i><span>${tool.title}</span>`;
+        continueToolsGrid.appendChild(card);
     });
+    lucide.createIcons();
+    
+    // Event listeners
+    resultDownloadBtn.onclick = () => {
+        if (currentResultBlob) {
+            const url = URL.createObjectURL(currentResultBlob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = currentResultFilename;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+    };
+    
+    resultDeleteBtn.onclick = () => {
+        currentResultBlob = null;
+        currentResultFilename = '';
+        resultScreen.classList.add('hidden');
+        showToast('File deleted', 'success');
+    };
+    
+    resultStartoverBtn.onclick = () => {
+        currentResultBlob = null;
+        currentResultFilename = '';
+        resultScreen.classList.add('hidden');
+        resetWorkspace();
+    };
+}
 
-    const arrayBuf = await blob.arrayBuffer();
-    imgFolder.file(`page-${pageNumber}.jpg`, arrayBuf);
-  }
+function getRelatedTools(toolId) {
+    const related = {
+        'merge': ['split', 'compress', 'delete'],
+        'split': ['merge', 'compress', 'delete'],
+        'compress': ['merge', 'split', 'pdf-to-word'],
+        'rotate': ['delete', 'split', 'merge'],
+        'delete': ['split', 'rotate', 'merge'],
+        'watermark': ['protect-pdf', 'merge', 'compress'],
+        'pdf-to-word': ['word-to-pdf', 'compress', 'merge'],
+        'word-to-pdf': ['pdf-to-word', 'merge', 'compress'],
+        'pdf-to-jpg': ['jpg-to-pdf', 'compress', 'merge'],
+        'jpg-to-pdf': ['pdf-to-jpg', 'merge', 'compress'],
+        'protect-pdf': ['unlock-pdf', 'merge', 'watermark'],
+        'unlock-pdf': ['protect-pdf', 'merge', 'watermark']
+    };
+    
+    const ids = related[toolId] || ['merge', 'split', 'compress'];
+    return ids.map(id => tools.find(t => t.id === id)).filter(Boolean);
+}
 
-  showLoading('📦 Packaging ZIP archive...');
-  const zipBlob = await zip.generateAsync({ type: 'blob' });
-  
-  // Use direct link download (avoid downloadBlob which expects ArrayBuffer)
-  const url = URL.createObjectURL(zipBlob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = 'pdf-pages.zip';
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
-  hideLoading();
+// Authentication Logic
+let currentUser = null;
+
+function initAuth() {
+    const savedUser = localStorage.getItem('currentUser');
+    if (savedUser) {
+        try {
+            currentUser = JSON.parse(savedUser);
+        } catch (e) {
+            currentUser = null;
+        }
+    }
+    updateAuthUI();
+    setupAuthEvents();
+}
+
+function updateAuthUI() {
+    const navSigninBtn = document.getElementById('nav-signin-btn');
+    const navUserMenu = document.getElementById('nav-user-menu');
+    
+    if (currentUser) {
+        if (navSigninBtn) navSigninBtn.classList.add('hidden');
+        if (navUserMenu) {
+            navUserMenu.classList.remove('hidden');
+            
+            const avatarEl = document.getElementById('nav-user-avatar');
+            const nameEl = document.getElementById('nav-user-name');
+            const dropdownNameEl = document.getElementById('dropdown-user-name');
+            const dropdownEmailEl = document.getElementById('dropdown-user-email');
+            
+            const displayName = currentUser.name || currentUser.email;
+            if (nameEl) nameEl.textContent = displayName.split(' ')[0];
+            if (dropdownNameEl) dropdownNameEl.textContent = displayName;
+            if (dropdownEmailEl) dropdownEmailEl.textContent = currentUser.email;
+            
+            if (avatarEl) {
+                avatarEl.textContent = displayName.charAt(0).toUpperCase();
+            }
+        }
+        
+        if (window.location.hash === '#auth') {
+            window.location.hash = '#home';
+        }
+    } else {
+        if (navSigninBtn) navSigninBtn.classList.remove('hidden');
+        if (navUserMenu) navUserMenu.classList.add('hidden');
+    }
+}
+
+function setupAuthEvents() {
+    const userMenu = document.getElementById('nav-user-menu');
+    const dropdown = document.getElementById('nav-user-dropdown');
+    
+    if (userMenu && dropdown) {
+        userMenu.addEventListener('click', (e) => {
+            e.stopPropagation();
+            dropdown.classList.toggle('show');
+        });
+        
+        document.addEventListener('click', () => {
+            dropdown.classList.remove('show');
+        });
+    }
+    
+    const signoutBtn = document.getElementById('btn-signout');
+    if (signoutBtn) {
+        signoutBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            
+            const loader = document.getElementById('global-loader');
+            if (loader) {
+                loader.classList.add('show');
+            }
+            
+            setTimeout(() => {
+                currentUser = null;
+                localStorage.removeItem('currentUser');
+                updateAuthUI();
+                
+                if (loader) {
+                    loader.classList.remove('show');
+                }
+                
+                showToast('Logged out successfully', 'success');
+                window.location.hash = '#home';
+            }, 2000);
+        });
+    }
+      const signinContainer = document.getElementById('form-signin-container');
+    const signupContainer = document.getElementById('form-signup-container');
+    const forgotContainer = document.getElementById('form-forgot-container');
+    
+    const linkForgot = document.getElementById('link-forgot');
+    const linkGotoSignup = document.getElementById('link-goto-signup');
+    const linkGotoSignin = document.getElementById('link-goto-signin');
+    const linkForgotGotoSignin = document.getElementById('link-forgot-goto-signin');
+    
+    const showPane = (paneToShow) => {
+        [signinContainer, signupContainer, forgotContainer].forEach(el => {
+            if (el) el.classList.add('hidden');
+        });
+        if (paneToShow) paneToShow.classList.remove('hidden');
+    };
+    
+    if (linkForgot) {
+        linkForgot.addEventListener('click', (e) => {
+            e.preventDefault();
+            showPane(forgotContainer);
+        });
+    }
+    if (linkGotoSignup) {
+        linkGotoSignup.addEventListener('click', (e) => {
+            e.preventDefault();
+            showPane(signupContainer);
+        });
+    }
+    if (linkGotoSignin) {
+        linkGotoSignin.addEventListener('click', (e) => {
+            e.preventDefault();
+            showPane(signinContainer);
+        });
+    }
+    if (linkForgotGotoSignin) {
+        linkForgotGotoSignin.addEventListener('click', (e) => {
+            e.preventDefault();
+            showPane(signinContainer);
+        });
+    }
+    
+    const formSignin = document.getElementById('form-signin');
+    if (formSignin) {
+        formSignin.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const email = document.getElementById('signin-email').value.trim();
+            const password = document.getElementById('signin-password').value;
+            
+            let users = [];
+            const savedUsers = localStorage.getItem('registeredUsers');
+            if (savedUsers) {
+                try {
+                    users = JSON.parse(savedUsers);
+                } catch (err) {}
+            }
+            
+            const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+            if (!user) {
+                showToast('Account not found. Please create a new account first.', 'error');
+                return;
+            }
+            
+            if (user.password !== password) {
+                showToast('Incorrect password.', 'error');
+                return;
+            }
+            
+            // Show loading overlay
+            const overlay = document.getElementById('auth-loading-overlay');
+            const overlayText = document.getElementById('loading-overlay-text');
+            if (overlay && overlayText) {
+                overlayText.textContent = "Signing you in securely...";
+                overlay.classList.remove('hidden');
+                void overlay.offsetWidth; // Force reflow
+                overlay.classList.add('show');
+            }
+
+            // Disable inputs & add loading spinner
+            const submitBtn = formSignin.querySelector('button[type="submit"]');
+            const originalHtml = submitBtn.innerHTML;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = `<span class="spinner" style="width: 16px; height: 16px; border-width: 2px;"></span> Signing in...`;
+            
+            const inputs = formSignin.querySelectorAll('.form-control');
+            inputs.forEach(input => input.disabled = true);
+
+            setTimeout(() => {
+                currentUser = { name: user.name, email: user.email };
+                localStorage.setItem('currentUser', JSON.stringify(currentUser));
+                updateAuthUI();
+                showToast(`Welcome back, ${user.name}!`, 'success');
+                window.location.hash = '#home';
+                
+                // Reset UI states
+                if (overlay) {
+                    overlay.classList.remove('show');
+                    setTimeout(() => overlay.classList.add('hidden'), 300);
+                }
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalHtml;
+                inputs.forEach(input => input.disabled = false);
+                formSignin.reset();
+            }, 2000);
+        });
+    }
+    
+    const formSignup = document.getElementById('form-signup');
+    if (formSignup) {
+        formSignup.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const name = document.getElementById('signup-name').value.trim();
+            const email = document.getElementById('signup-email').value.trim();
+            const password = document.getElementById('signup-password').value;
+            
+            let users = [];
+            const savedUsers = localStorage.getItem('registeredUsers');
+            if (savedUsers) {
+                try {
+                    users = JSON.parse(savedUsers);
+                } catch (err) {}
+            }
+            
+            const exists = users.some(u => u.email.toLowerCase() === email.toLowerCase());
+            if (exists) {
+                showToast('Account already exists with this email', 'error');
+                return;
+            }
+            
+            // Show loading overlay
+            const overlay = document.getElementById('auth-loading-overlay');
+            const overlayText = document.getElementById('loading-overlay-text');
+            if (overlay && overlayText) {
+                overlayText.textContent = "Creating your account...";
+                overlay.classList.remove('hidden');
+                void overlay.offsetWidth; // Force reflow
+                overlay.classList.add('show');
+            }
+
+            // Disable inputs & add loading spinner
+            const submitBtn = formSignup.querySelector('button[type="submit"]');
+            const originalHtml = submitBtn.innerHTML;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = `<span class="spinner" style="width: 16px; height: 16px; border-width: 2px;"></span> Registering...`;
+            
+            const inputs = formSignup.querySelectorAll('.form-control');
+            inputs.forEach(input => input.disabled = true);
+            const checkbox = document.getElementById('signup-terms');
+            if (checkbox) checkbox.disabled = true;
+
+            setTimeout(() => {
+                users.push({ name, email, password });
+                localStorage.setItem('registeredUsers', JSON.stringify(users));
+                
+                // Reset UI states
+                if (overlay) {
+                    overlay.classList.remove('show');
+                    setTimeout(() => overlay.classList.add('hidden'), 300);
+                }
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalHtml;
+                inputs.forEach(input => input.disabled = false);
+                if (checkbox) checkbox.disabled = false;
+                formSignup.reset();
+                
+                showToast('Account created successfully! Please sign in.', 'success');
+                showPane(signinContainer);
+            }, 2000);
+        });
+    }
+
+    const formForgot = document.getElementById('form-forgot');
+    if (formForgot) {
+        formForgot.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const email = document.getElementById('forgot-email').value.trim();
+            
+            let users = [];
+            const savedUsers = localStorage.getItem('registeredUsers');
+            if (savedUsers) {
+                try {
+                    users = JSON.parse(savedUsers);
+                } catch (err) {}
+            }
+            
+            const userExists = users.some(u => u.email.toLowerCase() === email.toLowerCase());
+            
+            // Show loading overlay
+            const overlay = document.getElementById('auth-loading-overlay');
+            const overlayText = document.getElementById('loading-overlay-text');
+            if (overlay && overlayText) {
+                overlayText.textContent = "Verifying email address...";
+                overlay.classList.remove('hidden');
+                void overlay.offsetWidth;
+                overlay.classList.add('show');
+            }
+            
+            const submitBtn = formForgot.querySelector('button[type="submit"]');
+            const originalHtml = submitBtn.innerHTML;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = `<span class="spinner" style="width: 16px; height: 16px; border-width: 2px;"></span> Processing...`;
+            
+            const emailInput = document.getElementById('forgot-email');
+            emailInput.disabled = true;
+            
+            setTimeout(() => {
+                // Reset loading overlay & button
+                if (overlay) {
+                    overlay.classList.remove('show');
+                    setTimeout(() => overlay.classList.add('hidden'), 300);
+                }
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = originalHtml;
+                emailInput.disabled = false;
+                
+                if (userExists) {
+                    showToast(`Password reset link sent to ${email}! (Mock)`, 'success');
+                    formForgot.reset();
+                    showPane(signinContainer);
+                } else {
+                    showToast('No account registered with this email.', 'error');
+                }
+            }, 2000);
+        });
+    }  
+    
+    const googleModal = document.getElementById('google-modal');
+    const googleClose = document.getElementById('google-modal-close');
+    const btnGoogleSignin = document.getElementById('google-signin-btn');
+    const btnGoogleSignup = document.getElementById('google-signup-btn');
+    
+    const openGoogleModal = () => {
+        if (googleModal) googleModal.classList.add('show');
+    };
+    
+    const closeGoogleModal = () => {
+        if (googleModal) googleModal.classList.remove('show');
+    };
+    
+    if (btnGoogleSignin) btnGoogleSignin.addEventListener('click', openGoogleModal);
+    if (btnGoogleSignup) btnGoogleSignup.addEventListener('click', openGoogleModal);
+    if (googleClose) googleClose.addEventListener('click', closeGoogleModal);
+    
+    const googleItems = document.querySelectorAll('.google-account-item');
+    googleItems.forEach(item => {
+        item.addEventListener('click', () => {
+            const email = item.getAttribute('data-email');
+            const name = item.getAttribute('data-name');
+            
+            closeGoogleModal();
+            
+            // Show loading overlay
+            const overlay = document.getElementById('auth-loading-overlay');
+            const overlayText = document.getElementById('loading-overlay-text');
+            if (overlay && overlayText) {
+                overlayText.textContent = "Authenticating with Google...";
+                overlay.classList.remove('hidden');
+                void overlay.offsetWidth; // Force reflow
+                overlay.classList.add('show');
+            }
+
+            showToast('Authenticating with Google...', 'info');
+            
+            setTimeout(() => {
+                currentUser = { name, email, provider: 'google' };
+                localStorage.setItem('currentUser', JSON.stringify(currentUser));
+                updateAuthUI();
+                
+                // Reset overlay
+                if (overlay) {
+                    overlay.classList.remove('show');
+                    setTimeout(() => overlay.classList.add('hidden'), 300);
+                }
+                showToast(`Signed in with Google as ${name}`, 'success');
+                window.location.hash = '#home';
+            }, 2000);
+        });
+    });
+}
+
+function showToast(message, type = 'success') {
+    const container = document.getElementById('toast-container');
+    if (!container) return;
+    
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    
+    let iconName = 'check-circle';
+    if (type === 'error') iconName = 'alert-triangle';
+    if (type === 'info') iconName = 'info';
+    
+    toast.innerHTML = `
+        <i data-lucide="${iconName}"></i>
+        <span>${message}</span>
+    `;
+    
+    container.appendChild(toast);
+    lucide.createIcons();
+    
+    setTimeout(() => {
+        toast.classList.add('show');
+    }, 10);
+    
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => {
+            toast.remove();
+        }, 300);
+    }, 3500);
 }
