@@ -43,6 +43,9 @@
     <!-- Tesseract.js: OCR for scanned PDFs in the browser -->
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.0.4/dist/tesseract.min.js"></script>
 
+    <!-- JSZip: bundle multiple converted images/pages into a downloadable archive -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
     <!-- مكتبة docx المخصصة للمتصفح مباشرة عبر ESM -->
     <script type="module">
         import * as docxModule from 'https://cdn.jsdelivr.net/npm/docx@7.8.2/+esm';
@@ -134,15 +137,21 @@
 
             <div class="workspace">
                 <div class="dropzone" id="file-dropzone">
-                    <i data-lucide="upload-cloud"></i>
-                    <h3>Choose a file or drag & drop it here</h3>
-                    <p style="color: var(--text-muted); margin-top: 8px;">Supports PDF files up to 100MB</p>
-                    <input type="file" id="file-input" style="display: none;" multiple accept=".pdf">
+                    <div class="dropzone-icon">
+                        <i data-lucide="upload-cloud"></i>
+                    </div>
+                    <h3>Drop your file here or browse</h3>
+                    <p>PDFs, images, and Word files are all supported for fast browser-based processing.</p>
+                    <div class="dropzone-chip-row">
+                        <span class="status-pill">Fast</span>
+                        <span class="status-pill">Secure</span>
+                        <span class="status-pill">No upload required</span>
+                    </div>
+                    <input type="file" id="file-input" style="display: none;" multiple accept=".pdf,.doc,.docx,image/*">
                 </div>
 
-                <div id="file-list" class="hidden" style="margin-top: 24px;">
-                    <!-- File info injected here -->
-                </div>
+                <div id="file-list" class="hidden" style="margin-top: 24px;"></div>
+                <div id="page-preview-grid" class="page-preview-grid hidden"></div>
 
                 <div id="tool-options" class="hidden" style="margin-top: 24px; text-align: center;">
                     <!-- Dynamic options like password input will be injected here -->
@@ -154,17 +163,18 @@
                     <button id="process-btn" class="btn hidden">
                         <span>Process PDF</span> <i data-lucide="settings"></i>
                     </button>
-                    <div id="loading-indicator" class="hidden"
-                        style="display: flex; align-items: center; justify-content: center; gap: 12px; color: var(--primary);">
-                        <div class="spinner"
-                            style="border-color: rgba(14, 165, 233, 0.3); border-top-color: var(--primary);"></div>
-                        <strong>Processing...</strong>
+                    <div id="loading-indicator" class="hidden" aria-live="polite">
+                        <div class="spinner"></div>
+                        <div class="loading-copy">
+                            <strong id="loading-message">Processing...</strong>
+                            <div class="progress-track" aria-hidden="true">
+                                <div id="progress-fill" class="progress-fill"></div>
+                            </div>
+                        </div>
                     </div>
-                </div>
-            </div>
 
-            <!-- Dynamic SEO Content injected here -->
-            <div id="tool-detail-article" class="text-page" style="margin-top: 60px;"></div>
+                    <!-- Dynamic SEO Content injected here -->
+                    <div id="tool-detail-article" class="text-page" style="margin-top: 60px;"></div>
         </section>
 
         <!-- View: About -->

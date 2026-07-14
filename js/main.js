@@ -97,6 +97,8 @@ function renderToolsGrid() {
 
 let currentTool = null;
 let selectedFiles = [];
+let selectedPageIndices = [];
+let currentPreviewFile = null;
 
 function initToolDetailView(tool) {
     currentTool = tool;
@@ -144,10 +146,14 @@ function initToolDetailView(tool) {
     
     if (tool.id === 'split') {
         optionsContainer.innerHTML = `
-            <div class="form-group" style="max-width: 300px; margin: 0 auto;">
-                <label>Page Range</label>
-                <input type="text" id="tool-range" class="form-control" placeholder="e.g. 1-3,5" />
-                <small style="color: var(--text-muted);">Leave blank to keep all pages.</small>
+            <div class="form-group" style="max-width: 380px; margin: 0 auto; text-align: left;">
+                <label>Split mode</label>
+                <div class="form-control" style="padding: 12px 14px; display: flex; align-items: center; gap: 10px;">
+                    <input type="checkbox" id="split-as-zip" />
+                    <span>Extract every page into a ZIP archive</span>
+                </div>
+                <input type="text" id="tool-range" class="form-control" style="margin-top: 10px;" placeholder="e.g. 2-5" />
+                <small style="color: var(--text-muted);">Leave blank to split the full document or enter a custom range.</small>
             </div>
         `;
         optionsContainer.classList.remove('hidden');
@@ -180,9 +186,38 @@ function initToolDetailView(tool) {
         optionsContainer.classList.remove('hidden');
     } else if (tool.id === 'pdf-to-word') {
         optionsContainer.innerHTML = `
-            <div class="form-group" style="max-width: 300px; margin: 0 auto;">
+            <div class="form-group" style="max-width: 380px; margin: 0 auto; text-align: left;">
                 <label>📄 Convert PDF to Word</label>
-                <p style="color: var(--text-muted); font-size: 0.9rem;">Extracts text and converts to editable .docx format</p>
+                <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 14px;">
+                    Uses PDF text extraction and automatic OCR fallback for scanned pages.
+                    Arabic documents with broken font mappings are detected and re-read via OCR automatically.
+                </p>
+                <div class="force-ocr-toggle-row" style="
+                    display: flex;
+                    align-items: flex-start;
+                    gap: 12px;
+                    padding: 12px 14px;
+                    background: var(--surface, rgba(255,255,255,0.04));
+                    border: 1px solid var(--border, rgba(255,255,255,0.1));
+                    border-radius: 10px;
+                    cursor: pointer;
+                " onclick="document.getElementById('force-ocr-toggle').click()">
+                    <div style="padding-top: 2px; flex-shrink: 0;">
+                        <input
+                            type="checkbox"
+                            id="force-ocr-toggle"
+                            style="width: 17px; height: 17px; cursor: pointer; accent-color: var(--primary, #6366f1);"
+                            onclick="event.stopPropagation()"
+                        />
+                    </div>
+                    <div>
+                        <strong style="display: block; font-size: 0.9rem; margin-bottom: 2px;">🔍 Force OCR for this file</strong>
+                        <small style="color: var(--text-muted); font-size: 0.8rem; line-height: 1.4;">
+                            Enable when the extracted text looks garbled or mixed up.
+                            All pages will be scanned as images and read by OCR instead of using the PDF text layer.
+                        </small>
+                    </div>
+                </div>
             </div>
         `;
         optionsContainer.classList.remove('hidden');
@@ -191,6 +226,14 @@ function initToolDetailView(tool) {
             <div class="form-group" style="max-width: 300px; margin: 0 auto;">
                 <label>📝 Convert Word to PDF</label>
                 <p style="color: var(--text-muted); font-size: 0.9rem;">Converts your .docx document to professional PDF format</p>
+            </div>
+        `;
+        optionsContainer.classList.remove('hidden');
+    } else if (tool.id === 'jpg-to-pdf') {
+        optionsContainer.innerHTML = `
+            <div class="form-group" style="max-width: 320px; margin: 0 auto; text-align: left;">
+                <label>🖼️ Arrange images</label>
+                <p style="color: var(--text-muted); font-size: 0.9rem;">Drag the thumbnails to reorder them before generating a combined PDF.</p>
             </div>
         `;
         optionsContainer.classList.remove('hidden');
@@ -237,9 +280,13 @@ function hideConversionNotice() {
 function resetWorkspace() {
     document.getElementById('file-list').classList.add('hidden');
     document.getElementById('file-list').innerHTML = '';
+    document.getElementById('page-preview-grid').classList.add('hidden');
+    document.getElementById('page-preview-grid').innerHTML = '';
     document.getElementById('process-btn').classList.add('hidden');
     document.getElementById('loading-indicator').classList.add('hidden');
     document.getElementById('file-dropzone').classList.remove('hidden');
+    selectedPageIndices = [];
+    currentPreviewFile = null;
     hideConversionNotice();
 }
 
@@ -285,83 +332,186 @@ function setupDropzone() {
     });
 }
 
+function getFileTypeIcon(file) {
+    const name = (file?.name || '').toLowerCase();
+    if (name.endsWith('.pdf')) return 'file-text';
+    if (name.endsWith('.docx') || name.endsWith('.doc')) return 'file-plus-2';
+    if (file?.type?.startsWith('image/')) return 'image';
+    return 'file';
+}
+
+function formatFileSize(size) {
+    if (size < 1024) return `${size} B`;
+    if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+    return `${(size / (1024 * 1024)).toFixed(2)} MB`;
+}
+
 function handleFiles(files) {
     if (!currentTool) {
         alert('Please select a tool before uploading files.');
         return;
     }
 
-    // Validate file types by tool
     let validFiles = [];
-    
+
     if (currentTool.id === 'jpg-to-pdf') {
         validFiles = Array.from(files).filter(file => file.type.startsWith('image/'));
     } else if (currentTool.id === 'word-to-pdf') {
-        validFiles = Array.from(files).filter(file => 
+        validFiles = Array.from(files).filter(file =>
             file.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
             file.type === 'application/msword' ||
-            file.name.endsWith('.docx') || 
+            file.name.endsWith('.docx') ||
             file.name.endsWith('.doc')
         );
-    } else if (currentTool.id === 'pdf-to-word') {
-        validFiles = Array.from(files).filter(file => file.type === 'application/pdf' || file.name.endsWith('.pdf'));
-    } else if (currentTool.id === 'protect-pdf' || currentTool.id === 'unlock-pdf') {
-        validFiles = Array.from(files).filter(file => file.type === 'application/pdf' || file.name.endsWith('.pdf'));
-    } else if (currentTool.id === 'merge') {
+    } else if (currentTool.id === 'pdf-to-word' || currentTool.id === 'protect-pdf' || currentTool.id === 'unlock-pdf' || currentTool.id === 'merge') {
         validFiles = Array.from(files).filter(file => file.type === 'application/pdf' || file.name.endsWith('.pdf'));
     } else {
         validFiles = Array.from(files).filter(file => file.type === 'application/pdf' || file.name.endsWith('.pdf'));
     }
-    
+
     if (validFiles.length === 0) {
         alert('Please upload a valid file format for this tool.');
         return;
     }
-    
+
     if (currentTool.id === 'merge' || currentTool.id === 'jpg-to-pdf') {
         selectedFiles = validFiles;
     } else {
         selectedFiles = [validFiles[0]];
     }
-    
+
+    selectedPageIndices = currentTool.id === 'delete' ? Array.from({ length: 10 }, (_, index) => index) : [];
     updateFileListUI();
+}
+
+async function renderPagePreviewGrid(file) {
+    const grid = document.getElementById('page-preview-grid');
+    if (!grid || !file || !['split', 'delete', 'compress', 'pdf-to-jpg'].includes(currentTool?.id)) {
+        if (grid) {
+            grid.classList.add('hidden');
+            grid.innerHTML = '';
+        }
+        return;
+    }
+
+    if (!file.name.toLowerCase().endsWith('.pdf')) {
+        grid.classList.add('hidden');
+        grid.innerHTML = '';
+        return;
+    }
+
+    grid.classList.remove('hidden');
+    grid.innerHTML = '<div class="page-preview-card"><div class="page-thumb">Loading…</div></div>';
+    currentPreviewFile = file;
+
+    try {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const count = pdfDoc.numPages;
+        const cards = [];
+
+        if (currentTool.id === 'delete') {
+            selectedPageIndices = selectedPageIndices.length ? selectedPageIndices : Array.from({ length: count }, (_, index) => index);
+        }
+
+        for (let pageNumber = 1; pageNumber <= count; pageNumber += 1) {
+            const page = await pdfDoc.getPage(pageNumber);
+            const viewport = page.getViewport({ scale: 0.22 });
+            const canvas = document.createElement('canvas');
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            const context = canvas.getContext('2d');
+            await page.render({ canvasContext: context, viewport }).promise;
+            const active = currentTool.id === 'delete' ? selectedPageIndices.includes(pageNumber - 1) : true;
+            cards.push(`
+                <button class="page-preview-card ${active ? 'active' : ''}" data-page-number="${pageNumber}" type="button">
+                    <div class="page-number">Page ${pageNumber}</div>
+                    <div class="page-thumb"><img src="${canvas.toDataURL('image/png')}" alt="Page ${pageNumber}" /></div>
+                </button>
+            `);
+        }
+
+        grid.innerHTML = cards.join('');
+        grid.querySelectorAll('.page-preview-card').forEach((card) => {
+            card.addEventListener('click', () => {
+                if (currentTool.id !== 'delete') return;
+                const pageIndex = Number(card.getAttribute('data-page-number')) - 1;
+                if (selectedPageIndices.includes(pageIndex)) {
+                    selectedPageIndices = selectedPageIndices.filter((item) => item !== pageIndex);
+                } else {
+                    selectedPageIndices.push(pageIndex);
+                }
+                renderPagePreviewGrid(currentPreviewFile);
+            });
+        });
+    } catch (error) {
+        grid.innerHTML = `<div class="page-preview-card"><div class="page-thumb">Preview unavailable</div></div>`;
+    }
 }
 
 function updateFileListUI() {
     const listEl = document.getElementById('file-list');
     const dropzone = document.getElementById('file-dropzone');
     const processBtn = document.getElementById('process-btn');
-    
+    const previewGrid = document.getElementById('page-preview-grid');
+
     dropzone.classList.add('hidden');
     listEl.classList.remove('hidden');
     processBtn.classList.remove('hidden');
-    
-    let html = '';
-    selectedFiles.forEach(file => {
-        html += `
-            <div class="file-info">
-                <div style="display: flex; align-items: center; gap: 12px;">
-                    <i data-lucide="file" style="color: var(--primary);"></i>
-                    <strong>${file.name}</strong>
-                    <span style="color: var(--text-muted); font-size: 0.85rem;">(${(file.size / 1024 / 1024).toFixed(2)} MB)</span>
-                </div>
+
+    if (currentTool.id === 'jpg-to-pdf') {
+        listEl.innerHTML = `
+            <div class="image-grid">
+                ${selectedFiles.map((file, index) => `
+                    <div class="image-card" draggable="true" data-index="${index}">
+                        <img src="${URL.createObjectURL(file)}" alt="${file.name}" />
+                        <div class="image-name">${file.name}</div>
+                    </div>
+                `).join('')}
             </div>
         `;
-    });
-    
-    // Add "add more files" button if tool is merge
-    if (currentTool.id === 'merge') {
-        html += `
-            <div style="margin-top: 16px; text-align: center;">
-                <button class="btn" style="background-color: var(--card-bg); color: var(--primary); border: 1px solid var(--primary);" onclick="document.getElementById('file-input').click()">
-                    + Add More Files
-                </button>
-            </div>
-        `;
+        const cards = listEl.querySelectorAll('.image-card');
+        let dragIndex = null;
+        cards.forEach((card) => {
+            card.addEventListener('dragstart', (event) => {
+                dragIndex = Number(event.currentTarget.getAttribute('data-index'));
+            });
+            card.addEventListener('dragover', (event) => event.preventDefault());
+            card.addEventListener('drop', (event) => {
+                event.preventDefault();
+                const targetIndex = Number(event.currentTarget.getAttribute('data-index'));
+                if (dragIndex === null || dragIndex === targetIndex) return;
+                const reordered = [...selectedFiles];
+                const [moved] = reordered.splice(dragIndex, 1);
+                reordered.splice(targetIndex, 0, moved);
+                selectedFiles = reordered;
+                updateFileListUI();
+            });
+        });
+        lucide.createIcons();
+        return;
     }
-    
+
+    const html = selectedFiles.map((file, index) => `
+        <div class="file-pill">
+            <i data-lucide="${getFileTypeIcon(file)}" style="color: var(--primary);"></i>
+            <div style="flex: 1;">
+                <strong>${file.name}</strong>
+                <small>${formatFileSize(file.size)}</small>
+            </div>
+            <span class="status-pill">${index + 1}</span>
+        </div>
+    `).join('');
+
     listEl.innerHTML = html;
     lucide.createIcons();
+
+    if (selectedFiles[0]) {
+        renderPagePreviewGrid(selectedFiles[0]);
+    } else {
+        previewGrid.classList.add('hidden');
+        previewGrid.innerHTML = '';
+    }
 }
 
 // Expose UI functions for pdf-tools.js to use

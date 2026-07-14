@@ -63,6 +63,9 @@ class PDFToWordConverter {
       hideConversionNotice();
       showLoading('📄 Extracting text from PDF...');
 
+      // Read the optional "Force OCR" toggle added by the UI
+      const forceOcr = document.getElementById('force-ocr-toggle')?.checked === true;
+
       const arrayBuffer = await this.readFile(file);
       this.pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
 
@@ -76,14 +79,45 @@ class PDFToWordConverter {
         const extractedPage = await this.extractTextFromPage(page, pageNum);
         console.log(`Extracted structured content from page ${pageNum}:`, extractedPage);
 
-        const textLength = (extractedPage?.text || '').replace(/\s+/g, '').length;
-        if (textLength >= 10) {
+        const pageText = extractedPage?.text || '';
+        const textLength = pageText.replace(/\s+/g, '').length;
+
+        // Determine whether to use the extracted text layer or fall back to OCR.
+        // Three reasons to skip the text layer and run OCR instead:
+        //   1. The user forced OCR via the UI toggle.
+        //   2. The character count is too low (sparse / scanned page).
+        //   3. The Arabic characters decoded to rare / Quranic-only codepoints,
+        //      which is the fingerprint of a broken PDF font mapping.
+        const needsOcr =
+          forceOcr ||
+          textLength < 10 ||
+          this.hasCorruptArabicLayer(pageText);
+
+        if (!needsOcr) {
           pageContent.push(extractedPage.paragraphs);
           continue;
         }
 
-        showLoading('🖼️ Reading text from images, please wait...');
-        showConversionNotice('The document appears to contain scanned images. OCR is running in your browser to extract text.', 'warning');
+        if (forceOcr) {
+          showLoading('🖼️ Force OCR active — reading page from image...');
+          showConversionNotice(
+            'Force OCR is enabled. All pages will be read from their rendered images.',
+            'warning'
+          );
+        } else if (textLength < 10) {
+          showLoading('🖼️ Reading text from images, please wait...');
+          showConversionNotice(
+            'The document appears to contain scanned images. OCR is running in your browser to extract text.',
+            'warning'
+          );
+        } else {
+          // Corrupt Arabic layer detected
+          showLoading('🔠 Detected broken font mapping — re-reading page via OCR...');
+          showConversionNotice(
+            'A broken font mapping was detected on this page. OCR will be used for accurate Arabic text extraction.',
+            'warning'
+          );
+        }
 
         const ocrText = await this.performOcrOnPage(page, pageNum);
         console.log(`OCR text from page ${pageNum}:`, ocrText);
@@ -369,10 +403,12 @@ class PDFToWordConverter {
       }
     }
 
-    // If RTL, reverse each contiguous Arabic/Hebrew segment to logical order
-    if (isRtl) {
-      result = result.replace(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]+/g, seg => seg.split('').reverse().join(''));
-    }
+    // NOTE: Do NOT reverse Arabic segments here.
+    // pdf.js already returns Arabic text in logical (Unicode) reading order.
+    // createWordContent() sets bidirectional/rightToLeft flags on every Paragraph
+    // and TextRun, so Word's own bidi engine handles visual reordering correctly.
+    // A manual reversal here conflicts with Word's bidi rendering and destroys
+    // base-letter/diacritic pairing (e.g. shadda lands on the wrong base letter).
 
     return this.normalizeArabicText(result);
   }
@@ -385,6 +421,54 @@ class PDFToWordConverter {
 
   isRtlText(text) {
     return this.detectTextDirection(text) === 'rtl';
+  }
+
+  /**
+   * Detect whether a page's text layer contains corrupt Arabic — i.e. Arabic-range
+   * characters that fall outside the everyday modern Arabic set and instead map to
+   * rare Quranic-only / extended codepoints that almost never appear in normal prose.
+   *
+   * When a PDF uses a non-standard or deliberately obscured font encoding, the glyphs
+   * render correctly on screen but the embedded Unicode values are wrong.  The broken
+   * codepoints cluster in extensions such as U+063B–U+063F, U+0653–U+065F (above the
+   * standard diacritic range U+064B–U+0652), and isolated spots like U+065B, U+0657.
+   *
+   * Algorithm:
+   *   1. Count all Arabic-block characters in the text.
+   *   2. Count how many of those fall OUTSIDE the "safe" modern set:
+   *        Basic letters   : U+0621–U+063A, U+0641–U+064A
+   *        Basic diacritics: U+064B–U+0652
+   *        Common extras   : U+060C (Arabic comma), U+061B (semicolon), U+061F (?),
+   *                          U+0660–U+0669 (Arabic-Indic digits), U+066A–U+066D (punct)
+   *   3. If ≥ 35 % of Arabic characters are "suspicious" AND there are at least 5
+   *      Arabic characters total, treat the page as having a broken text layer.
+   *
+   * @param {string} text  - Raw text extracted from a PDF page.
+   * @returns {boolean}    - true  → the text layer appears corrupt; use OCR instead.
+   *                         false → the text layer looks trustworthy.
+   */
+  hasCorruptArabicLayer(text) {
+    // All Arabic-script characters in the text
+    const allArabic = (text.match(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/g) || []);
+    if (allArabic.length < 5) {
+      return false; // Not enough Arabic to judge
+    }
+
+    // Characters that are perfectly normal in everyday Arabic text
+    const safeArabic = /[\u0621-\u063A\u0641-\u064A\u064B-\u0652\u060C\u061B\u061F\u0660-\u066D]/;
+
+    const suspiciousCount = allArabic.filter(ch => !safeArabic.test(ch)).length;
+    const suspiciousRatio = suspiciousCount / allArabic.length;
+
+    if (suspiciousRatio >= 0.35) {
+      console.warn(
+        `[PDFToWord] Corrupt Arabic layer suspected on page: ${suspiciousCount}/${allArabic.length} ` +
+        `Arabic chars (${Math.round(suspiciousRatio * 100)}%) are outside the standard modern set.`
+      );
+      return true;
+    }
+
+    return false;
   }
 
   estimateFontSize(items) {
