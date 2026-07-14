@@ -239,10 +239,13 @@ class PDFToWordConverter {
   }
 
   async extractTextFromPage(page) {
-    // disableCombineTextItems: keep every glyph cluster separate so we can
-    // measure inter-word gaps from the transform matrix.
+    // disableCombineTextItems: false → pdf.js combines individual Arabic glyphs
+    // into proper word-level items internally. We then apply gap detection only
+    // at word boundaries (between items), which is exactly where spaces are lost.
+    // Setting this to true breaks Arabic because each raw shaped glyph is returned
+    // separately, making reassembly destroy ligature context and character order.
     const textContent = await page.getTextContent({
-      disableCombineTextItems: true,
+      disableCombineTextItems: false,
       includeMarkedContent: false
     });
 
