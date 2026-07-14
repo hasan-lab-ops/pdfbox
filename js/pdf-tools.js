@@ -855,9 +855,14 @@ class WordToPDFConverter {
       const result = await mammothLib.convertToHtml({ arrayBuffer });
       const htmlContent = result.value;
 
+      console.log('[WordToPDFConverter] Extracted HTML length:', htmlContent ? htmlContent.length : 0);
+
       if (!htmlContent || htmlContent.trim().length === 0) {
+        console.error('[WordToPDFConverter] HTML content is empty after Mammoth conversion.');
         throw new Error('No content found in the Word document.');
       }
+
+      console.log('[WordToPDFConverter] HTML content successfully extracted. Sample:', htmlContent.substring(0, 100) + '...');
 
       showLoading('🔄 Converting to PDF...');
 
@@ -867,22 +872,32 @@ class WordToPDFConverter {
       container = document.createElement('div');
       container.id = 'word-to-pdf-temp-container';
       container.style.position = 'fixed';
-      container.style.opacity = '0.01';
-      container.style.zIndex = '-9999';
-      container.style.width = '800px';
-      container.style.direction = direction;
-      container.style.textAlign = direction === 'rtl' ? 'right' : 'left';
       container.style.top = '0';
       container.style.left = '0';
+      container.style.width = '800px';
+      container.style.zIndex = '-9999';
+      container.style.opacity = '0.01';
+      container.style.pointerEvents = 'none';
+      container.style.direction = direction;
+      container.style.textAlign = direction === 'rtl' ? 'right' : 'left';
       container.style.background = '#ffffff';
       container.style.color = '#000000';
       container.style.padding = '24px';
-      container.style.fontFamily = 'Arial, sans-serif';
+      container.style.fontFamily = 'sans-serif';
+      container.style.fontSize = '14px';
       container.style.lineHeight = '1.5';
+      
       container.innerHTML = htmlContent;
       document.body.appendChild(container);
 
-      await new Promise(r => setTimeout(r, 200));
+      // Force browser layout & paint pipeline (prevent race conditions)
+      await new Promise(resolve => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            setTimeout(resolve, 300);
+          });
+        });
+      });
 
       showLoading('🖼️ Rendering PDF...');
 
