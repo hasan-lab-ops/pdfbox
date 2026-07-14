@@ -287,7 +287,8 @@ class PDFToWordConverter {
 
   // -----------------------------------------------------------------------
   // groupIntoLines — group items on the same vertical band into lines
-  // Uses adaptive tolerance based on median text height
+  // Uses hasEOL flag from pdf.js as primary line-break signal, with
+  // adaptive Y-proximity as fallback.
   // -----------------------------------------------------------------------
 
   groupIntoLines(items) {
@@ -295,19 +296,38 @@ class PDFToWordConverter {
 
     const heights = items.map((i) => Math.abs(i.height)).filter(Boolean);
     const medianH = this.median(heights) || 12;
-    const lineTolerance = Math.max(3, medianH * 0.4);
+    const lineTolerance = Math.max(3, medianH * 0.35);
 
-    // Sort top-to-bottom (descending Y), then left-to-right within band
+    // Sort top-to-bottom (descending Y), then left-to-right
     const sorted = [...items].sort((a, b) => b.y - a.y || a.x - b.x);
 
     const lines = [];
+    let currentLine = null;
+
     sorted.forEach((item) => {
-      const last = lines[lines.length - 1];
-      if (!last || Math.abs(item.y - last.y) > lineTolerance) {
-        lines.push({ y: item.y, items: [item], heights: [Math.abs(item.height || medianH)] });
+      // New line if:
+      //  1. No current line yet
+      //  2. Previous item on this line had hasEOL (explicit line break in PDF)
+      //  3. Y distance exceeds tolerance (items are on different visual lines)
+      const prevHadEOL = currentLine && currentLine.lastHasEOL;
+      const yDist = currentLine ? Math.abs(item.y - currentLine.y) : Infinity;
+      const needsNewLine = !currentLine || prevHadEOL || yDist > lineTolerance;
+
+      if (needsNewLine) {
+        currentLine = {
+          y: item.y,
+          items: [item],
+          heights: [Math.abs(item.height || medianH)],
+          lastHasEOL: !!item.hasEOL
+        };
+        lines.push(currentLine);
       } else {
-        last.items.push(item);
-        if (item.height) last.heights.push(Math.abs(item.height));
+        currentLine.items.push(item);
+        if (item.height) currentLine.heights.push(Math.abs(item.height));
+        currentLine.lastHasEOL = !!item.hasEOL;
+        // Running average Y for more accurate gap measurement
+        const n = currentLine.items.length;
+        currentLine.y = currentLine.y + (item.y - currentLine.y) / n;
       }
     });
 
@@ -484,7 +504,10 @@ class PDFToWordConverter {
   }
 
   // -----------------------------------------------------------------------
-  // groupLinesIntoParagraphs — detect paragraph breaks by vertical gaps
+  // groupLinesIntoParagraphs — detect paragraph breaks by:
+  //   1. Large vertical gaps between lines
+  //   2. Script changes (English → Arabic or vice versa)
+  // This prevents bilingual documents from merging English+Arabic into one paragraph.
   // -----------------------------------------------------------------------
 
   groupLinesIntoParagraphs(lines, pageWidth) {
@@ -492,27 +515,41 @@ class PDFToWordConverter {
 
     const heights = lines.map((l) => l.avgHeight).filter(Boolean);
     const medianH = this.median(heights) || 12;
-    const paraGapThreshold = medianH * 1.35;
+    // Tighter gap threshold: 1.0× median height (was 1.35×)
+    const paraGapThreshold = medianH * 1.0;
 
     const paragraphs = [];
     let currentPara = { lines: [lines[0]] };
+
+    // Helper: get dominant script direction of a line's items
+    const lineDirection = (line) => {
+      const text = line.items.map((i) => i.text).join('');
+      return this.detectTextDirection(text);
+    };
+
+    let prevDir = lineDirection(lines[0]);
 
     for (let i = 1; i < lines.length; i++) {
       const prevLine = lines[i - 1];
       const currLine = lines[i];
       const gap = Math.abs(prevLine.y - currLine.y);
+      const currDir = lineDirection(currLine);
 
-      // Check for paragraph break: large vertical gap
-      const isParagraphBreak = gap > paraGapThreshold;
+      // Paragraph break when:
+      //  1. Large vertical gap (bigger than threshold), OR
+      //  2. Script changes between consecutive lines (English→Arabic or Arabic→English)
+      const isGapBreak = gap > paraGapThreshold;
+      const isScriptBreak = currDir !== prevDir && currentPara.lines.length > 0;
 
-      if (isParagraphBreak) {
-        // Finalize current paragraph
+      if (isGapBreak || isScriptBreak) {
         const built = this.buildParagraphFromLines(currentPara.lines, pageWidth);
         if (built) paragraphs.push(built);
         currentPara = { lines: [currLine] };
       } else {
         currentPara.lines.push(currLine);
       }
+
+      prevDir = currDir;
     }
 
     // Finalize last paragraph
@@ -590,6 +627,11 @@ class PDFToWordConverter {
       const paragraphs = this.groupLinesIntoParagraphs(lines, pageWidth);
       allParagraphs.push(...paragraphs);
     }
+
+    console.log(`Page extraction: ${items.length} items, ${columns.length} column(s), ${allParagraphs.length} paragraphs`);
+    allParagraphs.forEach((p, i) => {
+      console.log(`  Para ${i} [${p.isRtl ? 'RTL' : 'LTR'}] align=${p.alignment} size=${p.fontSize}: "${p.text.substring(0, 80)}..."`);
+    });
 
     const text = allParagraphs.map((p) => p.text).join('\n');
     return { text, paragraphs: allParagraphs };
@@ -710,32 +752,12 @@ class PDFToWordConverter {
 }
 
 // ============================================================================
-// 2. WORD TO PDF CONVERTER — High-Fidelity Formatting-Preserving Engine
+// 2. WORD TO PDF CONVERTER
 // ============================================================================
 
 class WordToPDFConverter {
   constructor() {
     this.wordContent = null;
-    this.mammothLib = null;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Library loader
-  // ---------------------------------------------------------------------------
-
-  async getMammoth() {
-    if (this.mammothLib) return this.mammothLib;
-    if (globalThis.mammoth) { this.mammothLib = globalThis.mammoth; return this.mammothLib; }
-    if (window.mammoth) { this.mammothLib = window.mammoth; return this.mammothLib; }
-    try {
-      const module = await import('https://cdn.jsdelivr.net/npm/mammoth@1.6.0/+esm');
-      this.mammothLib = module.default || module;
-      globalThis.mammoth = this.mammothLib;
-      window.mammoth = this.mammothLib;
-      return this.mammothLib;
-    } catch (error) {
-      throw new Error(`Unable to load the Mammoth library: ${error.message}`);
-    }
   }
 
   // ---------------------------------------------------------------------------
@@ -747,334 +769,70 @@ class WordToPDFConverter {
     try {
       showLoading('📄 Reading Word document...');
 
+      // Step 1: Read file as ArrayBuffer
       const arrayBuffer = await this.readFile(file);
-      const mammothLib = await this.getMammoth();
 
-      // Use custom style mappings for better formatting preservation
-      const result = await mammothLib.convertToHtml({
-        arrayBuffer,
-        styleMap: [
-          // Preserve heading levels
-          "p[style-name='Heading 1'] => h1:fresh",
-          "p[style-name='Heading 2'] => h2:fresh",
-          "p[style-name='Heading 3'] => h3:fresh",
-          "p[style-name='Heading 4'] => h4:fresh",
-          "p[style-name='Heading 5'] => h5:fresh",
-          "p[style-name='Heading 6'] => h6:fresh",
-          // Preserve list items
-          "p[style-name='List Paragraph'] => li > p",
-          // Preserve block quotes
-          "p[style-name='Quote'] => blockquote > p",
-          // Bold and italic are preserved by default by Mammoth
-        ]
-      });
-
-      this.wordContent = result.value;
-
-      // Log any conversion warnings
-      if (result.messages && result.messages.length > 0) {
-        console.log('Mammoth conversion messages:', result.messages);
+      // Step 2: Convert DOCX to HTML using Mammoth
+      const mammothLib = window.mammoth || globalThis.mammoth;
+      if (!mammothLib) {
+        throw new Error('Mammoth.js failed to load from the CDN.');
       }
 
-      showLoading('🔄 Preparing document for PDF...');
+      const result = await mammothLib.convertToHtml({ arrayBuffer });
+      const htmlContent = result.value;
 
-      // Build the styled HTML container
-      container = this.buildStyledContainer(this.wordContent);
+      if (!htmlContent || htmlContent.trim().length === 0) {
+        throw new Error('No content found in the Word document.');
+      }
 
-      // Detect and mark RTL paragraphs
-      this.markRTLParagraphs(container);
+      this.wordContent = htmlContent;
 
+      showLoading('🔄 Converting to PDF...');
+
+      // Step 3: Create off-screen container (not display:none, but positioned off-screen)
+      container = document.createElement('div');
+      container.style.cssText = 'position: absolute; left: -9999px; top: -9999px; width: 800px; padding: 40px; background: white; font-family: Arial, sans-serif;';
+
+      // Detect if content contains Arabic
+      const hasArabic = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(htmlContent);
+      if (hasArabic) {
+        container.style.direction = 'rtl';
+        container.style.textAlign = 'right';
+      }
+
+      container.innerHTML = htmlContent;
       document.body.appendChild(container);
 
-      showLoading('🖼️ Rendering high-quality PDF...');
+      showLoading('🖼️ Rendering PDF...');
 
-      const pdfBlob = await this.renderToPDF(container);
+      // Step 4: Generate PDF with html2pdf.js
+      const options = {
+        margin: 15,
+        filename: 'converted-document.pdf',
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
 
-      document.body.removeChild(container);
+      const pdfBlob = await window.html2pdf()
+        .set(options)
+        .from(container)
+        .outputPdf('blob');
+
+      // Step 5: Clean up — remove temporary container
+      if (container && container.parentNode) {
+        document.body.removeChild(container);
+      }
+
       return pdfBlob;
 
     } catch (error) {
+      // Clean up on error too
       if (container && container.parentNode) {
         document.body.removeChild(container);
       }
       throw new Error(`Word to PDF conversion failed: ${error.message}`);
     }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Build styled HTML container with comprehensive typography
-  // ---------------------------------------------------------------------------
-
-  buildStyledContainer(htmlContent) {
-    const container = document.createElement('div');
-    container.innerHTML = htmlContent;
-
-    // Inject comprehensive styles
-    const style = document.createElement('style');
-    style.textContent = `
-      /* ── Arabic web font from Google Fonts ── */
-      @import url('https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap');
-
-      /* ── Base typography ── */
-      * {
-        box-sizing: border-box;
-      }
-
-      body {
-        margin: 0;
-        padding: 0;
-        font-family: 'Segoe UI', 'Noto Naskh Arabic', Tahoma, Arial, 'Times New Roman', sans-serif;
-        font-size: 12pt;
-        line-height: 1.6;
-        color: #1a1a1a;
-        -webkit-font-smoothing: antialiased;
-        -moz-osx-font-smoothing: grayscale;
-      }
-
-      /* ── Headings ── */
-      h1 {
-        font-size: 20pt;
-        font-weight: 700;
-        margin-top: 0;
-        margin-bottom: 12pt;
-        line-height: 1.3;
-        color: #111;
-      }
-
-      h2 {
-        font-size: 16pt;
-        font-weight: 700;
-        margin-top: 18pt;
-        margin-bottom: 8pt;
-        line-height: 1.35;
-        color: #222;
-      }
-
-      h3 {
-        font-size: 13pt;
-        font-weight: 600;
-        margin-top: 14pt;
-        margin-bottom: 6pt;
-        line-height: 1.4;
-        color: #333;
-      }
-
-      h4 {
-        font-size: 12pt;
-        font-weight: 600;
-        margin-top: 12pt;
-        margin-bottom: 4pt;
-        color: #333;
-      }
-
-      h5, h6 {
-        font-size: 11pt;
-        font-weight: 600;
-        margin-top: 10pt;
-        margin-bottom: 4pt;
-        color: #444;
-      }
-
-      /* ── Paragraphs ── */
-      p {
-        margin-top: 0;
-        margin-bottom: 8pt;
-        text-align: justify;
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-      }
-
-      /* ── Lists ── */
-      ul, ol {
-        margin-top: 4pt;
-        margin-bottom: 8pt;
-        padding-left: 24pt;
-      }
-
-      li {
-        margin-bottom: 3pt;
-        line-height: 1.5;
-      }
-
-      li > p {
-        margin-bottom: 2pt;
-      }
-
-      /* ── Tables ── */
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        margin: 10pt 0;
-        table-layout: fixed;
-        word-wrap: break-word;
-        overflow-wrap: break-word;
-      }
-
-      td, th {
-        border: 1pt solid #999;
-        padding: 5pt 8pt;
-        vertical-align: top;
-        font-size: 11pt;
-        line-height: 1.4;
-      }
-
-      th {
-        background-color: #f0f0f0;
-        font-weight: 600;
-      }
-
-      /* ── Blockquotes ── */
-      blockquote {
-        margin: 8pt 0;
-        padding: 6pt 16pt;
-        border-left: 3pt solid #ccc;
-        color: #555;
-        font-style: italic;
-      }
-
-      /* ── Horizontal rules ── */
-      hr {
-        border: none;
-        border-top: 1pt solid #ccc;
-        margin: 12pt 0;
-      }
-
-      /* ── Links ── */
-      a {
-        color: #2563eb;
-        text-decoration: underline;
-      }
-
-      /* ── Images ── */
-      img {
-        max-width: 100%;
-        height: auto;
-      }
-
-      /* ── RTL support (Arabic content) ── */
-      .rtl-paragraph {
-        direction: rtl;
-        text-align: right;
-        unicode-bidi: embed;
-        font-family: 'Noto Naskh Arabic', 'Segoe UI', Tahoma, Arial, sans-serif;
-        line-height: 1.8;
-      }
-
-      /* ── Page break hints ── */
-      h1, h2, h3 {
-        page-break-after: avoid;
-      }
-
-      table, figure, blockquote {
-        page-break-inside: avoid;
-      }
-
-      /* ── Prevent text overflow ── */
-      * {
-        max-width: 100%;
-      }
-    `;
-
-    container.prepend(style);
-
-    // Apply container-level styles
-    container.style.cssText = `
-      padding: 20mm 25mm;
-      font-family: 'Segoe UI', 'Noto Naskh Arabic', Tahoma, Arial, 'Times New Roman', sans-serif;
-      line-height: 1.6;
-      color: #1a1a1a;
-      background: white;
-      width: 210mm;
-      min-height: 297mm;
-      box-sizing: border-box;
-      margin: 0 auto;
-      position: relative;
-    `;
-
-    return container;
-  }
-
-  // ---------------------------------------------------------------------------
-  // Detect and mark RTL paragraphs (Arabic content)
-  // ---------------------------------------------------------------------------
-
-  markRTLParagraphs(container) {
-    const RTL_RANGE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
-    const paragraphs = container.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, td, th');
-
-    paragraphs.forEach((el) => {
-      const text = el.textContent || '';
-      const rtlChars = (text.match(new RegExp(RTL_RANGE.source, 'g')) || []).length;
-      const latinChars = (text.match(/[A-Za-z0-9]/g) || []).length;
-      const totalAlpha = rtlChars + latinChars;
-
-      // If more than 40% of alphabetic chars are RTL, mark as RTL
-      if (totalAlpha > 0 && rtlChars / totalAlpha > 0.4) {
-        el.classList.add('rtl-paragraph');
-        el.setAttribute('dir', 'rtl');
-      }
-    });
-
-    // Also check if the entire document is predominantly RTL
-    const fullText = container.textContent || '';
-    const totalRtl = (fullText.match(new RegExp(RTL_RANGE.source, 'g')) || []).length;
-    const totalLatin = (fullText.match(/[A-Za-z0-9]/g) || []).length;
-    if (totalRtl + totalLatin > 0 && totalRtl / (totalRtl + totalLatin) > 0.5) {
-      container.style.direction = 'rtl';
-      container.style.textAlign = 'right';
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Render HTML to PDF using html2pdf.js with high quality settings
-  // ---------------------------------------------------------------------------
-
-  async renderToPDF(container) {
-    if (!window.html2pdf) {
-      throw new Error('html2pdf.js failed to load from the CDN.');
-    }
-
-    // A4 dimensions in mm
-    const MARGIN_TOP = 20;
-    const MARGIN_BOTTOM = 20;
-    const MARGIN_LEFT = 25;
-    const MARGIN_RIGHT = 25;
-
-    const options = {
-      margin: [MARGIN_TOP, MARGIN_RIGHT, MARGIN_BOTTOM, MARGIN_LEFT],
-      filename: 'converted.pdf',
-      image: { type: 'png', quality: 1.0 },
-      html2canvas: {
-        scale: 3,
-        useCORS: true,
-        logging: false,
-        letterRendering: true,
-        scrollX: 0,
-        scrollY: 0,
-        windowWidth: 794,
-        windowHeight: 1123,
-        backgroundColor: '#ffffff'
-      },
-      jsPDF: {
-        unit: 'mm',
-        format: 'a4',
-        orientation: 'portrait',
-        compress: true
-      },
-      pagebreak: {
-        mode: ['avoid-all', 'css', 'legacy'],
-        before: '.page-break-before',
-        after: '.page-break-after',
-        avoid: ['table', 'blockquote', 'h1', 'h2', 'h3']
-      }
-    };
-
-    const pdfBlob = await window.html2pdf()
-      .set(options)
-      .from(container)
-      .outputPdf('blob');
-
-    return pdfBlob;
   }
 
   // ---------------------------------------------------------------------------
