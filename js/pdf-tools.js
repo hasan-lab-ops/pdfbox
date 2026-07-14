@@ -347,29 +347,31 @@ class PDFToWordConverter {
   formatLine(items) {
     if (!items || !items.length) return '';
 
-    // Probe direction on the raw item texts
-    const probeText = items.map((i) => i.text).join('');
-    const isRtl     = this.detectTextDirection(probeText) === 'rtl';
+    // Detect if the line contains RTL script (Arabic/Hebrew)
+    const probeText = items.map(i => i.text).join('');
+    const isRtl = this.detectTextDirection(probeText) === 'rtl';
 
-    // Sort items in reading order for this direction
+    // Sort items according to visual order for the detected direction
     const sorted = [...items].sort((a, b) =>
       isRtl ? b.x - a.x : a.x - b.x
     );
 
-    // Accumulate text, inserting spaces where geometry demands it
+    // Build the line, inserting spaces where geometric gaps indicate word boundaries
     let result = sorted[0].text;
     for (let i = 1; i < sorted.length; i++) {
       const prev = sorted[i - 1];
       const curr = sorted[i];
-      const gap  = this.computeHorizontalGap(prev, curr, isRtl);
-
-      // If items overlap or are adjacent — no space needed.
-      // If there is a real gap — force a word space.
+      const gap = this.computeHorizontalGap(prev, curr, isRtl);
       if (gap > PDFToWordConverter.GAP_THRESHOLD) {
         result += ' ' + curr.text;
       } else {
         result += curr.text;
       }
+    }
+
+    // If RTL, reverse each contiguous Arabic/Hebrew segment to logical order
+    if (isRtl) {
+      result = result.replace(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]+/g, seg => seg.split('').reverse().join(''));
     }
 
     return this.normalizeArabicText(result);
