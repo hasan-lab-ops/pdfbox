@@ -840,157 +840,92 @@ class WordToPDFConverter {
     this.wordContent = null;
   }
 
-  // ---------------------------------------------------------------------------
-  // Main conversion entry point
-  // ---------------------------------------------------------------------------
-
   async convert(file) {
     let container = null;
     try {
       showLoading('📄 Reading Word document...');
 
-      // Step 1 — Read the uploaded .docx file as an ArrayBuffer
+      // 1. Read the uploaded .docx file as an ArrayBuffer
       const arrayBuffer = await this.readFile(file);
 
-      // Step 2 — Use Mammoth.js to convert DOCX → HTML
-      const mammothLib = await ensureMammothLoaded();
+      // 2. Use Mammoth.js to convert DOCX -> HTML
+      const mammothLib = window.mammoth || globalThis.mammoth;
+      if (!mammothLib) throw new Error('Mammoth.js library is not loaded.');
+      
       const result = await mammothLib.convertToHtml({ arrayBuffer });
       const htmlContent = result.value;
-
-      console.log('[WordToPDFConverter] Step 2 — Extracted HTML length:', htmlContent ? htmlContent.length : 0);
-      if (htmlContent) {
-        console.log('[WordToPDFConverter] HTML snippet (first 200 chars):', htmlContent.substring(0, 200));
-      }
-      if (result.messages && result.messages.length) {
-        console.warn('[WordToPDFConverter] Mammoth warnings:', result.messages.map(m => m.message).join('; '));
-      }
 
       if (!htmlContent || htmlContent.trim().length === 0) {
         throw new Error('Mammoth extracted no content. The .docx file may be empty or corrupted.');
       }
 
-      // Step 3 — Ensure html2pdf.js is loaded
       showLoading('🔄 Preparing renderer...');
-      const html2pdfLib = await ensureHtml2PdfLoaded();
-      const direction = detectHtmlDirection(htmlContent);
+      
+      const html2pdfLib = window.html2pdf;
+      if (!html2pdfLib) throw new Error('html2pdf.js library is not loaded.');
 
-      // Step 4 — Create an off-screen wrapper element with A4-like margins.
-      //          MUST be in the DOM with real dimensions so html2canvas can paint it.
-      //          Using position:fixed + zIndex:-99999 + opacity:0.01 keeps it
-      //          invisible without collapsing its canvas size to 0.
+      // 3. Create a temporary, off-screen DOM element wrapper
+      // Per AGENTS.md: Use opacity: 0.01 + z-index: -9999. Never display: none or left: -9999px.
       container = document.createElement('div');
       container.id = 'word-to-pdf-temp-container';
-
-      // Anti-collapse positioning (never use display:none or left:-9999px)
+      
       container.style.cssText = [
-        'position: fixed',
+        'position: absolute',
         'top: 0',
-        'left: 0',
-        'width: 794px',          // ~A4 width at 96 dpi
-        'min-height: 1px',
-        'z-index: -99999',
+        'right: 0',
+        'width: 794px',
+        'z-index: -9999',
         'opacity: 0.01',
         'pointer-events: none',
         'box-sizing: border-box',
-        // A4 print-friendly inner style
         'padding: 20mm',
-        'background: #ffffff',
-        `font-family: system-ui, -apple-system, Arial, sans-serif`,
-        'font-size: 14px',
-        'line-height: 1.6',
-        `direction: ${direction}`,
-        `text-align: ${direction === 'rtl' ? 'right' : 'left'}`
+        'background: white',
+        'font-family: system-ui, -apple-system, Arial, sans-serif',
+        'line-height: 1.6'
       ].join('; ');
 
-      // Step 5 — Inject CSS isolation reset + the Mammoth HTML
-      container.innerHTML = `
-        <style>
-          #word-to-pdf-temp-container { background: #ffffff !important; }
-          #word-to-pdf-temp-container *,
-          #word-to-pdf-temp-container p,
-          #word-to-pdf-temp-container span,
-          #word-to-pdf-temp-container h1,
-          #word-to-pdf-temp-container h2,
-          #word-to-pdf-temp-container h3,
-          #word-to-pdf-temp-container li,
-          #word-to-pdf-temp-container td,
-          #word-to-pdf-temp-container div {
-            color: #000000 !important;
-            opacity: 1 !important;
-            visibility: visible !important;
-            background-color: transparent !important;
-          }
-          #word-to-pdf-temp-container table { border-collapse: collapse; width: 100%; }
-          #word-to-pdf-temp-container td, #word-to-pdf-temp-container th { border: 1px solid #ccc; padding: 4px 8px; }
-        </style>
-      ` + htmlContent;
-
+      // 4. Inject parsed HTML
+      container.innerHTML = htmlContent;
       document.body.appendChild(container);
-      console.log('[WordToPDFConverter] Step 5 — Container appended to DOM.');
 
-      // Step 6 — Wait for fonts and layout to be fully painted
+      // Wait for DOM to be fully painted
       await document.fonts.ready;
-      await new Promise(resolve => {
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            setTimeout(resolve, 800);
-          });
-        });
-      });
+      await new Promise(resolve => setTimeout(resolve, 500));
 
-      // Step 7 — Diagnostic size check before rendering
-      console.log('[WordToPDFConverter] Step 7 — Container in DOM:', document.body.contains(container));
-      console.log('[WordToPDFConverter] scrollWidth:', container.scrollWidth, '| scrollHeight:', container.scrollHeight);
-      if (container.scrollHeight === 0 || container.scrollWidth === 0) {
-        console.warn('[WordToPDFConverter] ⚠️ Container dimensions are 0 — PDF will likely be blank!');
-      }
-
-      // Step 8 — Render with html2pdf using high-fidelity settings
       showLoading('🖼️ Rendering PDF...');
 
-      const pdfBlob = await html2pdfLib()
-        .set({
-          margin:     [15, 15, 15, 15],  // mm: top, left, bottom, right
-          filename:   'converted.pdf',
-          image:      { type: 'jpeg', quality: 0.98 },
-          html2canvas: {
-            scale:    2,
-            useCORS:  true,
-            logging:  false,
-            onclone:  (clonedDoc) => {
-              // Restore full opacity in the cloned document so html2canvas captures everything
-              const el = clonedDoc.getElementById('word-to-pdf-temp-container');
-              if (el) { el.style.opacity = '1'; }
-            }
-          },
-          jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
-        })
-        .from(container)
-        .outputPdf('blob');
+      // 5 & 6. Configure parameters and render to PDF Blob
+      const options = {
+        margin: [15, 15, 15, 15],
+        filename: 'converted.pdf',
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      };
 
-      // Step 9 — Cleanup temp container
+      const pdfBlob = await html2pdfLib()
+        .set(options)
+        .from(container)
+        .output('blob');
+
+      // 7. Clean up
       if (container && container.parentNode) {
         document.body.removeChild(container);
       }
-      console.log('[WordToPDFConverter] ✅ Conversion complete. Blob size:', pdfBlob?.size, 'bytes');
-
+      
       hideLoading();
+      
+      // 8. Return Blob
       return pdfBlob;
 
     } catch (error) {
-      // Always clean up DOM even on failure
       if (container && container.parentNode) {
         document.body.removeChild(container);
       }
       hideLoading();
-      console.error('[WordToPDFConverter] ❌ Conversion failed:', error);
       throw new Error(`Word to PDF conversion failed: ${error.message}`);
     }
   }
-
-  // ---------------------------------------------------------------------------
-  // Utility
-  // ---------------------------------------------------------------------------
 
   readFile(file) {
     return new Promise((resolve, reject) => {
