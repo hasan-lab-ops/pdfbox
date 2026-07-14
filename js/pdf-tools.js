@@ -12,7 +12,7 @@
 const { PDFDocument, PDFName, PDFNumber, degrees, rgb } = PDFLib;
 
 // ============================================================================
-// 1. PDF TO WORD CONVERTER
+// 1. PDF TO WORD CONVERTER — Intelligent Layout-Preserving Engine
 // ============================================================================
 
 class PDFToWordConverter {
@@ -22,27 +22,19 @@ class PDFToWordConverter {
     this.docxReadyPromise = null;
   }
 
-  async getDocxLib() {
-    if (this.docxLib) {
-      return this.docxLib;
-    }
+  // ---------------------------------------------------------------------------
+  // Library loader
+  // ---------------------------------------------------------------------------
 
+  async getDocxLib() {
+    if (this.docxLib) return this.docxLib;
     if (this.docxReadyPromise) {
       this.docxLib = await this.docxReadyPromise;
       return this.docxLib;
     }
-
     this.docxReadyPromise = (async () => {
-      if (globalThis.docx) {
-        this.docxLib = globalThis.docx;
-        return this.docxLib;
-      }
-
-      if (window.docx) {
-        this.docxLib = window.docx;
-        return this.docxLib;
-      }
-
+      if (globalThis.docx) { this.docxLib = globalThis.docx; return this.docxLib; }
+      if (window.docx) { this.docxLib = window.docx; return this.docxLib; }
       try {
         const module = await import('https://cdn.jsdelivr.net/npm/docx@7.8.2/+esm');
         this.docxLib = module;
@@ -53,10 +45,13 @@ class PDFToWordConverter {
         throw new Error(`Unable to load the DOCX library: ${error.message}`);
       }
     })();
-
     this.docxLib = await this.docxReadyPromise;
     return this.docxLib;
   }
+
+  // ---------------------------------------------------------------------------
+  // Main conversion entry point
+  // ---------------------------------------------------------------------------
 
   async convert(file) {
     try {
@@ -73,7 +68,7 @@ class PDFToWordConverter {
         showLoading(`📖 Processing page ${pageNum} of ${pageCount}...`);
 
         const page = await this.pdfDoc.getPage(pageNum);
-        const extractedPage = await this.extractTextFromPage(page, pageNum);
+        const extractedPage = await this.extractTextFromPage(page);
         console.log(`Extracted structured content from page ${pageNum}:`, extractedPage);
 
         const textLength = (extractedPage?.text || '').replace(/\s+/g, '').length;
@@ -87,66 +82,46 @@ class PDFToWordConverter {
         showLoading('🖼️ Reading text from images, please wait...');
         showConversionNotice(
           textIsSuspect
-            ? `Page ${pageNum}'s embedded Arabic text appears to be encoded incorrectly by the PDF itself. Running OCR in your browser to read it directly from the page image instead.`
+            ? `Page ${pageNum}'s embedded Arabic text appears to be encoded incorrectly. Running OCR in your browser to read it directly from the page image instead.`
             : 'The document appears to contain scanned images. OCR is running in your browser to extract text.',
           'warning'
         );
 
-        const ocrText = await this.performOcrOnPage(page, pageNum);
+        const ocrText = await this.performOcrOnPage(page);
         console.log(`OCR text from page ${pageNum}:`, ocrText);
         pageContent.push(this.buildParagraphsFromText(ocrText, this.detectTextDirection(ocrText)));
       }
 
-      const fullText = pageContent.flat().map((paragraph) => paragraph.text || '').join('\n\n');
+      const fullText = pageContent.flat().map((p) => p.text || '').join('\n\n');
       const extractedCharacterCount = fullText.replace(/\s+/g, '').length;
       console.log('Aggregated extracted text:', fullText);
-      console.log('Extraction summary:', {
-        pageCount,
-        extractedCharacterCount,
-        pageContent
-      });
+      console.log('Extraction summary:', { pageCount, extractedCharacterCount, pageContent });
 
       const minimumExpectedCharacters = Math.max(20, pageCount * 20);
       if (extractedCharacterCount < minimumExpectedCharacters) {
-        const scannedMessage = 'Warning: This document consists of scanned images and does not contain editable text for conversion.';
-        showConversionNotice(scannedMessage, 'warning');
-        showToast(scannedMessage, 'error');
+        const msg = 'Warning: This document consists of scanned images and does not contain editable text for conversion.';
+        showConversionNotice(msg, 'warning');
+        showToast(msg, 'error');
         hideLoading();
         return null;
       }
 
       showLoading('📝 Creating Word document...');
-
       const docxLib = await this.getDocxLib();
-
       if (!docxLib || !docxLib.Document || !docxLib.Packer) {
         throw new Error('The docx library failed to load from the CDN.');
       }
 
       const doc = new docxLib.Document({
-        sections: [
-          {
-            properties: {
-              page: {
-                margin: {
-                  top: 1440,
-                  right: 1440,
-                  bottom: 1440,
-                  left: 1440,
-                  header: 720,
-                  footer: 720,
-                  gutter: 0
-                },
-                size: {
-                  orientation: docxLib.PageOrientation.PORTRAIT,
-                  width: 11900,
-                  height: 16840
-                }
-              }
-            },
-            children: this.createWordContent(pageContent, docxLib)
-          }
-        ]
+        sections: [{
+          properties: {
+            page: {
+              margin: { top: 1440, right: 1440, bottom: 1440, left: 1440, header: 720, footer: 720, gutter: 0 },
+              size: { orientation: docxLib.PageOrientation.PORTRAIT, width: 11900, height: 16840 }
+            }
+          },
+          children: this.createWordContent(pageContent, docxLib)
+        }]
       });
 
       const blob = await docxLib.Packer.toBlob(doc);
@@ -160,307 +135,491 @@ class PDFToWordConverter {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // OCR fallback
+  // ---------------------------------------------------------------------------
+
   async performOcrOnPage(page) {
     if (!window.Tesseract || !window.Tesseract.recognize) {
       throw new Error('Tesseract.js failed to load from the CDN.');
     }
-
     const viewport = page.getViewport({ scale: 2.0 });
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d');
-
-    if (!context) {
-      throw new Error('Unable to create an image canvas for OCR.');
-    }
-
+    if (!context) throw new Error('Unable to create an image canvas for OCR.');
     canvas.width = viewport.width;
     canvas.height = viewport.height;
-
-    await page.render({
-      canvasContext: context,
-      viewport
-    }).promise;
-
+    await page.render({ canvasContext: context, viewport }).promise;
     const result = await window.Tesseract.recognize(canvas, 'ara+eng', {
-      logger: (message) => {
-        if (message?.status === 'recognizing text' && typeof message.progress === 'number') {
-          const progressPercent = Math.round(message.progress * 100);
-          showLoading(`🖼️ Reading text from images... ${progressPercent}%`);
+      logger: (msg) => {
+        if (msg?.status === 'recognizing text' && typeof msg.progress === 'number') {
+          showLoading(`🖼️ Reading text from images... ${Math.round(msg.progress * 100)}%`);
         }
       }
     });
-
     return (result?.data?.text || '').replace(/\s+/g, ' ').trim();
   }
 
-  // ---------------------------------------------------------------------------
-  // ARABIC TEXT EXTRACTION ENGINE — gap-aware, RTL-safe
-  // ---------------------------------------------------------------------------
+  // ===========================================================================
+  // INTELLIGENT TEXT EXTRACTION ENGINE
+  // ===========================================================================
 
-  /**
-   * Horizontal gap threshold (in PDF user-space units, ≈ pixels at 1x).
-   * RTL Arabic formula: gap = (current.x − current.width) − next.x
-   *   where current.x is the right edge, current.width is the advance width,
-   *   so (current.x − current.width) is the LEFT edge of the current word,
-   *   and next.x is the RIGHT edge of the next word (to the left in RTL flow).
-   * Any gap > 1.5 px is treated as a word boundary and a space is injected.
-   */
-  static GAP_THRESHOLD = 1.5;
+  // --- Unicode ranges ---
+  static RTL_RANGE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/g;
+  static ARABIC_CORE = /[\u0621-\u063A\u0640-\u064A\u064B-\u0652]/;
+  static ARABIC_SUSPECT_MIN = 8;
+  static ARABIC_SUSPECT_RATIO = 0.12;
 
-  /**
-   * Compute the visual gap between two consecutive text items on the same line.
-   *
-   * RTL (Arabic): items are sorted descending by X (right→left).
-   *   prevItem is to the RIGHT, currItem is to the LEFT.
-   *   end of prevItem  = prevItem.x − prevItem.width  (its left edge)
-   *   start of currItem = currItem.x                  (its right edge)
-   *   gap = (prevItem.x − prevItem.width) − currItem.x
-   *
-   * LTR: items are sorted ascending by X (left→right).
-   *   end of prevItem  = prevItem.x + prevItem.width  (its right edge)
-   *   start of currItem = currItem.x                  (its left edge)
-   *   gap = currItem.x − (prevItem.x + prevItem.width)
-   *
-   * A positive value means there is visible empty space between the two items.
-   */
-  computeHorizontalGap(prevItem, currItem, isRtl) {
-    if (isRtl) {
-      // end of word = left edge = x − width; start of next word = right edge = x
-      return (prevItem.x - (prevItem.width || 0)) - currItem.x;
-    }
-    return currItem.x - (prevItem.x + (prevItem.width || 0));
+  // -----------------------------------------------------------------------
+  // detectTextDirection — returns 'rtl' or 'ltr'
+  // -----------------------------------------------------------------------
+
+  detectTextDirection(text) {
+    const rtlCount = (text.match(PDFToWordConverter.RTL_RANGE) || []).length;
+    const ltrCount = (text.match(/[A-Za-z0-9]/g) || []).length;
+    return rtlCount > ltrCount ? 'rtl' : 'ltr';
   }
 
-  /**
-   * Clean up the assembled line text:
-   *  - Collapse runs of whitespace to a single space
-   *  - Remove spaces around Arabic-only punctuation
-   *  - Trim edges
-   */
-  normalizeArabicText(text) {
+  isRtlText(text) { return this.detectTextDirection(text) === 'rtl'; }
+
+  // -----------------------------------------------------------------------
+  // isArabicTextSuspect — broken ToUnicode mapping detector
+  // -----------------------------------------------------------------------
+
+  isArabicTextSuspect(text) {
+    const chars = (text || '').match(PDFToWordConverter.RTL_RANGE) || [];
+    if (chars.length < PDFToWordConverter.ARABIC_SUSPECT_MIN) return false;
+    const core = chars.filter((c) => PDFToWordConverter.ARABIC_CORE.test(c)).length;
+    return (1 - core / chars.length) > PDFToWordConverter.ARABIC_SUSPECT_RATIO;
+  }
+
+  // -----------------------------------------------------------------------
+  // Extract raw items from a pdf.js page with enriched metadata
+  // -----------------------------------------------------------------------
+
+  extractRawItems(textContent) {
+    return (textContent.items || [])
+      .filter((item) => item && typeof item.str === 'string' && item.str.trim())
+      .map((item) => {
+        const t = item.transform || [1, 0, 0, 1, 0, 0];
+        // Font size from the transform matrix: sqrt(a^2 + b^2) where [a,b] is the
+        // horizontal scale vector.  For rotated text use the vertical vector [c,d].
+        const hScale = Math.sqrt(t[0] * t[0] + t[1] * t[1]);
+        const vScale = Math.sqrt(t[2] * t[2] + t[3] * t[3]);
+        const rawFontSize = Math.max(hScale, vScale);
+
+        return {
+          text: item.str,
+          x: t[4] ?? 0,
+          y: t[5] ?? 0,
+          width: item.width || 0,
+          height: item.height || 0,
+          fontName: item.fontName || '',
+          rawFontSize,
+          hasEOL: !!item.hasEOL
+        };
+      });
+  }
+
+  // -----------------------------------------------------------------------
+  // Compute median of a numeric array
+  // -----------------------------------------------------------------------
+
+  median(nums) {
+    if (!nums.length) return 0;
+    const sorted = [...nums].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+  }
+
+  // -----------------------------------------------------------------------
+  // detectColumns — cluster items by X position into column groups
+  // Returns an array of column objects: { centerX, items[] }
+  // -----------------------------------------------------------------------
+
+  detectColumns(items, pageWidth) {
+    if (items.length <= 1) return [{ centerX: items[0]?.x ?? 0, items }];
+
+    // Build X-position histogram with bins of 10 units
+    const bins = new Map();
+    items.forEach((item) => {
+      const bin = Math.round(item.x / 10) * 10;
+      bins.set(bin, (bins.get(bin) || 0) + 1);
+    });
+
+    // Find peaks (column centers) — bins with count > 5% of total items
+    const threshold = Math.max(2, items.length * 0.05);
+    const peakBins = [...bins.entries()]
+      .filter(([, count]) => count >= threshold)
+      .sort((a, b) => a[0] - b[0]);
+
+    // Merge nearby peaks (within 40 units) into single columns
+    const columnCenters = [];
+    for (const [bin] of peakBins) {
+      if (columnCenters.length && bin - columnCenters[columnCenters.length - 1] < 40) {
+        // Merge: weighted average
+        const prev = columnCenters[columnCenters.length - 1];
+        columnCenters[columnCenters.length - 1] = (prev + bin) / 2;
+      } else {
+        columnCenters.push(bin);
+      }
+    }
+
+    // If only one column detected (or page is narrow), treat as single column
+    if (columnCenters.length <= 1 || pageWidth < 500) {
+      return [{ centerX: pageWidth / 2, items }];
+    }
+
+    // Assign items to nearest column center
+    const columns = columnCenters.map((cx) => ({ centerX: cx, items: [] }));
+    items.forEach((item) => {
+      let minDist = Infinity;
+      let bestCol = 0;
+      columnCenters.forEach((cx, idx) => {
+        const dist = Math.abs(item.x - cx);
+        if (dist < minDist) { minDist = dist; bestCol = idx; }
+      });
+      columns[bestCol].items.push(item);
+    });
+
+    return columns.filter((c) => c.items.length > 0);
+  }
+
+  // -----------------------------------------------------------------------
+  // groupIntoLines — group items on the same vertical band into lines
+  // Uses adaptive tolerance based on median text height
+  // -----------------------------------------------------------------------
+
+  groupIntoLines(items) {
+    if (!items.length) return [];
+
+    const heights = items.map((i) => Math.abs(i.height)).filter(Boolean);
+    const medianH = this.median(heights) || 12;
+    const lineTolerance = Math.max(3, medianH * 0.4);
+
+    // Sort top-to-bottom (descending Y), then left-to-right within band
+    const sorted = [...items].sort((a, b) => b.y - a.y || a.x - b.x);
+
+    const lines = [];
+    sorted.forEach((item) => {
+      const last = lines[lines.length - 1];
+      if (!last || Math.abs(item.y - last.y) > lineTolerance) {
+        lines.push({ y: item.y, items: [item], heights: [Math.abs(item.height || medianH)] });
+      } else {
+        last.items.push(item);
+        if (item.height) last.heights.push(Math.abs(item.height));
+      }
+    });
+
+    // Compute average height per line
+    lines.forEach((l) => {
+      l.avgHeight = this.median(l.heights) || medianH;
+    });
+
+    return lines;
+  }
+
+  // -----------------------------------------------------------------------
+  // sortLineItems — sort items within a line, handling mixed RTL/LTR
+  // Returns segments: [{ direction, items[] }] in reading order
+  // -----------------------------------------------------------------------
+
+  sortLineItems(items) {
+    if (!items.length) return [];
+
+    // First: sort by X ascending to get spatial order
+    const byX = [...items].sort((a, b) => a.x - b.x);
+
+    // Detect directional segments by scanning for script changes
+    const segments = [];
+    let currentSeg = { direction: null, items: [] };
+
+    byX.forEach((item) => {
+      const itemDir = this.detectTextDirection(item.text);
+      if (!currentSeg.direction) {
+        currentSeg.direction = itemDir;
+        currentSeg.items.push(item);
+      } else if (itemDir === currentSeg.direction) {
+        currentSeg.items.push(item);
+      } else {
+        // Direction change — start new segment
+        if (currentSeg.items.length) segments.push(currentSeg);
+        currentSeg = { direction: itemDir, items: [item] };
+      }
+    });
+    if (currentSeg.items.length) segments.push(currentSeg);
+
+    // If only one segment, that's the line direction
+    if (segments.length === 1) {
+      const dir = segments[0].direction;
+      segments[0].items.sort((a, b) => dir === 'rtl' ? b.x - a.x : a.x - b.x);
+      return segments;
+    }
+
+    // Multiple segments: sort items within each segment by their direction
+    segments.forEach((seg) => {
+      seg.items.sort((a, b) => seg.direction === 'rtl' ? b.x - a.x : a.x - b.x);
+    });
+
+    return segments;
+  }
+
+  // -----------------------------------------------------------------------
+  // computeGap — adaptive gap between two consecutive items
+  // -----------------------------------------------------------------------
+
+  computeGap(prev, curr, isRtl) {
+    if (isRtl) {
+      return (prev.x - (prev.width || 0)) - curr.x;
+    }
+    return curr.x - (prev.x + (prev.width || 0));
+  }
+
+  // -----------------------------------------------------------------------
+  // formatLine — assemble a single line's text with proper spacing
+  // -----------------------------------------------------------------------
+
+  formatLine(items) {
+    if (!items || !items.length) return '';
+
+    const segments = this.sortLineItems(items);
+    if (!segments.length) return '';
+
+    // Compute adaptive gap threshold from this line's character widths
+    const widths = items.map((i) => i.width / Math.max(1, i.text.length)).filter(Boolean);
+    const medianCharWidth = this.median(widths) || 4;
+    const gapThreshold = Math.max(1.5, medianCharWidth * 0.3);
+
+    const lineParts = [];
+
+    segments.forEach((seg) => {
+      const dir = seg.direction;
+      let partText = seg.items[0].text;
+      for (let i = 1; i < seg.items.length; i++) {
+        const gap = this.computeGap(seg.items[i - 1], seg.items[i], dir === 'rtl');
+        if (gap > gapThreshold) {
+          partText += ' ' + seg.items[i].text;
+        } else {
+          partText += seg.items[i].text;
+        }
+      }
+      lineParts.push({ text: partText, direction: dir });
+    });
+
+    // For a single-direction line, return directly
+    if (lineParts.length === 1) {
+      return this.normalizeText(lineParts[0].text, lineParts[0].direction);
+    }
+
+    // For mixed-direction lines: LTR parts read left-to-right, RTL parts right-to-left
+    // Place LTR parts first (they appear on the left visually), then RTL parts
+    const ltrParts = lineParts.filter((p) => p.direction === 'ltr');
+    const rtlParts = lineParts.filter((p) => p.direction === 'rtl');
+    const ordered = [...ltrParts, ...rtlParts];
+    return this.normalizeText(ordered.map((p) => p.text).join(' '), 'auto');
+  }
+
+  // -----------------------------------------------------------------------
+  // normalizeText — collapse whitespace, fix Arabic punctuation spacing
+  // -----------------------------------------------------------------------
+
+  normalizeText(text, _direction) {
     return text
-      .replace(/[ \t]+/g, ' ')                    // collapse whitespace
-      .replace(/ ([،؛؟!،])/g, '$1')               // no space before Arabic punct
-      .replace(/([،؛؟!،]) /g, '$1')               // no space after Arabic punct
+      .replace(/[ \t]+/g, ' ')
+      .replace(/ ([،؛؟!،])/g, '$1')
+      .replace(/([،؛؟!،]) /g, '$1')
       .trim();
   }
 
-  async extractTextFromPage(page) {
-    // disableCombineTextItems: false → pdf.js combines individual Arabic glyphs
-    // into proper word-level items internally. We then apply gap detection only
-    // at word boundaries (between items), which is exactly where spaces are lost.
-    // Setting this to true breaks Arabic because each raw shaped glyph is returned
-    // separately, making reassembly destroy ligature context and character order.
-    const textContent = await page.getTextContent({
-      disableCombineTextItems: false,
-      includeMarkedContent: false
-    });
+  // -----------------------------------------------------------------------
+  // estimateFontSize — accurate size from transform matrix data
+  // -----------------------------------------------------------------------
 
-    // Map raw pdf.js items to a richer structure that preserves coordinates.
-    const items = (textContent.items || [])
-      .filter((item) => item && typeof item.str === 'string' && item.str.trim())
-      .map((item) => ({
-        // Keep the raw string — we will insert spaces ourselves
-        text: item.str,
-        x: item.transform?.[4] ?? 0,
-        y: item.transform?.[5] ?? 0,
-        // item.width is the advance width in user-space units
-        width: item.width || 0,
-        height: item.height || 0,
-        fontName: item.fontName || ''
-      }));
-
-    if (!items.length) {
-      return { text: '', paragraphs: [] };
-    }
-
-    // ── Step 1: group items into visual lines by Y proximity ──────────────────
-    // Sort descending by Y first so the topmost line comes first.
-    const sortedByY = [...items].sort((a, b) => b.y - a.y || a.x - b.x);
-
-    const lineTolerance = 5;   // px — items within this Y-band are one line
-    const paragraphGapThreshold = 16; // px — Y-gap larger than this starts a new paragraph
-
-    const lines = [];
-    sortedByY.forEach((item) => {
-      const currentLine = lines[lines.length - 1];
-      if (!currentLine || Math.abs(item.y - currentLine.y) > lineTolerance) {
-        lines.push({ y: item.y, items: [item] });
-      } else {
-        currentLine.items.push(item);
-      }
-    });
-
-    // ── Step 2: group lines into paragraphs by Y-gap ──────────────────────────
-    const paragraphs = [];
-    let pendingLines = [];
-
-    lines.forEach((line) => {
-      if (!pendingLines.length) {
-        pendingLines.push(line);
-        return;
-      }
-      const previousLine = pendingLines[pendingLines.length - 1];
-      const lineGap = Math.abs(previousLine.y - line.y);
-      if (lineGap > paragraphGapThreshold) {
-        const paragraph = this.buildParagraphFromLines(pendingLines);
-        if (paragraph) paragraphs.push(paragraph);
-        pendingLines = [line];
-      } else {
-        pendingLines.push(line);
-      }
-    });
-
-    if (pendingLines.length) {
-      const paragraph = this.buildParagraphFromLines(pendingLines);
-      if (paragraph) paragraphs.push(paragraph);
-    }
-
-    const text = paragraphs.map((p) => p.text).join('\n');
-    return { text, paragraphs };
+  estimateFontSize(items) {
+    if (!items.length) return 24;
+    const sizes = items.map((i) => i.rawFontSize).filter((s) => s > 0);
+    if (!sizes.length) return 24;
+    const med = this.median(sizes);
+    // Convert PDF points to half-points for docx (1 pt = 2 half-points)
+    // Typical body text is 10-12pt → 20-24 half-points
+    const halfPoints = Math.round(med * 2);
+    return Math.max(16, Math.min(72, halfPoints));
   }
 
-  buildParagraphFromLines(lines) {
-    const textLines = lines
-      .map((line) => this.formatLine(line.items))
-      .filter(Boolean);
+  // -----------------------------------------------------------------------
+  // detectParagraphAlignment — determine alignment from line edges
+  // -----------------------------------------------------------------------
 
+  detectParagraphAlignment(lines, pageWidth) {
+    if (lines.length < 2) {
+      const dir = this.detectTextDirection(lines.map((l) => l.items.map((i) => i.text).join('')).join(''));
+      return dir === 'rtl' ? 'right' : 'left';
+    }
+
+    const leftEdges = lines.map((l) => Math.min(...l.items.map((i) => i.x)));
+    const rightEdges = lines.map((l) => Math.max(...l.items.map((i) => i.x + (i.width || 0))));
+
+    const leftVariance = this.median(leftEdges.map((e) => Math.abs(e - leftEdges[0])));
+    const rightVariance = this.median(rightEdges.map((e) => Math.abs(e - rightEdges[0])));
+    const centerX = pageWidth / 2;
+    const avgCenter = this.median(lines.map((l) => {
+      const min = Math.min(...l.items.map((i) => i.x));
+      const max = Math.max(...l.items.map((i) => i.x + (i.width || 0)));
+      return (min + max) / 2;
+    }));
+
+    // Check if all lines are roughly centered
+    if (Math.abs(avgCenter - centerX) < pageWidth * 0.1 && leftVariance < 20 && rightVariance < 20) {
+      return 'center';
+    }
+
+    // Check if lines have consistent left edge (left-aligned)
+    if (leftVariance < 15) return 'left';
+
+    // Check if lines have consistent right edge (right-aligned)
+    if (rightVariance < 15) return 'right';
+
+    // Otherwise: justified
+    return 'justify';
+  }
+
+  // -----------------------------------------------------------------------
+  // groupLinesIntoParagraphs — detect paragraph breaks by vertical gaps
+  // -----------------------------------------------------------------------
+
+  groupLinesIntoParagraphs(lines, pageWidth) {
+    if (!lines.length) return [];
+
+    const heights = lines.map((l) => l.avgHeight).filter(Boolean);
+    const medianH = this.median(heights) || 12;
+    const paraGapThreshold = medianH * 1.35;
+
+    const paragraphs = [];
+    let currentPara = { lines: [lines[0]] };
+
+    for (let i = 1; i < lines.length; i++) {
+      const prevLine = lines[i - 1];
+      const currLine = lines[i];
+      const gap = Math.abs(prevLine.y - currLine.y);
+
+      // Check for paragraph break: large vertical gap
+      const isParagraphBreak = gap > paraGapThreshold;
+
+      if (isParagraphBreak) {
+        // Finalize current paragraph
+        const built = this.buildParagraphFromLines(currentPara.lines, pageWidth);
+        if (built) paragraphs.push(built);
+        currentPara = { lines: [currLine] };
+      } else {
+        currentPara.lines.push(currLine);
+      }
+    }
+
+    // Finalize last paragraph
+    const built = this.buildParagraphFromLines(currentPara.lines, pageWidth);
+    if (built) paragraphs.push(built);
+
+    return paragraphs;
+  }
+
+  // -----------------------------------------------------------------------
+  // buildParagraphFromLines — create paragraph object from grouped lines
+  // -----------------------------------------------------------------------
+
+  buildParagraphFromLines(lines, pageWidth) {
+    if (!lines.length) return null;
+
+    const textLines = lines.map((line) => this.formatLine(line.items)).filter(Boolean);
     if (!textLines.length) return null;
 
     const paragraphText = textLines.join('\n');
     const direction = this.detectTextDirection(paragraphText);
     const isRtl = direction === 'rtl';
-    const fontSize = this.estimateFontSize(lines[0]?.items || []);
-    const isBold = (lines[0]?.items || []).some((item) => /bold/i.test(item.fontName || ''));
+
+    // Font size: use median across ALL items in the paragraph (not just first line)
+    const allItems = lines.flatMap((l) => l.items);
+    const fontSize = this.estimateFontSize(allItems);
+
+    // Bold: check if ANY item in the paragraph has a bold font name
+    const isBold = allItems.some((item) => /bold|heavy|black|semibold/i.test(item.fontName || ''));
+
+    // Italic: check font names for italic/oblique
+    const isItalic = allItems.some((item) => /italic|oblique|slant/i.test(item.fontName || ''));
+
+    // Alignment: detect from line edges
+    const alignment = this.detectParagraphAlignment(lines, pageWidth);
 
     return {
       text: paragraphText,
       isRtl,
-      alignment: isRtl ? 'right' : 'left',
+      alignment,
       fontSize,
-      isBold
+      isBold,
+      isItalic
     };
   }
 
-  /**
-   * Assemble a single line's text from its items using geometric gap detection.
-   *
-   * For RTL lines (Arabic): items are sorted right→left (descending X).
-   * For LTR lines:          items are sorted left→right (ascending X).
-   *
-   * A space is injected between consecutive items whenever the visual gap
-   * between them exceeds GAP_THRESHOLD, preventing words from merging.
-   */
-  formatLine(items) {
-    if (!items || !items.length) return '';
+  // -----------------------------------------------------------------------
+  // extractTextFromPage — main page-level extraction pipeline
+  // -----------------------------------------------------------------------
 
-    // Detect if the line contains RTL script (Arabic/Hebrew)
-    const probeText = items.map(i => i.text).join('');
-    const isRtl = this.detectTextDirection(probeText) === 'rtl';
+  async extractTextFromPage(page) {
+    const textContent = await page.getTextContent({
+      disableCombineTextItems: false,
+      includeMarkedContent: false
+    });
 
-    // Sort items according to visual order for the detected direction
-    const sorted = [...items].sort((a, b) =>
-      isRtl ? b.x - a.x : a.x - b.x
-    );
+    const items = this.extractRawItems(textContent);
+    if (!items.length) return { text: '', paragraphs: [] };
 
-    // Build the line, inserting spaces where geometric gaps indicate word boundaries
-    let result = sorted[0].text;
-    for (let i = 1; i < sorted.length; i++) {
-      const prev = sorted[i - 1];
-      const curr = sorted[i];
-      const gap = this.computeHorizontalGap(prev, curr, isRtl);
-      if (gap > PDFToWordConverter.GAP_THRESHOLD) {
-        result += ' ' + curr.text;
-      } else {
-        result += curr.text;
-      }
+    const viewport = page.getViewport({ scale: 1.0 });
+    const pageWidth = viewport.width;
+
+    // Step 1: Detect columns
+    const columns = this.detectColumns(items, pageWidth);
+
+    // Step 2: For each column, group into lines, then paragraphs
+    const allParagraphs = [];
+
+    // Sort columns in reading order (LTR: left→right, RTL: right→left)
+    const pageDir = this.detectTextDirection(items.map((i) => i.text).join(''));
+    columns.sort((a, b) => pageDir === 'rtl' ? b.centerX - a.centerX : a.centerX - b.centerX);
+
+    for (const column of columns) {
+      const lines = this.groupIntoLines(column.items);
+      const paragraphs = this.groupLinesIntoParagraphs(lines, pageWidth);
+      allParagraphs.push(...paragraphs);
     }
 
-    // NOTE: We intentionally do NOT reverse Arabic character order here.
-    // pdf.js already returns each text item's string in correct logical
-    // (reading) order — Unicode Arabic text is always stored logically in a
-    // well-formed PDF, regardless of its right-to-left visual direction.
-    // createWordContent() sets rightToLeft/bidirectional flags on the Word
-    // output, and Word's own bidi engine handles the visual RTL rendering
-    // from there. Manually reversing characters here breaks base-letter /
-    // diacritic pairing and fights the correct handling already in place.
-
-    return this.normalizeArabicText(result);
+    const text = allParagraphs.map((p) => p.text).join('\n');
+    return { text, paragraphs: allParagraphs };
   }
 
-  detectTextDirection(text) {
-    const arabicCount = (text.match(/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/g) || []).length;
-    const latinCount = (text.match(/[A-Za-z]/g) || []).length;
-    return arabicCount > latinCount ? 'rtl' : 'ltr';
-  }
-
-  isRtlText(text) {
-    return this.detectTextDirection(text) === 'rtl';
-  }
-
-  /**
-   * Detects PDFs whose embedded font has a broken/incorrect ToUnicode
-   * mapping for Arabic — a font-authoring bug (common in some Word→PDF
-   * export paths) where glyphs RENDER correctly on the page but DECODE to
-   * the wrong Unicode character codes. No amount of reordering fixes this,
-   * because the extracted characters are simply wrong, not just misordered.
-   *
-   * Detection: ordinary Modern Standard Arabic text (lecture notes,
-   * articles, etc.) is built almost entirely from the 28 base letters,
-   * hamza variants, tatweel, and the basic short-vowel diacritics/shadda/
-   * sukun. Rare extended letters and Quranic annotation marks essentially
-   * never appear in that kind of text. If a meaningful share of the
-   * "Arabic-range" characters we extracted fall outside that core set, the
-   * mapping is almost certainly broken rather than the text genuinely being
-   * annotated/Quranic.
-   */
-  static ARABIC_ANY_RANGE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/g;
-  static ARABIC_CORE_RANGE = /[\u0621-\u063A\u0640-\u064A\u064B-\u0652]/;
-  static ARABIC_SUSPECT_MIN_CHARS = 8;      // below this, we can't judge reliably
-  static ARABIC_SUSPECT_RATIO = 0.12;   // >12% outside the core set = suspect
-
-  isArabicTextSuspect(text) {
-    const arabicChars = (text || '').match(PDFToWordConverter.ARABIC_ANY_RANGE) || [];
-    if (arabicChars.length < PDFToWordConverter.ARABIC_SUSPECT_MIN_CHARS) {
-      return false;
-    }
-
-    const coreCount = arabicChars.filter((ch) => PDFToWordConverter.ARABIC_CORE_RANGE.test(ch)).length;
-    const outsideCoreRatio = 1 - (coreCount / arabicChars.length);
-
-    return outsideCoreRatio > PDFToWordConverter.ARABIC_SUSPECT_RATIO;
-  }
-
-  estimateFontSize(items) {
-    if (!items.length) {
-      return 22;
-    }
-
-    const heights = items
-      .map((item) => Math.abs(item.height || 0))
-      .filter(Boolean);
-
-    const baseSize = heights.length ? Math.max(...heights) : 12;
-    const size = Math.max(18, Math.min(36, Math.round(baseSize * 0.75)));
-    return size * 2;
-  }
+  // -----------------------------------------------------------------------
+  // buildParagraphsFromText — fallback for OCR text
+  // -----------------------------------------------------------------------
 
   buildParagraphsFromText(text, direction = 'ltr') {
     const cleanedText = (text || '').replace(/\s+/g, ' ').trim();
-    if (!cleanedText) {
-      return [];
-    }
-
-    return [
-      {
-        text: cleanedText,
+    if (!cleanedText) return [];
+    // Split OCR text into paragraphs on double newlines or sentence boundaries
+    const rawParagraphs = cleanedText.split(/\n{2,}|\.\s+(?=[A-Z\u0621-\u064A])/);
+    return rawParagraphs
+      .map((p) => p.trim())
+      .filter(Boolean)
+      .map((p) => ({
+        text: p,
         isRtl: direction === 'rtl',
         alignment: direction === 'rtl' ? 'right' : 'left',
         fontSize: 24,
-        isBold: false
-      }
-    ];
+        isBold: false,
+        isItalic: false
+      }));
   }
+
+  // ===========================================================================
+  // DOCX OUTPUT GENERATION
+  // ===========================================================================
 
   createWordContent(pageContent, docxLib) {
     const children = [];
@@ -468,34 +627,28 @@ class PDFToWordConverter {
     // ── Document title ─────────────────────────────────────────────────────────
     children.push(
       new docxLib.Paragraph({
-        children: [
-          new docxLib.TextRun({
-            text: 'Converted PDF Document',
-            bold: true,
-            size: 32
-          })
-        ],
+        children: [new docxLib.TextRun({ text: 'Converted PDF Document', bold: true, size: 32 })],
         heading: docxLib.HeadingLevel.HEADING_1,
         spacing: { line: 276, lineRule: docxLib.LineRuleType?.AUTO, after: 200 },
         alignment: docxLib.AlignmentType.CENTER
       })
     );
-
     children.push(
       new docxLib.Paragraph({
-        children: [
-          new docxLib.TextRun({
-            text: `Converted on ${new Date().toLocaleString()}`,
-            italics: true,
-            size: 20
-          })
-        ],
+        children: [new docxLib.TextRun({ text: `Converted on ${new Date().toLocaleString()}`, italics: true, size: 20 })],
         spacing: { line: 276, lineRule: docxLib.LineRuleType?.AUTO, after: 400 },
         alignment: docxLib.AlignmentType.CENTER
       })
     );
 
     // ── Page content ───────────────────────────────────────────────────────────
+    const alignmentMap = {
+      left: docxLib.AlignmentType.LEFT,
+      right: docxLib.AlignmentType.RIGHT,
+      center: docxLib.AlignmentType.CENTER,
+      justify: docxLib.AlignmentType.JUSTIFIED
+    };
+
     pageContent.forEach((paragraphs, index) => {
       if (index > 0) {
         children.push(new docxLib.Paragraph({ text: '', pageBreakBefore: true }));
@@ -503,45 +656,30 @@ class PDFToWordConverter {
 
       (paragraphs || []).forEach((paragraph) => {
         const isRtl = Boolean(paragraph.isRtl);
-        const lines = (paragraph.text || '').split(/\n+/).filter((line) => line.trim());
+        const lines = (paragraph.text || '').split(/\n+/).filter((l) => l.trim());
+        const docxAlignment = alignmentMap[paragraph.alignment] || (isRtl ? docxLib.AlignmentType.RIGHT : docxLib.AlignmentType.LEFT);
 
         lines.forEach((line) => {
-          // ── TextRun: set RTL character direction so shaping is correct ──
-          const run = new docxLib.TextRun({
+          const runProps = {
             text: line,
             bold: Boolean(paragraph.isBold),
-            // size is in half-points; ensure a sensible minimum
-            size: Math.max(20, paragraph.fontSize || 24),
-            italics: false,
-            // rightToLeft on TextRun forces the Unicode BiDi override
+            italics: Boolean(paragraph.isItalic),
+            size: Math.max(16, paragraph.fontSize || 24),
             rightToLeft: isRtl
-          });
-
-          // ── Paragraph: set direction, alignment, and generous line spacing ──
-          const paragraphProps = {
-            children: [run],
-            alignment: isRtl
-              ? docxLib.AlignmentType.RIGHT
-              : docxLib.AlignmentType.LEFT,
-            // bidirectional + rightToLeft both set the paragraph-level bidi flag (w:bidi)
-            // bidirectional is the canonical docx.js v7 property name
-            bidirectional: isRtl,
-            rightToLeft: isRtl,
-            spacing: isRtl
-              ? {
-                // 360 twips = 1.5× line height; prevents diacritic/nunation overlap
-                line: 360,
-                lineRule: docxLib.LineRuleType?.AUTO ?? 'auto',
-                after: 200   // 200 twips (~3.5mm) gap between paragraphs
-              }
-              : {
-                line: 276,
-                lineRule: docxLib.LineRuleType?.AUTO ?? 'auto',
-                after: 120
-              }
           };
 
-          // Inject textDirection if the docx version supports it
+          const paragraphProps = {
+            children: [new docxLib.TextRun(runProps)],
+            alignment: docxAlignment,
+            bidirectional: isRtl,
+            rightToLeft: isRtl,
+            spacing: {
+              line: isRtl ? 360 : 276,
+              lineRule: docxLib.LineRuleType?.AUTO ?? 'auto',
+              after: isRtl ? 200 : 120
+            }
+          };
+
           if (isRtl && docxLib.TextDirection) {
             paragraphProps.textDirection =
               docxLib.TextDirection.RIGHT_TO_LEFT_OVERRIDE ||
@@ -557,6 +695,10 @@ class PDFToWordConverter {
     return children;
   }
 
+  // -----------------------------------------------------------------------
+  // Utility
+  // -----------------------------------------------------------------------
+
   readFile(file) {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -568,7 +710,7 @@ class PDFToWordConverter {
 }
 
 // ============================================================================
-// 2. WORD TO PDF CONVERTER
+// 2. WORD TO PDF CONVERTER — High-Fidelity Formatting-Preserving Engine
 // ============================================================================
 
 class WordToPDFConverter {
@@ -577,21 +719,14 @@ class WordToPDFConverter {
     this.mammothLib = null;
   }
 
+  // ---------------------------------------------------------------------------
+  // Library loader
+  // ---------------------------------------------------------------------------
+
   async getMammoth() {
-    if (this.mammothLib) {
-      return this.mammothLib;
-    }
-
-    if (globalThis.mammoth) {
-      this.mammothLib = globalThis.mammoth;
-      return this.mammothLib;
-    }
-
-    if (window.mammoth) {
-      this.mammothLib = window.mammoth;
-      return this.mammothLib;
-    }
-
+    if (this.mammothLib) return this.mammothLib;
+    if (globalThis.mammoth) { this.mammothLib = globalThis.mammoth; return this.mammothLib; }
+    if (window.mammoth) { this.mammothLib = window.mammoth; return this.mammothLib; }
     try {
       const module = await import('https://cdn.jsdelivr.net/npm/mammoth@1.6.0/+esm');
       this.mammothLib = module.default || module;
@@ -603,69 +738,348 @@ class WordToPDFConverter {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // Main conversion entry point
+  // ---------------------------------------------------------------------------
+
   async convert(file) {
+    let container = null;
     try {
       showLoading('📄 Reading Word document...');
 
       const arrayBuffer = await this.readFile(file);
       const mammothLib = await this.getMammoth();
-      const result = await mammothLib.convertToHtml({ arrayBuffer });
+
+      // Use custom style mappings for better formatting preservation
+      const result = await mammothLib.convertToHtml({
+        arrayBuffer,
+        styleMap: [
+          // Preserve heading levels
+          "p[style-name='Heading 1'] => h1:fresh",
+          "p[style-name='Heading 2'] => h2:fresh",
+          "p[style-name='Heading 3'] => h3:fresh",
+          "p[style-name='Heading 4'] => h4:fresh",
+          "p[style-name='Heading 5'] => h5:fresh",
+          "p[style-name='Heading 6'] => h6:fresh",
+          // Preserve list items
+          "p[style-name='List Paragraph'] => li > p",
+          // Preserve block quotes
+          "p[style-name='Quote'] => blockquote > p",
+          // Bold and italic are preserved by default by Mammoth
+        ]
+      });
 
       this.wordContent = result.value;
 
-      showLoading('🔄 Converting to PDF...');
+      // Log any conversion warnings
+      if (result.messages && result.messages.length > 0) {
+        console.log('Mammoth conversion messages:', result.messages);
+      }
 
-      const container = document.createElement('div');
-      container.innerHTML = this.wordContent;
-      container.style.cssText = `
-        padding: 16mm;
-        font-family: 'Segoe UI', Arial, Tahoma, 'Noto Naskh Arabic', 'Times New Roman', sans-serif;
-        line-height: 1.6;
-        color: #111827;
-        background: white;
-        width: 210mm;
-        min-height: 297mm;
-        box-sizing: border-box;
-        margin: 0 auto;
-      `;
+      showLoading('🔄 Preparing document for PDF...');
+
+      // Build the styled HTML container
+      container = this.buildStyledContainer(this.wordContent);
+
+      // Detect and mark RTL paragraphs
+      this.markRTLParagraphs(container);
 
       document.body.appendChild(container);
 
-      showLoading('🖼️ Rendering PDF...');
+      showLoading('🖼️ Rendering high-quality PDF...');
 
-      const options = {
-        margin: [12, 12, 12, 12],
-        filename: 'converted.pdf',
-        image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: {
-          scale: 2,
-          useCORS: true,
-          logging: false,
-          letterRendering: true,
-          scrollX: 0,
-          scrollY: 0
-        },
-        jsPDF: {
-          unit: 'mm',
-          format: 'a4',
-          orientation: 'portrait'
-        },
-        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
-      };
-
-      if (window.html2pdf) {
-        const pdfBlob = await window.html2pdf().set(options).from(container).outputPdf('blob');
-        document.body.removeChild(container);
-        return pdfBlob;
-      }
+      const pdfBlob = await this.renderToPDF(container);
 
       document.body.removeChild(container);
-      throw new Error('html2pdf.js failed to load from the CDN.');
+      return pdfBlob;
 
     } catch (error) {
+      if (container && container.parentNode) {
+        document.body.removeChild(container);
+      }
       throw new Error(`Word to PDF conversion failed: ${error.message}`);
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // Build styled HTML container with comprehensive typography
+  // ---------------------------------------------------------------------------
+
+  buildStyledContainer(htmlContent) {
+    const container = document.createElement('div');
+    container.innerHTML = htmlContent;
+
+    // Inject comprehensive styles
+    const style = document.createElement('style');
+    style.textContent = `
+      /* ── Arabic web font from Google Fonts ── */
+      @import url('https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap');
+
+      /* ── Base typography ── */
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        padding: 0;
+        font-family: 'Segoe UI', 'Noto Naskh Arabic', Tahoma, Arial, 'Times New Roman', sans-serif;
+        font-size: 12pt;
+        line-height: 1.6;
+        color: #1a1a1a;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+
+      /* ── Headings ── */
+      h1 {
+        font-size: 20pt;
+        font-weight: 700;
+        margin-top: 0;
+        margin-bottom: 12pt;
+        line-height: 1.3;
+        color: #111;
+      }
+
+      h2 {
+        font-size: 16pt;
+        font-weight: 700;
+        margin-top: 18pt;
+        margin-bottom: 8pt;
+        line-height: 1.35;
+        color: #222;
+      }
+
+      h3 {
+        font-size: 13pt;
+        font-weight: 600;
+        margin-top: 14pt;
+        margin-bottom: 6pt;
+        line-height: 1.4;
+        color: #333;
+      }
+
+      h4 {
+        font-size: 12pt;
+        font-weight: 600;
+        margin-top: 12pt;
+        margin-bottom: 4pt;
+        color: #333;
+      }
+
+      h5, h6 {
+        font-size: 11pt;
+        font-weight: 600;
+        margin-top: 10pt;
+        margin-bottom: 4pt;
+        color: #444;
+      }
+
+      /* ── Paragraphs ── */
+      p {
+        margin-top: 0;
+        margin-bottom: 8pt;
+        text-align: justify;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+      }
+
+      /* ── Lists ── */
+      ul, ol {
+        margin-top: 4pt;
+        margin-bottom: 8pt;
+        padding-left: 24pt;
+      }
+
+      li {
+        margin-bottom: 3pt;
+        line-height: 1.5;
+      }
+
+      li > p {
+        margin-bottom: 2pt;
+      }
+
+      /* ── Tables ── */
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 10pt 0;
+        table-layout: fixed;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+      }
+
+      td, th {
+        border: 1pt solid #999;
+        padding: 5pt 8pt;
+        vertical-align: top;
+        font-size: 11pt;
+        line-height: 1.4;
+      }
+
+      th {
+        background-color: #f0f0f0;
+        font-weight: 600;
+      }
+
+      /* ── Blockquotes ── */
+      blockquote {
+        margin: 8pt 0;
+        padding: 6pt 16pt;
+        border-left: 3pt solid #ccc;
+        color: #555;
+        font-style: italic;
+      }
+
+      /* ── Horizontal rules ── */
+      hr {
+        border: none;
+        border-top: 1pt solid #ccc;
+        margin: 12pt 0;
+      }
+
+      /* ── Links ── */
+      a {
+        color: #2563eb;
+        text-decoration: underline;
+      }
+
+      /* ── Images ── */
+      img {
+        max-width: 100%;
+        height: auto;
+      }
+
+      /* ── RTL support (Arabic content) ── */
+      .rtl-paragraph {
+        direction: rtl;
+        text-align: right;
+        unicode-bidi: embed;
+        font-family: 'Noto Naskh Arabic', 'Segoe UI', Tahoma, Arial, sans-serif;
+        line-height: 1.8;
+      }
+
+      /* ── Page break hints ── */
+      h1, h2, h3 {
+        page-break-after: avoid;
+      }
+
+      table, figure, blockquote {
+        page-break-inside: avoid;
+      }
+
+      /* ── Prevent text overflow ── */
+      * {
+        max-width: 100%;
+      }
+    `;
+
+    container.prepend(style);
+
+    // Apply container-level styles
+    container.style.cssText = `
+      padding: 20mm 25mm;
+      font-family: 'Segoe UI', 'Noto Naskh Arabic', Tahoma, Arial, 'Times New Roman', sans-serif;
+      line-height: 1.6;
+      color: #1a1a1a;
+      background: white;
+      width: 210mm;
+      min-height: 297mm;
+      box-sizing: border-box;
+      margin: 0 auto;
+      position: relative;
+    `;
+
+    return container;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Detect and mark RTL paragraphs (Arabic content)
+  // ---------------------------------------------------------------------------
+
+  markRTLParagraphs(container) {
+    const RTL_RANGE = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
+    const paragraphs = container.querySelectorAll('p, h1, h2, h3, h4, h5, h6, li, td, th');
+
+    paragraphs.forEach((el) => {
+      const text = el.textContent || '';
+      const rtlChars = (text.match(new RegExp(RTL_RANGE.source, 'g')) || []).length;
+      const latinChars = (text.match(/[A-Za-z0-9]/g) || []).length;
+      const totalAlpha = rtlChars + latinChars;
+
+      // If more than 40% of alphabetic chars are RTL, mark as RTL
+      if (totalAlpha > 0 && rtlChars / totalAlpha > 0.4) {
+        el.classList.add('rtl-paragraph');
+        el.setAttribute('dir', 'rtl');
+      }
+    });
+
+    // Also check if the entire document is predominantly RTL
+    const fullText = container.textContent || '';
+    const totalRtl = (fullText.match(new RegExp(RTL_RANGE.source, 'g')) || []).length;
+    const totalLatin = (fullText.match(/[A-Za-z0-9]/g) || []).length;
+    if (totalRtl + totalLatin > 0 && totalRtl / (totalRtl + totalLatin) > 0.5) {
+      container.style.direction = 'rtl';
+      container.style.textAlign = 'right';
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Render HTML to PDF using html2pdf.js with high quality settings
+  // ---------------------------------------------------------------------------
+
+  async renderToPDF(container) {
+    if (!window.html2pdf) {
+      throw new Error('html2pdf.js failed to load from the CDN.');
+    }
+
+    // A4 dimensions in mm
+    const MARGIN_TOP = 20;
+    const MARGIN_BOTTOM = 20;
+    const MARGIN_LEFT = 25;
+    const MARGIN_RIGHT = 25;
+
+    const options = {
+      margin: [MARGIN_TOP, MARGIN_RIGHT, MARGIN_BOTTOM, MARGIN_LEFT],
+      filename: 'converted.pdf',
+      image: { type: 'png', quality: 1.0 },
+      html2canvas: {
+        scale: 3,
+        useCORS: true,
+        logging: false,
+        letterRendering: true,
+        scrollX: 0,
+        scrollY: 0,
+        windowWidth: 794,
+        windowHeight: 1123,
+        backgroundColor: '#ffffff'
+      },
+      jsPDF: {
+        unit: 'mm',
+        format: 'a4',
+        orientation: 'portrait',
+        compress: true
+      },
+      pagebreak: {
+        mode: ['avoid-all', 'css', 'legacy'],
+        before: '.page-break-before',
+        after: '.page-break-after',
+        avoid: ['table', 'blockquote', 'h1', 'h2', 'h3']
+      }
+    };
+
+    const pdfBlob = await window.html2pdf()
+      .set(options)
+      .from(container)
+      .outputPdf('blob');
+
+    return pdfBlob;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Utility
+  // ---------------------------------------------------------------------------
 
   readFile(file) {
     return new Promise((resolve, reject) => {
