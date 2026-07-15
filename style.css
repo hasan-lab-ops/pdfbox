@@ -419,3 +419,15 @@ body {
         padding: 2rem 1rem;
     }
 }
+
+/* Word to PDF hidden container overrides to prevent dark mode bleeding into generated PDF */
+#hidden-html2pdf {
+    color: #000 !important;
+    background-color: #fff !important;
+    padding: 20px !important;
+    font-family: Arial, sans-serif !important;
+}
+
+#hidden-html2pdf * {
+    color: #000 !important;
+}

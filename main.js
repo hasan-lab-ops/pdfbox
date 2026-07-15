@@ -81,9 +81,9 @@ function setupSingleFileUI(dropId, inputId, stateKey, expectedType, optionsId, f
     setupDragAndDrop(dropId, inputId, (files) => {
         let validFiles = files;
         if (expectedType === 'application/pdf') {
-            validFiles = files.filter(f => f.type === 'application/pdf');
+            validFiles = files.filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
         } else if (expectedType === '.docx') {
-            validFiles = files.filter(f => f.name.endsWith('.docx') || f.type.includes('wordprocessingml'));
+            validFiles = files.filter(f => f.name.toLowerCase().endsWith('.docx') || f.type.includes('wordprocessingml'));
         }
         
         if (validFiles.length > 0) {
@@ -101,7 +101,7 @@ function setupSingleFileUI(dropId, inputId, stateKey, expectedType, optionsId, f
 
 // ---------------- Merge PDFs ----------------
 setupDragAndDrop('merge-drop-zone', 'merge-input', (files) => {
-    const pdfFiles = files.filter(f => f.type === 'application/pdf');
+    const pdfFiles = files.filter(f => f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf'));
     state.mergeFiles = [...state.mergeFiles, ...pdfFiles];
     renderMergeList();
 });
@@ -151,7 +151,7 @@ document.getElementById('split-btn').addEventListener('click', async () => {
 
 // ---------------- Image to PDF ----------------
 setupDragAndDrop('img2pdf-drop-zone', 'img2pdf-input', (files) => {
-    const imageFiles = files.filter(f => f.type.startsWith('image/'));
+    const imageFiles = files.filter(f => f.type.startsWith('image/') || f.name.match(/\.(jpg|jpeg|png)$/i));
     state.imageFiles = [...state.imageFiles, ...imageFiles];
     renderImageList();
 });
