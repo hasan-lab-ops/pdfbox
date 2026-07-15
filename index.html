@@ -7,7 +7,7 @@
   <meta name="description" content="PDF BOX — Free, fast, and secure online PDF tools. Merge, split, compress, rotate, convert PDFs, and more. No upload required — works entirely in your browser." />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="./style.css" />
 </head>
 <body>
 
@@ -1049,9 +1049,8 @@
   <div class="toast" id="toast"></div>
 
   <!-- Scripts -->
-  <!-- pdf-lib-with-encrypt: superset of pdf-lib with real AES encryption support -->
+  <!-- External CDNs -->
   <script src="https://unpkg.com/pdf-lib-with-encrypt/dist/pdf-lib.min.js"></script>
-  <!-- Fallback: if pdf-lib-with-encrypt fails to load, load standard pdf-lib -->
   <script>
     if (typeof PDFLib === 'undefined') {
       var s = document.createElement('script');
@@ -1061,17 +1060,18 @@
   </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <!-- docx.js for Word document creation (PDF→Word) -->
   <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
-  <!-- mammoth.js for Word document reading (Word→PDF) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
-  <!-- html2canvas for HTML rendering (Word→PDF) -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  
   <script>
     if (typeof pdfjsLib !== 'undefined') {
       pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
     }
   </script>
-  <script src="main.js"></script>
+
+  <!-- Local Custom Scripts -->
+  <script src="./main.js"></script>
 </body>
 </html>
