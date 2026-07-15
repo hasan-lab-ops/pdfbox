@@ -1190,10 +1190,11 @@ async function viewerZoomOut() {
    ────────────────────────────────────────────────── */
 
 /**
- * Isolated logic to parse PDF and convert to DOCX.
- * Extracts text, normalizes Arabic presentation forms using NFKC, detects RTL, handles gap spacing, and extracts styling.
+ * Completely isolated, robust DOM-based PDF to DOCX converter.
+ * Renders TextLayer to a hidden container, parses DOM absolute coordinates, handles Arabic Bidi/Shaping, 
+ * Maps unmapped glyphs to bullets, and constructs a styled DOCX.
  */
-async function parseAndConvertPDFToWord(file, onProgress) {
+async function convertPDFToWordIsolated(file, onProgress) {
   const bytes = await readFileBytes(file);
   const pdfDoc = await pdfjsLib.getDocument({ data: bytes }).promise;
   const numPages = pdfDoc.numPages;
@@ -1205,136 +1206,192 @@ async function parseAndConvertPDFToWord(file, onProgress) {
     return ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
   };
 
-  for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-    onProgress(5 + Math.round(((pageNum - 1) / numPages) * 80), `Extracting page ${pageNum} of ${numPages}…`);
+  const sanitizeText = (text) => {
+    // Replace typical unmapped PUA characters and control characters with bullets (fixes blank boxes)
+    return text.replace(/[\uE000-\uF8FF\u0000-\u001F\u007F-\u009F]/g, '•');
+  };
 
-    const page = await pdfDoc.getPage(pageNum);
-    const textContent = await page.getTextContent({ includeMarkedContent: false });
-    const items = textContent.items.filter(item => item.str && item.str.trim() !== '');
+  const hiddenContainer = document.createElement('div');
+  hiddenContainer.style.position = 'absolute';
+  hiddenContainer.style.top = '-99999px';
+  hiddenContainer.style.left = '-99999px';
+  hiddenContainer.style.visibility = 'hidden';
+  hiddenContainer.style.width = '2000px'; 
+  document.body.appendChild(hiddenContainer);
 
-    if (items.length === 0) {
-      docxChildren.push(new docx.Paragraph({ children: [] }));
-      if (pageNum < numPages) docxChildren.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
-      continue;
-    }
+  try {
+    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+      onProgress(5 + Math.round(((pageNum - 1) / numPages) * 80), `Extracting page ${pageNum} of ${numPages}…`);
 
-    const sortedItems = [...items].sort((a, b) => b.transform[5] - a.transform[5]);
-    const lines = [];
-    let currentLine = [sortedItems[0]];
-    let currentY = sortedItems[0].transform[5];
-    const tolerance = 4;
+      const page = await pdfDoc.getPage(pageNum);
+      const viewport = page.getViewport({ scale: 1.0 });
 
-    for (let i = 1; i < sortedItems.length; i++) {
-      const item = sortedItems[i];
-      if (Math.abs(item.transform[5] - currentY) <= tolerance) {
-        currentLine.push(item);
-      } else {
-        lines.push(currentLine);
-        currentLine = [item];
-        currentY = item.transform[5];
+      const textContent = await page.getTextContent({ includeMarkedContent: false });
+      
+      hiddenContainer.innerHTML = '';
+      
+      // Native PDF.js TextLayer DOM rendering
+      await pdfjsLib.renderTextLayer({
+        textContent: textContent,
+        container: hiddenContainer,
+        viewport: viewport,
+        textDivs: []
+      }).promise;
+
+      const spans = Array.from(hiddenContainer.querySelectorAll('span'));
+      
+      if (spans.length === 0) {
+        docxChildren.push(new docx.Paragraph({ children: [] }));
+        if (pageNum < numPages) docxChildren.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
+        continue;
       }
-    }
-    if (currentLine.length) lines.push(currentLine);
 
-    for (const line of lines) {
-      const lineStr = line.map(i => i.str).join('');
-      const isRTL = isRTLText(lineStr);
-
-      if (isRTL) {
-        line.sort((a, b) => b.transform[4] - a.transform[4]); // Sort Right-to-Left
-      } else {
-        line.sort((a, b) => a.transform[4] - b.transform[4]); // Sort Left-to-Right
-      }
-
-      const runs = [];
-      let currentRunStr = '';
-      let currentRunStyle = null;
-
-      const finishRun = () => {
-        if (currentRunStr) {
-          const runProps = {
-            text: currentRunStr,
-            size: currentRunStyle.size * 2,
-            font: currentRunStyle.font,
-            rightToLeft: isRTL
-          };
-          if (currentRunStyle.color && currentRunStyle.color !== '000000') {
-            runProps.color = currentRunStyle.color;
-          }
-          runs.push(new docx.TextRun(runProps));
-        }
-      };
-
-      for (let i = 0; i < line.length; i++) {
-        const item = line[i];
-        const fontSize = Math.abs(item.transform[3]) || 12;
-        let fontName = textContent.styles[item.fontName]?.fontFamily || (isRTL ? 'Arial' : 'Calibri');
-        fontName = fontName.replace(/["']/g, '').split(',')[0].trim();
-        if (fontName === 'sans-serif') fontName = isRTL ? 'Arial' : 'Calibri';
+      // Extract accurate Layout & Styles from DOM bounds
+      const elements = spans.map((span, index) => {
+        const style = window.getComputedStyle(span);
+        const rect = span.getBoundingClientRect();
+        const item = textContent.items[index];
         
         let colorHex = '000000';
-        if (item.color && item.color.length >= 3) {
+        if (item && item.color && item.color.length >= 3) {
           let [r, g, b] = item.color;
-          // Scale float colors (0.0 to 1.0) to 0-255 bounds
           if (r <= 1 && g <= 1 && b <= 1 && (r > 0 || g > 0 || b > 0 || item.color.some(c => !Number.isInteger(c)))) {
-            r = Math.round(r * 255);
-            g = Math.round(g * 255);
-            b = Math.round(b * 255);
+            r = Math.round(r * 255); g = Math.round(g * 255); b = Math.round(b * 255);
           }
           colorHex = rgbToHex(Math.round(r), Math.round(g), Math.round(b));
         }
-        
-        const itemStyle = { size: Math.round(Math.min(Math.max(fontSize, 8), 72)), color: colorHex, font: fontName };
-        let prependSpace = false;
 
-        if (i > 0) {
-          const prev = line[i - 1];
-          let gap = 0;
-          if (isRTL) {
-            gap = prev.transform[4] - (item.transform[4] + (item.width || 0));
-          } else {
-            gap = item.transform[4] - (prev.transform[4] + (prev.width || 0));
-          }
-          if (gap > fontSize * 0.25) { // Use 25% of font size for stricter gap detection to avoid disconnecting cursive letters
-            prependSpace = true;
-          }
+        let fontWeight = style.fontWeight || 'normal';
+        if (item && item.fontName && item.fontName.toLowerCase().includes('bold')) {
+          fontWeight = 'bold';
         }
 
-        const styleChanged = !currentRunStyle || 
-                             currentRunStyle.size !== itemStyle.size || 
-                             currentRunStyle.color !== itemStyle.color || 
-                             currentRunStyle.font !== itemStyle.font;
+        return {
+          text: sanitizeText(span.textContent || ''),
+          top: rect.top,
+          left: rect.left,
+          width: rect.width,
+          fontSize: parseFloat(style.fontSize) || 12,
+          fontFamily: (style.fontFamily || 'Arial').replace(/["']/g, '').split(',')[0].trim(),
+          fontWeight: fontWeight,
+          color: colorHex
+        };
+      }).filter(e => e.text.trim() !== '');
 
-        let itemStr = item.str;
-        // PDF.js often extracts multi-character RTL words in visual LTR order. Reverse it for logical Word output.
-        if (isRTLText(itemStr)) {
-          itemStr = Array.from(itemStr).reverse().join('');
-        }
-        // Normalize any presentation forms into standard Unicode characters so Word can connect them automatically
-        itemStr = itemStr.normalize('NFKC');
+      if (elements.length === 0) continue;
 
-        if (styleChanged) {
-          finishRun();
-          currentRunStyle = itemStyle;
-          currentRunStr = (prependSpace ? ' ' : '') + itemStr;
+      // Group by logical lines based on absolute vertical bounds
+      elements.sort((a, b) => a.top - b.top);
+      
+      const lines = [];
+      let currentLine = [elements[0]];
+      let currentTop = elements[0].top;
+      const tolerance = 5;
+
+      for (let i = 1; i < elements.length; i++) {
+        const el = elements[i];
+        if (Math.abs(el.top - currentTop) <= tolerance) {
+          currentLine.push(el);
         } else {
-          currentRunStr += (prependSpace ? ' ' : '') + itemStr;
+          lines.push(currentLine);
+          currentLine = [el];
+          currentTop = el.top;
         }
       }
-      finishRun();
+      if (currentLine.length) lines.push(currentLine);
 
-      if (runs.length > 0) {
-        docxChildren.push(new docx.Paragraph({
-          children: runs,
-          bidirectional: isRTL,
-          alignment: isRTL ? docx.AlignmentType.RIGHT : docx.AlignmentType.LEFT,
-          spacing: { after: 100 }
-        }));
+      for (const line of lines) {
+        const lineStr = line.map(e => e.text).join('');
+        const isRTL = isRTLText(lineStr);
+
+        // Sort items horizontally within the line
+        if (isRTL) {
+          line.sort((a, b) => b.left - a.left);
+        } else {
+          line.sort((a, b) => a.left - b.left);
+        }
+
+        const runs = [];
+        let currentRunStr = '';
+        let currentRunStyle = null;
+
+        const finishRun = () => {
+          if (currentRunStr) {
+            const runProps = {
+              text: currentRunStr,
+              size: Math.round(currentRunStyle.fontSize * 2),
+              font: currentRunStyle.fontFamily,
+              rightToLeft: isRTL
+            };
+            if (currentRunStyle.fontWeight === 'bold' || parseInt(currentRunStyle.fontWeight) >= 600) {
+              runProps.bold = true;
+            }
+            if (currentRunStyle.color && currentRunStyle.color !== '000000') {
+              runProps.color = currentRunStyle.color;
+            }
+            runs.push(new docx.TextRun(runProps));
+          }
+        };
+
+        for (let i = 0; i < line.length; i++) {
+          const el = line[i];
+          let prependSpace = false;
+          
+          if (i > 0) {
+            const prev = line[i - 1];
+            let gap = isRTL ? (prev.left - (el.left + el.width)) : (el.left - (prev.left + prev.width));
+            if (gap > el.fontSize * 0.25) {
+               prependSpace = true;
+            }
+          }
+
+          const styleChanged = !currentRunStyle || 
+                               currentRunStyle.fontSize !== el.fontSize || 
+                               currentRunStyle.color !== el.color || 
+                               currentRunStyle.fontFamily !== el.fontFamily ||
+                               currentRunStyle.fontWeight !== el.fontWeight;
+
+          let elText = el.text;
+          
+          // Bidirectional Reordering & Shaping
+          if (isRTLText(elText)) {
+            // Keep English/Technical terms (like "compiler", "Assembly") intact, reverse Arabic
+            elText = elText.split(/([A-Za-z0-9_\-\.\:\(\)\[\]]+)/).map(part => {
+               if (/[A-Za-z0-9]/.test(part)) return part;
+               return Array.from(part).reverse().join('');
+            }).join('');
+          }
+          
+          // Connect cursive letters elegantly by mapping presentation forms to base chars
+          elText = elText.normalize('NFKC');
+
+          if (styleChanged) {
+            finishRun();
+            currentRunStyle = el;
+            currentRunStr = (prependSpace ? ' ' : '') + elText;
+          } else {
+            currentRunStr += (prependSpace ? ' ' : '') + elText;
+          }
+        }
+        finishRun();
+
+        if (runs.length > 0) {
+          docxChildren.push(new docx.Paragraph({
+            children: runs,
+            bidirectional: isRTL,
+            alignment: isRTL ? docx.AlignmentType.RIGHT : docx.AlignmentType.LEFT,
+            spacing: { after: 100 }
+          }));
+        }
+      }
+      
+      if (pageNum < numPages) {
+        docxChildren.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
       }
     }
-
-    if (pageNum < numPages) {
-      docxChildren.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
+  } finally {
+    if (hiddenContainer.parentNode) {
+      hiddenContainer.parentNode.removeChild(hiddenContainer);
     }
   }
 
@@ -1368,7 +1425,7 @@ async function pdfToWord() {
   setButtonEnabled('btn-pdf2word', false);
 
   try {
-    const blob = await parseAndConvertPDFToWord(file, (progress, msg) => {
+    const blob = await convertPDFToWordIsolated(file, (progress, msg) => {
       setProgress('pdf2word', progress, msg);
     });
     
