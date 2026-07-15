@@ -1,7 +1,0 @@
-{
-  "type": "module",
-  "dependencies": {
-    "@playwright/test": "^1.61.1",
-    "pdf-lib": "^1.17.1"
-  }
-}
