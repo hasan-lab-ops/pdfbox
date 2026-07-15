@@ -1,438 +1,830 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
-    <title>PDFBox | Complete PDF & Document Converter Toolkit</title>
-    <meta name="description"
-        content="Professional PDF & Document conversion tools. Convert PDF to Word, Word to PDF, encrypt/decrypt PDFs with passwords. Fast, secure, client-side processing.">
-    <meta name="keywords"
-        content="pdf to word, word to pdf, pdf converter, pdf encryption, password protect pdf, pdf decrypt, document converter">
-    <link rel="canonical" href="https://pdfbox.online/">
-    <link rel="stylesheet" href="css/styles.css">
-
-    <!-- Google Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-
-    <!-- Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
-
-    <!-- Core Libraries -->
-    <!-- PDF-Lib: Advanced PDF manipulation with encryption support -->
-    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
-
-    <!-- pdf.js: PDF text extraction and rendering -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
-    <script>
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
-    </script>
-<!-- Mammoth.js: DOCX → HTML -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
-
-<!-- html2pdf: HTML → PDF -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-    <!-- html2canvas: HTML to image conversion -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-
-    <!-- html2pdf.js: HTML to PDF export (pinned to stable v0.10.1) -->
-
-    <!-- Tesseract.js: OCR for scanned PDFs in the browser -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/6.0.1/tesseract.min.js"></script>
-
-    <!-- JSZip: bundle multiple converted images/pages into a downloadable archive -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-
-    <!-- مكتبة docx المخصصة للمتصفح مباشرة عبر ESM -->
-    <script type="module">
-        import * as docxModule from 'https://cdn.jsdelivr.net/npm/docx@9.7.1/+esm';
-        window.docx = docxModule;
-        window.docxReady = Promise.resolve(docxModule);
-    </script>
-
-    <!-- Mammoth.js: DOCX file reading -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
-<!-- مكتبة تحويل الـ HTML إلى PDF بجودة عالية -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PDF BOX — Free Online PDF Tools</title>
+  <meta name="description" content="PDF BOX — Free, fast, and secure online PDF tools. Merge, split, compress, rotate, convert PDFs and more. No upload required — works entirely in your browser." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
 </head>
-
 <body>
 
-    <!-- Header -->
-    <header>
-        <div class="container nav-container">
-            <a href="#home" class="logo">
-                <i data-lucide="file-text"></i> PDF Toolkit
-            </a>
-            <ul class="nav-links" id="nav-links">
-                <li><a href="#home">Home</a></li>
-                <li><a href="#tools">All Tools</a></li>
-                <li><a href="#about">About</a></li>
-                <li><a href="#contact">Contact</a></li>
-                <li id="nav-auth-container" style="display: flex; align-items: center;">
-                    <a href="#auth" id="nav-signin-btn" class="btn"
-                        style="padding: 6px 16px; font-size: 0.9rem; margin-left: 8px;">Sign In</a>
-                    <div id="nav-user-menu" class="header-user-menu hidden">
-                        <div class="header-avatar" id="nav-user-avatar">U</div>
-                        <span class="header-username" id="nav-user-name">User</span>
-                        <i data-lucide="chevron-down" style="width: 16px; height: 16px;"></i>
-                        <div class="user-dropdown" id="nav-user-dropdown">
-                            <div class="user-dropdown-header">
-                                <div class="user-dropdown-name" id="dropdown-user-name">User Name</div>
-                                <div class="user-dropdown-email" id="dropdown-user-email">user@example.com</div>
-                            </div>
-                            <button id="btn-signout">
-                                <i data-lucide="log-out" style="width: 16px; height: 16px;"></i> Sign Out
-                            </button>
-                        </div>
-                    </div>
-                </li>
-            </ul>
+  <!-- ===== NAVBAR ===== -->
+  <nav class="navbar" id="navbar">
+    <div class="nav-container">
+      <a href="#" class="nav-logo">
+        <div class="logo-icon">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+            <rect x="3" y="2" width="16" height="20" rx="2" fill="url(#logoGrad)" />
+            <rect x="9" y="6" width="14" height="20" rx="2" fill="url(#logoGrad2)" opacity="0.8"/>
+            <path d="M7 9h8M7 12h8M7 15h5" stroke="#0A0F2E" stroke-width="1.5" stroke-linecap="round"/>
+            <defs>
+              <linearGradient id="logoGrad" x1="3" y1="2" x2="19" y2="22" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#00E5FF"/>
+                <stop offset="1" stop-color="#00BCD4"/>
+              </linearGradient>
+              <linearGradient id="logoGrad2" x1="9" y1="6" x2="23" y2="26" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#00BCD4"/>
+                <stop offset="1" stop-color="#0288D1"/>
+              </linearGradient>
+            </defs>
+          </svg>
         </div>
-    </header>
-
-    <!-- Main Content Area -->
-    <main class="container">
-
-        <!-- View: Home -->
-        <section id="view-home" class="view-section">
-            <div class="hero">
-                <h1>Free, Fast & Secure PDF Tools</h1>
-                <p>Everything you need to manage your PDF files. Processed securely in your browser so your files never
-                    leave your computer.</p>
-                <div class="trust-badges">
-                    <span class="badge"><i data-lucide="shield-check"></i> 100% Secure</span>
-                    <span class="badge"><i data-lucide="zap"></i> Lightning Fast</span>
-                    <span class="badge"><i data-lucide="browser"></i> In-Browser Processing</span>
-                </div>
-            </div>
-
-            <h2 style="text-align: center; margin-bottom: 24px;">Our Most Popular Tools</h2>
-            <div class="tools-grid" id="home-tools-grid">
-                <!-- Injected via JS -->
-            </div>
-            <div style="text-align: center; margin-bottom: 40px;">
-                <a href="#tools" class="btn">View All Tools <i data-lucide="arrow-right"></i></a>
-            </div>
-        </section>
-
-        <!-- View: All Tools -->
-        <section id="view-tools" class="view-section hidden">
-            <h1 style="margin-bottom: 32px; text-align: center;">All PDF Tools</h1>
-            <div class="tools-grid" id="all-tools-grid">
-                <!-- Injected via JS -->
-            </div>
-        </section>
-
-        <!-- View: Tool Detail -->
-        <section id="view-tool-detail" class="view-section hidden">
-            <div class="tool-header">
-                <div class="tool-icon" id="tool-detail-icon" style="margin: 0 auto 16px;"></div>
-                <h1 id="tool-detail-title"></h1>
-                <p id="tool-detail-desc"></p>
-            </div>
-
-            <div class="workspace">
-                <div class="dropzone" id="file-dropzone">
-                    <div class="dropzone-icon">
-                        <i data-lucide="upload-cloud"></i>
-                    </div>
-                    <h3>Drop your file here or browse</h3>
-                    <p>PDFs, images, and Word files are all supported for fast browser-based processing.</p>
-                    <div class="dropzone-chip-row">
-                        <span class="status-pill">Fast</span>
-                        <span class="status-pill">Secure</span>
-                        <span class="status-pill">No upload required</span>
-                    </div>
-                    <input type="file" id="file-input" style="display: none;" multiple accept=".pdf,.doc,.docx,image/*">
-                </div>
-
-                <div id="file-list" class="hidden" style="margin-top: 24px;"></div>
-                <div id="page-preview-grid" class="page-preview-grid hidden"></div>
-
-                <div id="tool-options" class="hidden" style="margin-top: 24px; text-align: center;">
-                    <!-- Dynamic options like password input will be injected here -->
-                </div>
-
-                <div id="conversion-notice" class="conversion-notice hidden" role="alert" aria-live="polite"></div>
-
-                <div style="text-align: center; margin-top: 32px;">
-                    <button id="process-btn" class="btn hidden">
-                        <span>Process PDF</span> <i data-lucide="settings"></i>
-                    </button>
-                    <div id="loading-indicator" class="hidden" aria-live="polite">
-                        <div class="spinner"></div>
-                        <div class="loading-copy">
-                            <strong id="loading-message">Processing...</strong>
-                            <div class="progress-track" aria-hidden="true">
-                                <div id="progress-fill" class="progress-fill"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Result Screen -->
-                <div id="result-screen" class="result-screen hidden">
-                    <div class="result-card">
-                        <div class="result-icon">
-                            <i data-lucide="check-circle"></i>
-                        </div>
-                        <h2>Your file is ready</h2>
-                        <p id="result-filename" class="result-filename"></p>
-                        <div class="result-actions">
-                            <button id="result-download-btn" class="btn result-download-btn">
-                                <i data-lucide="download"></i> Download File
-                            </button>
-                            <button id="result-delete-btn" class="btn btn-outline result-delete-btn">
-                                <i data-lucide="trash-2"></i> Delete File
-                            </button>
-                            <button id="result-startover-btn" class="btn btn-outline result-startover-btn">
-                                <i data-lucide="rotate-ccw"></i> Start Over
-                            </button>
-                        </div>
-                    </div>
-
-                    <div class="continue-in-section">
-                        <h3>Continue in:</h3>
-                        <div class="continue-tools-grid" id="continue-tools-grid">
-                            <!-- Related tools injected here -->
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Dynamic SEO Content injected here -->
-                <div id="tool-detail-article" class="text-page" style="margin-top: 60px;"></div>
-            </div>
-        </section>
-
-        <!-- View: About -->
-        <section id="view-about" class="view-section hidden text-page">
-            <h1>About Us</h1>
-            <p>Welcome to PDF Toolkit, your secure, free, and fast platform for managing PDF files.</p>
-            <p>Our mission is to provide simple yet powerful tools to merge, split, compress, and edit PDFs without
-                compromising your privacy. Unlike many other services that require you to upload your sensitive
-                documents to their servers, our tools leverage modern web technologies to process your files directly in
-                your web browser.</p>
-            <h2>Our Commitment to Privacy</h2>
-            <p>Your privacy is our top priority. Because all processing happens locally on your device, we never see,
-                store, or share your files. Your data remains strictly yours.</p>
-        </section>
-
-        <!-- View: Contact -->
-        <section id="view-contact" class="view-section hidden text-page">
-            <h1>Contact Us</h1>
-            <p>Have questions, suggestions, or experiencing issues? We'd love to hear from you.</p>
-            <form onsubmit="event.preventDefault(); alert('Message sent! (Mock)');">
-                <div class="form-group">
-                    <label>Name</label>
-                    <input type="text" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label>Email</label>
-                    <input type="email" class="form-control" required>
-                </div>
-                <div class="form-group">
-                    <label>Message</label>
-                    <textarea class="form-control" rows="5" required></textarea>
-                </div>
-                <button type="submit" class="btn">Send Message</button>
-            </form>
-            <p style="margin-top: 24px;">Alternative contact: <a
-                    href="https://mail.google.com/mail/?view=cm&fs=1&to=hasan.saad898@gmail.com" target="_blank"
-                    rel="noopener noreferrer">hasan.saad898@gmail.com</a></p>
-        </section>
-
-        <!-- View: Privacy -->
-        <section id="view-privacy" class="view-section hidden text-page">
-            <h1>Privacy Policy</h1>
-            <p>Last updated: July 2026</p>
-            <p>At PDFBox, the privacy and security of your data are our top priorities. We build our PDF tools so users
-                can process documents safely and confidently without exposing sensitive files to unnecessary risk.</p>
-            <h2>1. Information We Collect</h2>
-            <p>We collect as little information as possible. Our priority is to keep your data private and minimize any
-                personal information stored or processed.</p>
-            <ul>
-                <li><strong>Files and Documents:</strong> We do NOT store or access any PDF files, images, or documents
-                    you process with our tools. All uploaded items are processed securely and are removed immediately
-                    after the conversion or merging workflow completes.</li>
-                <li><strong>Processing Security:</strong> When files are handled through any communication channels, we
-                    use fully encrypted and secure protocols. This ensures that data remains protected during the
-                    processing session.</li>
-                <li><strong>Log Files:</strong> We may use standard server logs for monitoring site health. These logs
-                    can include IP address, browser type, ISP, date/time stamp, and referring pages. This information is
-                    not linked to personally identifiable information.</li>
-            </ul>
-        </section>
-
-        <!-- View: Terms -->
-        <section id="view-terms" class="view-section hidden text-page">
-            <h1>Terms of Service</h1>
-            <p>Last updated: July 2026</p>
-            <p>Welcome to PDF Toolkit!</p>
-            <h2>1. Acceptance of Terms</h2>
-            <p>By accessing this website we assume you accept these terms and conditions. Do not continue to use PDF
-                Toolkit if you do not agree to take all of the terms and conditions stated on this page.</p>
-            <h2>2. License and Usage</h2>
-            <p>Unless otherwise stated, PDF Toolkit and/or its licensors own the intellectual property rights for all
-                material on PDF Toolkit. All intellectual property rights are reserved.</p>
-        </section>
-
-        <!-- View: Auth (Sign In / Sign Up) -->
-        <section id="view-auth" class="view-section hidden">
-            <div class="auth-container">
-                <!-- Loading Overlay -->
-                <div class="auth-loading-overlay hidden" id="auth-loading-overlay">
-                    <div class="spinner"
-                        style="border-color: rgba(14, 165, 233, 0.2); border-top-color: var(--primary);"></div>
-                    <h3 id="loading-overlay-text">Signing in securely...</h3>
-                    <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 6px;">Verifying browser
-                        credentials</p>
-                </div>
-
-                <!-- Sign In Form -->
-                <div id="form-signin-container" class="auth-form-pane">
-                    <h2 class="auth-title">Welcome Back</h2>
-                    <p class="auth-subtitle">Sign in to manage your PDFs and access more features.</p>
-                    <button type="button" class="btn-google" id="google-signin-btn">
-                        <svg viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
-                            <g transform="matrix(1, 0, 0, 1, 0, 0)">
-                                <path
-                                    d="M21.35,11.1H12v2.7h5.38c-0.24,1.28 -0.96,2.37 -2.04,3.1v2.58h3.3c1.93,-1.78 3.04,-4.4 3.04,-7.38c0,-0.68 -0.06,-1.34 -0.18,-2H21.35z"
-                                    fill="#4285F4" />
-                                <path
-                                    d="M12,20.6c2.43,0 4.47,-0.8 5.96,-2.2l-3.3,-2.58c-0.92,0.62 -2.1,1 -2.66,1c-2.43,0 -4.5,-1.64 -5.23,-3.85H3.37v2.67C4.85,18.06 8.13,20.6 12,20.6z"
-                                    fill="#34A853" />
-                                <path
-                                    d="M6.77,12.97c-0.18,-0.54 -0.28,-1.11 -0.28,-1.7c0,-0.59 0.1,-1.16 0.28,-1.7V6.9H3.37C2.73,8.19 2.37,9.65 2.37,11.27c0,1.62 0.36,3.08 1.01,4.37l3.39,-2.67z"
-                                    fill="#FBBC05" />
-                                <path
-                                    d="M12,5.7c1.32,0 2.5,0.45 3.44,1.35l2.58,-2.58C16.46,3.02 14.43,2.3 12,2.3C8.13,2.3 4.85,4.84 3.37,7.52l3.39,2.67C7.5,7.98 9.57,5.7 12,5.7z"
-                                    fill="#EA4335" />
-                            </g>
-                        </svg>
-                        Sign in with Google
-                    </button>
-                    <div class="auth-divider">or sign in with email</div>
-                    <form id="form-signin">
-                        <div class="form-group">
-                            <label for="signin-email">Email Address</label>
-                            <div class="input-group">
-                                <i data-lucide="mail"></i>
-                                <input type="email" id="signin-email" class="form-control"
-                                    placeholder="name@example.com" required>
-                            </div>
-                        </div>
-                        <div class="form-group">
-                            <label for="signin-password">Password</label>
-                            <div class="input-group">
-                                <i data-lucide="lock"></i>
-                                <input type="password" id="signin-password" class="form-control" placeholder="••••••••"
-                                    required>
-                            </div>
-                        </div>
-                        <button type="submit" class="btn"
-                            style="width: 100%; justify-content: center; margin-top: 8px;">
-                            Sign In
-                        </button>
-                    </form>
-                </div>
-            </div>
-        </section>
-    </main>
-
-    <!-- Footer -->
-    <footer>
-        <div class="container">
-            <div class="footer-content">
-                <div class="footer-col">
-                    <div class="logo" style="margin-bottom: 16px;">
-                        <i data-lucide="file-text"></i> PDF Toolkit
-                    </div>
-                    <p style="color: var(--text-muted); font-size: 0.9rem;">The simplest, most secure way to manage your
-                        PDF files. Processed entirely in your browser.</p>
-                </div>
-                <div class="footer-col">
-                    <h4>Quick Links</h4>
-                    <ul class="footer-links">
-                        <li><a href="#home">Home</a></li>
-                        <li><a href="#tools">All Tools</a></li>
-                        <li><a href="#about">About Us</a></li>
-                    </ul>
-                </div>
-                <div class="footer-col">
-                    <h4>Legal</h4>
-                    <ul class="footer-links">
-                        <li><a href="#privacy">Privacy Policy</a></li>
-                        <li><a href="#terms">Terms of Service</a></li>
-                        <li><a href="#contact">Contact</a></li>
-                    </ul>
-                </div>
-            </div>
-            <div class="copyright">
-                &copy; 2026 PDF Toolkit. All rights reserved.
-            </div>
-        </div>
-    </footer>
-
-    <!-- Global Loading Overlay -->
-    <div id="global-loader" class="modal-backdrop">
-        <div
-            style="background: white; border-radius: 12px; padding: 40px; text-align: center; box-shadow: var(--shadow-lg); border: 1px solid var(--border); max-width: 320px; width: 100%;">
-            <div class="spinner"
-                style="border-color: rgba(14, 165, 233, 0.2); border-top-color: var(--primary); width: 40px; height: 40px; border-width: 3px; margin-bottom: 16px;">
-            </div>
-            <h3 id="global-loader-text"
-                style="font-weight: 600; margin-bottom: 6px; font-size: 1.15rem; color: var(--text-main);">Signing
-                out...</h3>
-            <p style="color: var(--text-muted); font-size: 0.85rem;">Clearing secure session</p>
-        </div>
+        <span class="logo-text">PDF <span class="logo-accent">BOX</span></span>
+      </a>
+      <div class="nav-links">
+        <a href="#tools" class="nav-link">Tools</a>
+        <a href="#features" class="nav-link">Features</a>
+        <a href="#faq" class="nav-link">FAQ</a>
+      </div>
+      <div class="nav-cta">
+        <a href="#tools" class="btn btn-outline-sm">Get Started</a>
+      </div>
+      <button class="hamburger" id="hamburger" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
     </div>
+  </nav>
 
-    <!-- Toast Notifications -->
-    <div id="toast-container" class="toast-container"></div>
+  <!-- Mobile Menu -->
+  <div class="mobile-menu" id="mobileMenu">
+    <a href="#tools" class="mobile-link" onclick="closeMobileMenu()">Tools</a>
+    <a href="#features" class="mobile-link" onclick="closeMobileMenu()">Features</a>
+    <a href="#faq" class="mobile-link" onclick="closeMobileMenu()">FAQ</a>
+    <a href="#tools" class="btn btn-primary mobile-cta" onclick="closeMobileMenu()">Get Started</a>
+  </div>
 
-    <!-- Google Account Chooser Modal -->
-    <div id="google-modal" class="modal-backdrop">
-        <div class="google-modal-content">
-            <button class="google-modal-close" id="google-modal-close" aria-label="Close modal">
-                <i data-lucide="x" style="width: 20px; height: 20px;"></i>
-            </button>
-            <div class="google-header" style="text-align: center; margin-bottom: 20px;">
-                <svg viewBox="0 0 24 24" width="40" height="40" xmlns="http://www.w3.org/2000/svg">
-                    <g transform="matrix(1, 0, 0, 1, 0, 0)">
-                        <path
-                            d="M21.35,11.1H12v2.7h5.38c-0.24,1.28 -0.96,2.37 -2.04,3.1v2.58h3.3c1.93,-1.78 3.04,-4.4 3.04,-7.38c0,-0.68 -0.06,-1.34 -0.18,-2H21.35z"
-                            fill="#4285F4" />
-                        <path
-                            d="M12,20.6c2.43,0 4.47,-0.8 5.96,-2.2l-3.3,-2.58c-0.92,0.62 -2.1,1 -2.66,1c-2.43,0 -4.5,-1.64 -5.23,-3.85H3.37v2.67C4.85,18.06 8.13,20.6 12,20.6z"
-                            fill="#34A853" />
-                        <path
-                            d="M6.77,12.97c-0.18,-0.54 -0.28,-1.11 -0.28,-1.7c0,-0.59 0.1,-1.16 0.28,-1.7V6.9H3.37C2.73,8.19 2.37,9.65 2.37,11.27c0,1.62 0.36,3.08 1.01,4.37l3.39,-2.67z"
-                            fill="#FBBC05" />
-                        <path
-                            d="M12,5.7c1.32,0 2.5,0.45 3.44,1.35l2.58,-2.58C16.46,3.02 14.43,2.3 12,2.3C8.13,2.3 4.85,4.84 3.37,7.52l3.39,2.67C7.5,7.98 9.57,5.7 12,5.7z"
-                            fill="#EA4335" />
-                    </g>
-                </svg>
-                <h3 style="margin-top: 10px;">Sign in with Google</h3>
-            </div>
-            <!-- سيتم حقن الحسابات هنا بواسطة الجافاسكريبت -->
-            <div id="google-accounts-list" class="google-accounts-list"></div>
-        </div>
+  <!-- ===== HERO ===== -->
+  <section class="hero" id="home">
+    <div class="hero-bg">
+      <div class="hero-orb orb-1"></div>
+      <div class="hero-orb orb-2"></div>
+      <div class="hero-orb orb-3"></div>
+      <div class="grid-overlay"></div>
     </div>
+    <div class="hero-container">
+      <div class="hero-badge">
+        <span class="badge-dot"></span>
+        <span>100% Free — No Sign-up Required</span>
+      </div>
+      <h1 class="hero-title">
+        Your All-in-One<br />
+        <span class="gradient-text">PDF Toolbox</span>
+      </h1>
+      <p class="hero-subtitle">
+        Merge, split, compress, rotate, convert & more. Everything runs <strong>right in your browser</strong> — your files never leave your device.
+      </p>
+      <div class="hero-actions">
+        <a href="#tools" class="btn btn-primary btn-lg">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2"/><polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="2"/></svg>
+          Explore Tools
+        </a>
+        <div class="hero-stats">
+          <div class="stat"><span class="stat-num">10+</span><span class="stat-label">Tools</span></div>
+          <div class="stat-divider"></div>
+          <div class="stat"><span class="stat-num">0</span><span class="stat-label">Uploads</span></div>
+          <div class="stat-divider"></div>
+          <div class="stat"><span class="stat-num">100%</span><span class="stat-label">Private</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="hero-scroll">
+      <div class="scroll-indicator">
+        <div class="scroll-dot"></div>
+      </div>
+    </div>
+  </section>
 
-    <!-- Scripts (main.js first — UI/routing/auth; pdf-tools.js — converters + legacy PDF ops) -->
-    <script src="js/main.js"></script>
-    <script src="js/pdf-tools.js"></script>
-    <script src="js/tool-content.js"></script>
+  <!-- ===== TOOLS GRID ===== -->
+  <section class="tools-section" id="tools">
+    <div class="container">
+      <div class="section-header">
+        <div class="section-badge">PDF Tools</div>
+        <h2 class="section-title">Everything You Need</h2>
+        <p class="section-subtitle">Powerful PDF tools built for students, professionals, and everyone in between.</p>
+      </div>
 
-    <!-- تهيئة أيقونات Lucide -->
-    <script>
-        lucide.createIcons();
-    </script>
+      <div class="tools-grid">
+
+        <!-- 1. Merge PDF -->
+        <div class="tool-card" id="card-merge" onclick="openModal('mergePDF')">
+          <div class="tool-card-glow"></div>
+          <div class="tool-icon-wrap" style="--icon-color: #00E5FF;">
+            <svg class="tool-icon" viewBox="0 0 24 24" fill="none"><path d="M4 6h6v12H4zM14 6h6v12h-6z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M10 12h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M8 12l-2-2M8 12l-2 2M16 12l2-2M16 12l2 2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
+          </div>
+          <h3 class="tool-name">Merge PDF</h3>
+          <p class="tool-desc">Combine multiple PDF files into a single document instantly.</p>
+          <div class="tool-arrow">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </div>
+
+        <!-- 2. Split PDF -->
+        <div class="tool-card" id="card-split" onclick="openModal('splitPDF')">
+          <div class="tool-card-glow"></div>
+          <div class="tool-icon-wrap" style="--icon-color: #00BCD4;">
+            <svg class="tool-icon" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/><line x1="12" y1="3" x2="12" y2="21" stroke="currentColor" stroke-width="2" stroke-dasharray="3 2"/><path d="M9 9l-3 3 3 3M15 9l3 3-3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <h3 class="tool-name">Split PDF</h3>
+          <p class="tool-desc">Extract a range of pages from any PDF into a new file.</p>
+          <div class="tool-arrow">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </div>
+
+        <!-- 3. Compress PDF -->
+        <div class="tool-card" id="card-compress" onclick="openModal('compressPDF')">
+          <div class="tool-card-glow"></div>
+          <div class="tool-icon-wrap" style="--icon-color: #26C6DA;">
+            <svg class="tool-icon" viewBox="0 0 24 24" fill="none"><path d="M12 3v14M12 3l-4 4M12 3l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 17v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M8 13l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".5"/></svg>
+          </div>
+          <h3 class="tool-name">Compress PDF</h3>
+          <p class="tool-desc">Reduce PDF file size while maintaining quality for easy sharing.</p>
+          <div class="tool-arrow">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </div>
+
+        <!-- 4. Rotate PDF -->
+        <div class="tool-card" id="card-rotate" onclick="openModal('rotatePDF')">
+          <div class="tool-card-glow"></div>
+          <div class="tool-icon-wrap" style="--icon-color: #00E5FF;">
+            <svg class="tool-icon" viewBox="0 0 24 24" fill="none"><path d="M1 4v6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.51 15a9 9 0 1 0 .49-5.05" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </div>
+          <h3 class="tool-name">Rotate PDF</h3>
+          <p class="tool-desc">Rotate all pages or specific pages 90°, 180°, or 270°.</p>
+          <div class="tool-arrow">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </div>
+
+        <!-- 5. PDF to Images -->
+        <div class="tool-card" id="card-pdf2img" onclick="openModal('pdf2img')">
+          <div class="tool-card-glow"></div>
+          <div class="tool-icon-wrap" style="--icon-color: #00BCD4;">
+            <svg class="tool-icon" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="14" height="18" rx="2" stroke="currentColor" stroke-width="2"/><path d="M16 7h5M16 12h5M16 17h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="7" cy="9" r="2" stroke="currentColor" stroke-width="1.5"/><path d="M3 18l4-4 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <h3 class="tool-name">PDF to Images</h3>
+          <p class="tool-desc">Convert each PDF page into high-quality PNG images.</p>
+          <div class="tool-arrow">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </div>
+
+        <!-- 6. Images to PDF -->
+        <div class="tool-card" id="card-img2pdf" onclick="openModal('img2pdf')">
+          <div class="tool-card-glow"></div>
+          <div class="tool-icon-wrap" style="--icon-color: #26C6DA;">
+            <svg class="tool-icon" viewBox="0 0 24 24" fill="none"><rect x="8" y="3" width="14" height="18" rx="2" stroke="currentColor" stroke-width="2"/><path d="M2 7h6M2 12h4M2 17h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><circle cx="13" cy="9" r="2" stroke="currentColor" stroke-width="1.5"/><path d="M9 18l4-4 5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <h3 class="tool-name">Images to PDF</h3>
+          <p class="tool-desc">Combine JPG, PNG, or multiple images into a single PDF.</p>
+          <div class="tool-arrow">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </div>
+
+        <!-- 7. Watermark -->
+        <div class="tool-card" id="card-watermark" onclick="openModal('watermark')">
+          <div class="tool-card-glow"></div>
+          <div class="tool-icon-wrap" style="--icon-color: #00E5FF;">
+            <svg class="tool-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <h3 class="tool-name">Add Watermark</h3>
+          <p class="tool-desc">Overlay custom text watermarks on all pages of your PDF.</p>
+          <div class="tool-arrow">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </div>
+
+        <!-- 8. Protect PDF -->
+        <div class="tool-card" id="card-protect" onclick="openModal('protectPDF')">
+          <div class="tool-card-glow"></div>
+          <div class="tool-icon-wrap" style="--icon-color: #00BCD4;">
+            <svg class="tool-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2l8 4v6c0 5-4 9-8 10C8 21 4 17 4 12V6l8-4z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+          <h3 class="tool-name">Protect PDF</h3>
+          <p class="tool-desc">Password-protect your PDF to keep sensitive content secure.</p>
+          <div class="tool-arrow">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </div>
+
+        <!-- 9. Extract Pages -->
+        <div class="tool-card" id="card-extract" onclick="openModal('extractPages')">
+          <div class="tool-card-glow"></div>
+          <div class="tool-icon-wrap" style="--icon-color: #26C6DA;">
+            <svg class="tool-icon" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2"/><polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="2"/><line x1="16" y1="13" x2="8" y2="13" stroke="currentColor" stroke-width="2"/><line x1="16" y1="17" x2="8" y2="17" stroke="currentColor" stroke-width="2"/><polyline points="10 9 9 9 8 9" stroke="currentColor" stroke-width="2"/></svg>
+          </div>
+          <h3 class="tool-name">Extract Pages</h3>
+          <p class="tool-desc">Select specific pages to extract into a brand new PDF file.</p>
+          <div class="tool-arrow">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </div>
+
+        <!-- 10. PDF Viewer -->
+        <div class="tool-card" id="card-viewer" onclick="openModal('pdfViewer')">
+          <div class="tool-card-glow"></div>
+          <div class="tool-icon-wrap" style="--icon-color: #00E5FF;">
+            <svg class="tool-icon" viewBox="0 0 24 24" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
+          </div>
+          <h3 class="tool-name">PDF Viewer</h3>
+          <p class="tool-desc">View and navigate any PDF file directly in your browser with zoom.</p>
+          <div class="tool-arrow">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          </div>
+        </div>
+
+      </div><!-- end .tools-grid -->
+    </div>
+  </section>
+
+  <!-- ===== FEATURES SECTION ===== -->
+  <section class="features-section" id="features">
+    <div class="container">
+      <div class="section-header">
+        <div class="section-badge">Why PDF BOX?</div>
+        <h2 class="section-title">Built for Everyone</h2>
+        <p class="section-subtitle">Fast, secure, and completely free — no hidden fees, no sign-up.</p>
+      </div>
+      <div class="features-grid">
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2"/></svg>
+          </div>
+          <h3>100% Private</h3>
+          <p>All processing happens in your browser. Your files are never uploaded to any server.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><polyline points="12 6 12 12 16 14" stroke="currentColor" stroke-width="2"/></svg>
+          </div>
+          <h3>Lightning Fast</h3>
+          <p>No waiting for uploads. Tools work instantly using your device's own processing power.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" stroke="currentColor" stroke-width="2"/></svg>
+          </div>
+          <h3>Completely Free</h3>
+          <p>No subscriptions, no limits, no watermarks on output files. Totally free forever.</p>
+        </div>
+        <div class="feature-card">
+          <div class="feature-icon">
+            <svg viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          </div>
+          <h3>Works Everywhere</h3>
+          <p>Compatible with all modern browsers on desktop and mobile. No installation needed.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== FAQ ===== -->
+  <section class="faq-section" id="faq">
+    <div class="container">
+      <div class="section-header">
+        <div class="section-badge">FAQ</div>
+        <h2 class="section-title">Frequently Asked Questions</h2>
+      </div>
+      <div class="faq-list">
+        <div class="faq-item">
+          <button class="faq-question" onclick="toggleFAQ(this)">
+            Are my files safe? <span class="faq-icon">+</span>
+          </button>
+          <div class="faq-answer">
+            <p>Yes! PDF BOX processes everything locally in your browser using JavaScript. Your files are never sent to any server, so they remain completely private and secure.</p>
+          </div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-question" onclick="toggleFAQ(this)">
+            Is there a file size limit? <span class="faq-icon">+</span>
+          </button>
+          <div class="faq-answer">
+            <p>Since processing happens in your browser, the limit depends on your device's available RAM. Generally, files up to 100MB work great. Very large files may slow down on older devices.</p>
+          </div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-question" onclick="toggleFAQ(this)">
+            Do I need to create an account? <span class="faq-icon">+</span>
+          </button>
+          <div class="faq-answer">
+            <p>No account needed! PDF BOX is 100% free and requires no registration. Just open the site and start using the tools right away.</p>
+          </div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-question" onclick="toggleFAQ(this)">
+            What PDF tools are available? <span class="faq-icon">+</span>
+          </button>
+          <div class="faq-answer">
+            <p>PDF BOX offers 10 tools: Merge PDF, Split PDF, Compress PDF, Rotate PDF, PDF to Images, Images to PDF, Add Watermark, Protect PDF, Extract Pages, and a PDF Viewer.</p>
+          </div>
+        </div>
+        <div class="faq-item">
+          <button class="faq-question" onclick="toggleFAQ(this)">
+            Does it work on mobile? <span class="faq-icon">+</span>
+          </button>
+          <div class="faq-answer">
+            <p>Yes! PDF BOX is fully responsive and works on smartphones and tablets running modern browsers like Chrome, Firefox, Safari, or Edge.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== FOOTER ===== -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-top">
+        <div class="footer-brand">
+          <div class="nav-logo">
+            <div class="logo-icon">
+              <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                <rect x="3" y="2" width="16" height="20" rx="2" fill="url(#footerLogoGrad)"/>
+                <rect x="9" y="6" width="14" height="20" rx="2" fill="url(#footerLogoGrad2)" opacity="0.8"/>
+                <path d="M7 9h8M7 12h8M7 15h5" stroke="#0A0F2E" stroke-width="1.5" stroke-linecap="round"/>
+                <defs>
+                  <linearGradient id="footerLogoGrad" x1="3" y1="2" x2="19" y2="22" gradientUnits="userSpaceOnUse">
+                    <stop stop-color="#00E5FF"/><stop offset="1" stop-color="#00BCD4"/>
+                  </linearGradient>
+                  <linearGradient id="footerLogoGrad2" x1="9" y1="6" x2="23" y2="26" gradientUnits="userSpaceOnUse">
+                    <stop stop-color="#00BCD4"/><stop offset="1" stop-color="#0288D1"/>
+                  </linearGradient>
+                </defs>
+              </svg>
+            </div>
+            <span class="logo-text">PDF <span class="logo-accent">BOX</span></span>
+          </div>
+          <p class="footer-tagline">Free, fast, and private PDF tools for everyone.</p>
+        </div>
+        <div class="footer-links-wrap">
+          <div class="footer-links-col">
+            <h4>Tools</h4>
+            <a onclick="openModal('mergePDF')">Merge PDF</a>
+            <a onclick="openModal('splitPDF')">Split PDF</a>
+            <a onclick="openModal('compressPDF')">Compress PDF</a>
+            <a onclick="openModal('rotatePDF')">Rotate PDF</a>
+            <a onclick="openModal('pdf2img')">PDF to Images</a>
+          </div>
+          <div class="footer-links-col">
+            <h4>More Tools</h4>
+            <a onclick="openModal('img2pdf')">Images to PDF</a>
+            <a onclick="openModal('watermark')">Add Watermark</a>
+            <a onclick="openModal('protectPDF')">Protect PDF</a>
+            <a onclick="openModal('extractPages')">Extract Pages</a>
+            <a onclick="openModal('pdfViewer')">PDF Viewer</a>
+          </div>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2024 PDF BOX. All processing is done locally in your browser.</p>
+        <div class="footer-badge">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="currentColor"/></svg>
+          Files never leave your device
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ===================================================================
+       MODALS
+  ==================================================================== -->
+
+  <!-- Modal Overlay -->
+  <div class="modal-overlay" id="modalOverlay" onclick="closeModal()"></div>
+
+  <!-- ===== MODAL: Merge PDF ===== -->
+  <div class="modal" id="modal-mergePDF">
+    <div class="modal-header">
+      <div class="modal-title-wrap">
+        <div class="modal-icon-wrap" style="--icon-color: #00E5FF;">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M4 6h6v12H4zM14 6h6v12h-6z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M10 12h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </div>
+        <div>
+          <h2 class="modal-title">Merge PDF</h2>
+          <p class="modal-subtitle">Combine multiple PDFs into one file</p>
+        </div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="dropzone" id="dz-merge" onclick="document.getElementById('input-merge').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,'input-merge')">
+        <input type="file" id="input-merge" accept=".pdf" multiple hidden onchange="handleFileSelect('merge', this.files)" />
+        <div class="dz-icon">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="2"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2"/></svg>
+        </div>
+        <p class="dz-text">Drop PDFs here or <span class="dz-link">browse files</span></p>
+        <p class="dz-hint">Select multiple PDF files to merge</p>
+      </div>
+      <div class="file-list" id="files-merge"></div>
+      <div class="modal-options">
+        <label class="option-label">Output filename</label>
+        <input type="text" class="text-input" id="merge-output" value="merged" placeholder="Output filename (without .pdf)" />
+      </div>
+      <button class="btn btn-primary btn-full" id="btn-merge" onclick="mergePDFs()" disabled>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 6h6v12H4zM14 6h6v12h-6z" stroke="currentColor" stroke-width="2"/><path d="M10 12h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Merge PDFs
+      </button>
+      <div class="progress-wrap" id="progress-merge" style="display:none;">
+        <div class="progress-bar"><div class="progress-fill" id="pf-merge"></div></div>
+        <p class="progress-text" id="pt-merge">Processing…</p>
+      </div>
+      <div class="result-box" id="result-merge"></div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: Split PDF ===== -->
+  <div class="modal" id="modal-splitPDF">
+    <div class="modal-header">
+      <div class="modal-title-wrap">
+        <div class="modal-icon-wrap" style="--icon-color: #00BCD4;">
+          <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/><line x1="12" y1="3" x2="12" y2="21" stroke="currentColor" stroke-width="2" stroke-dasharray="3 2"/></svg>
+        </div>
+        <div>
+          <h2 class="modal-title">Split PDF</h2>
+          <p class="modal-subtitle">Extract a page range into a new PDF</p>
+        </div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="dropzone" id="dz-split" onclick="document.getElementById('input-split').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,'input-split')">
+        <input type="file" id="input-split" accept=".pdf" hidden onchange="handleFileSelect('split', this.files)" />
+        <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="2"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2"/></svg></div>
+        <p class="dz-text">Drop a PDF here or <span class="dz-link">browse</span></p>
+        <p class="dz-hint">Select one PDF file</p>
+      </div>
+      <div class="file-list" id="files-split"></div>
+      <div class="modal-options">
+        <label class="option-label">Page range (e.g. 1-3 or 2,4,5)</label>
+        <input type="text" class="text-input" id="split-range" placeholder="e.g. 1-5 or 1,3,5" />
+        <p class="option-hint" id="split-page-count"></p>
+      </div>
+      <button class="btn btn-primary btn-full" id="btn-split" onclick="splitPDF()" disabled>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/><line x1="12" y1="3" x2="12" y2="21" stroke="currentColor" stroke-width="2" stroke-dasharray="3 2"/></svg>
+        Split PDF
+      </button>
+      <div class="progress-wrap" id="progress-split" style="display:none;"><div class="progress-bar"><div class="progress-fill" id="pf-split"></div></div><p class="progress-text" id="pt-split">Processing…</p></div>
+      <div class="result-box" id="result-split"></div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: Compress PDF ===== -->
+  <div class="modal" id="modal-compressPDF">
+    <div class="modal-header">
+      <div class="modal-title-wrap">
+        <div class="modal-icon-wrap" style="--icon-color: #26C6DA;">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 3v14M12 3l-4 4M12 3l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 17v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </div>
+        <div>
+          <h2 class="modal-title">Compress PDF</h2>
+          <p class="modal-subtitle">Reduce file size for easy sharing</p>
+        </div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="dropzone" id="dz-compress" onclick="document.getElementById('input-compress').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,'input-compress')">
+        <input type="file" id="input-compress" accept=".pdf" hidden onchange="handleFileSelect('compress', this.files)" />
+        <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="2"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2"/></svg></div>
+        <p class="dz-text">Drop a PDF here or <span class="dz-link">browse</span></p>
+        <p class="dz-hint">Select one PDF file to compress</p>
+      </div>
+      <div class="file-list" id="files-compress"></div>
+      <div class="modal-options">
+        <label class="option-label">Compression level</label>
+        <div class="radio-group">
+          <label class="radio-option"><input type="radio" name="compress-level" value="low" /> <span>Low (best quality)</span></label>
+          <label class="radio-option"><input type="radio" name="compress-level" value="medium" checked /> <span>Medium (balanced)</span></label>
+          <label class="radio-option"><input type="radio" name="compress-level" value="high" /> <span>High (smallest size)</span></label>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-full" id="btn-compress" onclick="compressPDF()" disabled>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 3v14M12 3l-4 4M12 3l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        Compress PDF
+      </button>
+      <div class="progress-wrap" id="progress-compress" style="display:none;"><div class="progress-bar"><div class="progress-fill" id="pf-compress"></div></div><p class="progress-text" id="pt-compress">Processing…</p></div>
+      <div class="result-box" id="result-compress"></div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: Rotate PDF ===== -->
+  <div class="modal" id="modal-rotatePDF">
+    <div class="modal-header">
+      <div class="modal-title-wrap">
+        <div class="modal-icon-wrap" style="--icon-color: #00E5FF;">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M1 4v6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.51 15a9 9 0 1 0 .49-5.05" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </div>
+        <div>
+          <h2 class="modal-title">Rotate PDF</h2>
+          <p class="modal-subtitle">Rotate pages in any direction</p>
+        </div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="dropzone" id="dz-rotate" onclick="document.getElementById('input-rotate').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,'input-rotate')">
+        <input type="file" id="input-rotate" accept=".pdf" hidden onchange="handleFileSelect('rotate', this.files)" />
+        <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="2"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2"/></svg></div>
+        <p class="dz-text">Drop a PDF here or <span class="dz-link">browse</span></p>
+      </div>
+      <div class="file-list" id="files-rotate"></div>
+      <div class="modal-options">
+        <label class="option-label">Rotation angle</label>
+        <div class="btn-group">
+          <button class="btn-option active" id="rot-90" onclick="selectRotation(90, this)">↻ 90°</button>
+          <button class="btn-option" id="rot-180" onclick="selectRotation(180, this)">↺ 180°</button>
+          <button class="btn-option" id="rot-270" onclick="selectRotation(270, this)">↺ 270°</button>
+        </div>
+        <label class="option-label" style="margin-top:14px;">Apply to</label>
+        <div class="radio-group">
+          <label class="radio-option"><input type="radio" name="rotate-pages" value="all" checked /> <span>All pages</span></label>
+          <label class="radio-option"><input type="radio" name="rotate-pages" value="specific" /> <span>Specific pages (e.g. 1,3,5)</span></label>
+        </div>
+        <input type="text" class="text-input" id="rotate-specific" placeholder="e.g. 1,3,5" style="margin-top:8px; display:none;" />
+      </div>
+      <button class="btn btn-primary btn-full" id="btn-rotate" onclick="rotatePDF()" disabled>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M1 4v6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.51 15a9 9 0 1 0 .49-5.05" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        Rotate PDF
+      </button>
+      <div class="progress-wrap" id="progress-rotate" style="display:none;"><div class="progress-bar"><div class="progress-fill" id="pf-rotate"></div></div><p class="progress-text" id="pt-rotate">Processing…</p></div>
+      <div class="result-box" id="result-rotate"></div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: PDF to Images ===== -->
+  <div class="modal" id="modal-pdf2img">
+    <div class="modal-header">
+      <div class="modal-title-wrap">
+        <div class="modal-icon-wrap" style="--icon-color: #00BCD4;">
+          <svg viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="14" height="18" rx="2" stroke="currentColor" stroke-width="2"/><circle cx="7" cy="9" r="2" stroke="currentColor" stroke-width="1.5"/><path d="M3 18l4-4 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div>
+          <h2 class="modal-title">PDF to Images</h2>
+          <p class="modal-subtitle">Convert each page to a PNG image</p>
+        </div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="dropzone" id="dz-pdf2img" onclick="document.getElementById('input-pdf2img').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,'input-pdf2img')">
+        <input type="file" id="input-pdf2img" accept=".pdf" hidden onchange="handleFileSelect('pdf2img', this.files)" />
+        <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="2"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2"/></svg></div>
+        <p class="dz-text">Drop a PDF here or <span class="dz-link">browse</span></p>
+      </div>
+      <div class="file-list" id="files-pdf2img"></div>
+      <div class="modal-options">
+        <label class="option-label">Resolution (DPI)</label>
+        <div class="btn-group">
+          <button class="btn-option" id="dpi-72" onclick="selectDPI(72, this)">72 DPI</button>
+          <button class="btn-option active" id="dpi-150" onclick="selectDPI(150, this)">150 DPI</button>
+          <button class="btn-option" id="dpi-300" onclick="selectDPI(300, this)">300 DPI</button>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-full" id="btn-pdf2img" onclick="pdfToImages()" disabled>
+        Convert to Images
+      </button>
+      <div class="progress-wrap" id="progress-pdf2img" style="display:none;"><div class="progress-bar"><div class="progress-fill" id="pf-pdf2img"></div></div><p class="progress-text" id="pt-pdf2img">Processing…</p></div>
+      <div class="result-box" id="result-pdf2img"></div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: Images to PDF ===== -->
+  <div class="modal" id="modal-img2pdf">
+    <div class="modal-header">
+      <div class="modal-title-wrap">
+        <div class="modal-icon-wrap" style="--icon-color: #26C6DA;">
+          <svg viewBox="0 0 24 24" fill="none"><rect x="8" y="3" width="14" height="18" rx="2" stroke="currentColor" stroke-width="2"/><circle cx="13" cy="9" r="2" stroke="currentColor" stroke-width="1.5"/><path d="M9 18l4-4 5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div>
+          <h2 class="modal-title">Images to PDF</h2>
+          <p class="modal-subtitle">Combine images into a single PDF</p>
+        </div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="dropzone" id="dz-img2pdf" onclick="document.getElementById('input-img2pdf').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,'input-img2pdf')">
+        <input type="file" id="input-img2pdf" accept="image/jpeg,image/png,image/webp" multiple hidden onchange="handleFileSelect('img2pdf', this.files)" />
+        <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="2"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2"/></svg></div>
+        <p class="dz-text">Drop images here or <span class="dz-link">browse</span></p>
+        <p class="dz-hint">JPG, PNG, or WebP files</p>
+      </div>
+      <div class="file-list" id="files-img2pdf"></div>
+      <div class="modal-options">
+        <label class="option-label">Page size</label>
+        <div class="select-wrap">
+          <select class="styled-select" id="img2pdf-pagesize">
+            <option value="A4">A4 (210 × 297 mm)</option>
+            <option value="Letter">Letter (8.5 × 11 in)</option>
+            <option value="fit">Fit to image</option>
+          </select>
+        </div>
+        <label class="option-label" style="margin-top:14px;">Output filename</label>
+        <input type="text" class="text-input" id="img2pdf-output" value="images" placeholder="Output filename (without .pdf)" />
+      </div>
+      <button class="btn btn-primary btn-full" id="btn-img2pdf" onclick="imagesToPDF()" disabled>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="8" y="3" width="14" height="18" rx="2" stroke="currentColor" stroke-width="2"/></svg>
+        Convert to PDF
+      </button>
+      <div class="progress-wrap" id="progress-img2pdf" style="display:none;"><div class="progress-bar"><div class="progress-fill" id="pf-img2pdf"></div></div><p class="progress-text" id="pt-img2pdf">Processing…</p></div>
+      <div class="result-box" id="result-img2pdf"></div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: Watermark ===== -->
+  <div class="modal" id="modal-watermark">
+    <div class="modal-header">
+      <div class="modal-title-wrap">
+        <div class="modal-icon-wrap" style="--icon-color: #00E5FF;">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div>
+          <h2 class="modal-title">Add Watermark</h2>
+          <p class="modal-subtitle">Overlay text on all PDF pages</p>
+        </div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="dropzone" id="dz-watermark" onclick="document.getElementById('input-watermark').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,'input-watermark')">
+        <input type="file" id="input-watermark" accept=".pdf" hidden onchange="handleFileSelect('watermark', this.files)" />
+        <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="2"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2"/></svg></div>
+        <p class="dz-text">Drop a PDF here or <span class="dz-link">browse</span></p>
+      </div>
+      <div class="file-list" id="files-watermark"></div>
+      <div class="modal-options">
+        <label class="option-label">Watermark text</label>
+        <input type="text" class="text-input" id="wm-text" value="CONFIDENTIAL" placeholder="Watermark text" />
+        <label class="option-label" style="margin-top:14px;">Font size</label>
+        <input type="range" class="range-input" id="wm-size" min="20" max="100" value="50" oninput="document.getElementById('wm-size-val').textContent = this.value" />
+        <span class="range-value" id="wm-size-val">50</span>
+        <label class="option-label" style="margin-top:14px;">Opacity (%)</label>
+        <input type="range" class="range-input" id="wm-opacity" min="5" max="80" value="25" oninput="document.getElementById('wm-opacity-val').textContent = this.value" />
+        <span class="range-value" id="wm-opacity-val">25</span>
+        <label class="option-label" style="margin-top:14px;">Color</label>
+        <input type="color" class="color-input" id="wm-color" value="#ff0000" />
+      </div>
+      <button class="btn btn-primary btn-full" id="btn-watermark" onclick="addWatermark()" disabled>
+        Add Watermark
+      </button>
+      <div class="progress-wrap" id="progress-watermark" style="display:none;"><div class="progress-bar"><div class="progress-fill" id="pf-watermark"></div></div><p class="progress-text" id="pt-watermark">Processing…</p></div>
+      <div class="result-box" id="result-watermark"></div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: Protect PDF ===== -->
+  <div class="modal" id="modal-protectPDF">
+    <div class="modal-header">
+      <div class="modal-title-wrap">
+        <div class="modal-icon-wrap" style="--icon-color: #00BCD4;">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M12 2l8 4v6c0 5-4 9-8 10C8 21 4 17 4 12V6l8-4z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div>
+          <h2 class="modal-title">Protect PDF</h2>
+          <p class="modal-subtitle">Password-protect your PDF file</p>
+        </div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="dropzone" id="dz-protect" onclick="document.getElementById('input-protect').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,'input-protect')">
+        <input type="file" id="input-protect" accept=".pdf" hidden onchange="handleFileSelect('protect', this.files)" />
+        <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="2"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2"/></svg></div>
+        <p class="dz-text">Drop a PDF here or <span class="dz-link">browse</span></p>
+      </div>
+      <div class="file-list" id="files-protect"></div>
+      <div class="modal-options">
+        <label class="option-label">User Password (required to open)</label>
+        <div class="password-wrap">
+          <input type="password" class="text-input" id="protect-pass" placeholder="Enter password" />
+          <button class="pwd-toggle" onclick="togglePwd('protect-pass', this)" type="button">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
+          </button>
+        </div>
+        <label class="option-label" style="margin-top:14px;">Confirm Password</label>
+        <div class="password-wrap">
+          <input type="password" class="text-input" id="protect-pass2" placeholder="Confirm password" />
+          <button class="pwd-toggle" onclick="togglePwd('protect-pass2', this)" type="button">
+            <svg viewBox="0 0 24 24" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
+          </button>
+        </div>
+      </div>
+      <button class="btn btn-primary btn-full" id="btn-protect" onclick="protectPDF()" disabled>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2l8 4v6c0 5-4 9-8 10C8 21 4 17 4 12V6l8-4z" stroke="currentColor" stroke-width="2"/></svg>
+        Protect PDF
+      </button>
+      <div class="progress-wrap" id="progress-protect" style="display:none;"><div class="progress-bar"><div class="progress-fill" id="pf-protect"></div></div><p class="progress-text" id="pt-protect">Processing…</p></div>
+      <div class="result-box" id="result-protect"></div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: Extract Pages ===== -->
+  <div class="modal" id="modal-extractPages">
+    <div class="modal-header">
+      <div class="modal-title-wrap">
+        <div class="modal-icon-wrap" style="--icon-color: #26C6DA;">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2"/><polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="2"/></svg>
+        </div>
+        <div>
+          <h2 class="modal-title">Extract Pages</h2>
+          <p class="modal-subtitle">Save specific pages as a new PDF</p>
+        </div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="dropzone" id="dz-extract" onclick="document.getElementById('input-extract').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,'input-extract')">
+        <input type="file" id="input-extract" accept=".pdf" hidden onchange="handleFileSelect('extract', this.files)" />
+        <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="2"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2"/></svg></div>
+        <p class="dz-text">Drop a PDF here or <span class="dz-link">browse</span></p>
+      </div>
+      <div class="file-list" id="files-extract"></div>
+      <div class="modal-options">
+        <label class="option-label">Pages to extract (e.g. 1,3,5-7)</label>
+        <input type="text" class="text-input" id="extract-pages" placeholder="e.g. 1,3,5-7" />
+        <p class="option-hint" id="extract-page-count"></p>
+      </div>
+      <button class="btn btn-primary btn-full" id="btn-extract" onclick="extractPages()" disabled>
+        Extract Pages
+      </button>
+      <div class="progress-wrap" id="progress-extract" style="display:none;"><div class="progress-bar"><div class="progress-fill" id="pf-extract"></div></div><p class="progress-text" id="pt-extract">Processing…</p></div>
+      <div class="result-box" id="result-extract"></div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: PDF Viewer ===== -->
+  <div class="modal modal-wide" id="modal-pdfViewer">
+    <div class="modal-header">
+      <div class="modal-title-wrap">
+        <div class="modal-icon-wrap" style="--icon-color: #00E5FF;">
+          <svg viewBox="0 0 24 24" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
+        </div>
+        <div>
+          <h2 class="modal-title">PDF Viewer</h2>
+          <p class="modal-subtitle">Browse PDF pages with zoom</p>
+        </div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="dropzone" id="dz-viewer" onclick="document.getElementById('input-viewer').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,'input-viewer')">
+        <input type="file" id="input-viewer" accept=".pdf" hidden onchange="handleFileSelect('viewer', this.files)" />
+        <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="2"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2"/></svg></div>
+        <p class="dz-text">Drop a PDF here or <span class="dz-link">browse</span></p>
+      </div>
+      <div id="viewer-controls" class="viewer-controls" style="display:none;">
+        <button class="viewer-btn" onclick="viewerPrevPage()" id="viewer-prev">‹ Prev</button>
+        <span class="viewer-page-info"><input type="number" id="viewer-page-input" min="1" onchange="viewerGoToPage()" /> / <span id="viewer-total">0</span></span>
+        <button class="viewer-btn" onclick="viewerNextPage()" id="viewer-next">Next ›</button>
+        <div class="viewer-zoom">
+          <button class="viewer-btn" onclick="viewerZoomOut()">−</button>
+          <span id="viewer-zoom-val">100%</span>
+          <button class="viewer-btn" onclick="viewerZoomIn()">+</button>
+        </div>
+      </div>
+      <div class="viewer-canvas-wrap" id="viewer-canvas-wrap">
+        <canvas id="viewer-canvas"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== TOAST NOTIFICATION ===== -->
+  <div class="toast" id="toast"></div>
+
+  <!-- Scripts -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    // Configure PDF.js worker
+    if (typeof pdfjsLib !== 'undefined') {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+  </script>
+  <script src="main.js"></script>
 </body>
-
 </html>
