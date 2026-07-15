@@ -1205,17 +1205,27 @@ function groupTextItemsIntoLines(items, tolerance = 4) {
     if (Math.abs(item.transform[5] - currentY) <= tolerance) {
       currentLine.push(item);
     } else {
-      // Sort current line left-to-right by X
-      currentLine.sort((a, b) => a.transform[4] - b.transform[4]);
       lines.push(currentLine);
       currentLine = [item];
       currentY = item.transform[5];
     }
   }
   if (currentLine.length) {
-    currentLine.sort((a, b) => a.transform[4] - b.transform[4]);
     lines.push(currentLine);
   }
+
+  lines.forEach(line => {
+    const lineStr = line.map(i => i.str).join('');
+    line.isRTL = isRTLText(lineStr);
+    if (line.isRTL) {
+      // Sort Right-to-Left (descending X)
+      line.sort((a, b) => b.transform[4] - a.transform[4]);
+    } else {
+      // Sort Left-to-Right (ascending X)
+      line.sort((a, b) => a.transform[4] - b.transform[4]);
+    }
+  });
+
   return lines;
 }
 
@@ -1228,22 +1238,42 @@ function isRTLText(text) {
  * Reconstruct words from a line of PDF text items,
  * respecting inter-word gaps.
  */
-function reconstructLineText(items) {
-  if (!items.length) return '';
+function reconstructLineText(line) {
+  if (!line.length) return '';
   let text = '';
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
+  const isRTL = line.isRTL;
+
+  for (let i = 0; i < line.length; i++) {
+    const item = line[i];
     if (i > 0) {
-      const prev = items[i - 1];
-      const prevEnd = prev.transform[4] + (prev.width || 0);
-      const gap = item.transform[4] - prevEnd;
+      const prev = line[i - 1];
+      let gap = 0;
+      if (isRTL) {
+        gap = prev.transform[4] - (item.transform[4] + (item.width || 0));
+      } else {
+        const prevEnd = prev.transform[4] + (prev.width || 0);
+        gap = item.transform[4] - prevEnd;
+      }
+      
       const fontSize = Math.abs(item.transform[3]) || 12;
-      const spaceWidth = fontSize * 0.25;
+      const spaceWidth = fontSize * 0.2;
       if (gap > spaceWidth) text += ' ';
     }
     text += item.str;
   }
+  
+  if (isRTL) {
+    text = normalizeArabic(text);
+  }
+  
   return text;
+}
+
+function normalizeArabic(text) {
+  const normalizationMap = {
+    '\uFE8F':'\u0628','\uFE91':'\u0628','\uFE92':'\u0628','\uFE93':'\u0629','\uFE94':'\u0629','\uFE95':'\u062A','\uFE97':'\u062A','\uFE98':'\u062A','\uFE99':'\u062B','\uFE9B':'\u062B','\uFE9C':'\u062B','\uFE9D':'\u062C','\uFE9F':'\u062C','\uFEA0':'\u062C','\uFEA1':'\u062D','\uFEA3':'\u062D','\uFEA4':'\u062D','\uFEA5':'\u062E','\uFEA7':'\u062E','\uFEA8':'\u062E','\uFEA9':'\u062F','\uFEAA':'\u062F','\uFEAB':'\u0630','\uFEAC':'\u0630','\uFEAD':'\u0631','\uFEAE':'\u0631','\uFEAF':'\u0632','\uFEB0':'\u0632','\uFEB1':'\u0633','\uFEB3':'\u0633','\uFEB4':'\u0633','\uFEB5':'\u0634','\uFEB7':'\u0634','\uFEB8':'\u0634','\uFEB9':'\u0635','\uFEBB':'\u0635','\uFEBC':'\u0635','\uFEBD':'\u0636','\uFEBF':'\u0636','\uFEC0':'\u0636','\uFEC1':'\u0637','\uFEC3':'\u0637','\uFEC4':'\u0637','\uFEC5':'\u0638','\uFEC7':'\u0638','\uFEC8':'\u0638','\uFEC9':'\u0639','\uFECB':'\u0639','\uFECC':'\u0639','\uFECD':'\u063A','\uFECF':'\u063A','\uFED0':'\u063A','\uFED1':'\u0641','\uFED3':'\u0641','\uFED4':'\u0641','\uFED5':'\u0642','\uFED7':'\u0642','\uFED8':'\u0642','\uFED9':'\u0643','\uFEDB':'\u0643','\uFEDC':'\u0643','\uFEDD':'\u0644','\uFEDF':'\u0644','\uFEE0':'\u0644','\uFEE1':'\u0645','\uFEE3':'\u0645','\uFEE4':'\u0645','\uFEE5':'\u0646','\uFEE7':'\u0646','\uFEE8':'\u0646','\uFEE9':'\u0647','\uFEEB':'\u0647','\uFEEC':'\u0647','\uFEED':'\u0648','\uFEEE':'\u0648','\uFEEF':'\u0649','\uFEF0':'\u0649','\uFEF1':'\u064A','\uFEF3':'\u064A','\uFEF4':'\u064A','\uFE8D':'\u0627','\uFE8E':'\u0627','\uFE81':'\u0622','\uFE82':'\u0622','\uFE83':'\u0623','\uFE84':'\u0623','\uFE85':'\u0624','\uFE86':'\u0624','\uFE87':'\u0625','\uFE88':'\u0625','\uFE89':'\u0626','\uFE8A':'\u0626','\uFE8B':'\u0626','\uFE80':'\u0621','\uFEF5':'\u0644\u0622','\uFEF6':'\u0644\u0622','\uFEF7':'\u0644\u0623','\uFEF8':'\u0644\u0623','\uFEF9':'\u0644\u0625','\uFEFA':'\u0644\u0625','\uFEFB':'\u0644\u0627','\uFEFC':'\u0644\u0627'
+  };
+  return text.replace(/[\uFE70-\uFEFC]/g, match => normalizationMap[match] || match);
 }
 
 async function pdfToWord() {
@@ -1288,7 +1318,7 @@ async function pdfToWord() {
         const lineText = reconstructLineText(line);
         if (!lineText.trim()) continue;
 
-        const rtl = isRTLText(lineText);
+        const rtl = line.isRTL;
         const fontSize = Math.abs(line[0].transform[3]) || 12;
         const fontSizePt = Math.round(Math.min(Math.max(fontSize, 8), 72));
 
@@ -1527,9 +1557,9 @@ function sendContact() {
   const body = encodeURIComponent(
     `Name: ${name}\nEmail: ${email}\n\nMessage:\n${message}`
   );
-  window.location.href = `mailto:hasan.saad898@gmail.com?subject=${subjectLine}&body=${body}`;
+  window.open(`https://mail.google.com/mail/?view=cm&fs=1&to=hasan.saad898@gmail.com&su=${subjectLine}&body=${body}`, '_blank');
 
-  showToast('Opening your email client…');
+  showToast('Opening Gmail…');
   // Clear form
   document.getElementById('contact-name').value = '';
   document.getElementById('contact-email').value = '';
