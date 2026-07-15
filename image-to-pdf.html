@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Image to PDF | PDF BOX</title>
+  <meta name="description" content="Convert JPG or PNG images to PDF in seconds.">
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+
+  <header>
+    <div class="container">
+      <div class="logo-container">
+        <div class="logo-box">PB</div>
+        <h1 class="logo-text">PDF <span class="text-aqua">BOX</span></h1>
+      </div>
+      <nav>
+        <a href="index.html" class="nav-link">Tools</a>
+        <a href="#" class="nav-link">Pricing</a>
+        <a href="#" class="nav-link">API</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="container animate-fade-in">
+      <div class="back-btn-container">
+        <a href="index.html" class="btn-secondary back-btn">&larr; Back to Tools</a>
+      </div>
+      <div class="tool-header">
+        <div class="tool-header-icon"><i data-lucide="image" width="40" height="40"></i></div>
+        <h2 class="tool-header-title">Image to PDF</h2>
+        <p class="tool-header-desc">Convert JPG or PNG images to PDF in seconds.</p>
+      </div>
+      <div class="card static-card">
+        <div class="mb-8">
+          <input type="file" id="img-upload" accept="image/jpeg, image/png, image/jpg" multiple style="display: none;">
+          <label for="img-upload" class="btn-secondary">Select Images</label>
+        </div>
+        <div id="img-file-list" class="file-list hidden">
+          <h4 class="file-list-title">Selected Images:</h4>
+          <ul id="img-files-ul"></ul>
+        </div>
+        <div id="img-error" class="alert-error"></div>
+        <button id="img-action-btn" class="btn-primary" disabled>Convert to PDF</button>
+        <a id="img-download-link" class="btn-primary hidden" style="background-color: #00E5FF;"><i data-lucide="file-down"></i> Download PDF</a>
+      </div>
+    </div>
+  </main>
+
+  <footer class="text-center">
+    <div class="container text-muted" style="color: var(--color-text-muted);">
+      <p>&copy; 2026 PDF BOX. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+  <script>
+    lucide.createIcons();
+  </script>
+</body>
+</html>
