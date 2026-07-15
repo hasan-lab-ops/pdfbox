@@ -1191,7 +1191,7 @@ async function viewerZoomOut() {
 
 /**
  * Isolated logic to parse PDF and convert to DOCX.
- * Extracts text, normalizes Arabic presentation forms, detects RTL, handles gap spacing, and extracts styling.
+ * Extracts text, normalizes Arabic presentation forms using NFKC, detects RTL, handles gap spacing, and extracts styling.
  */
 async function parseAndConvertPDFToWord(file, onProgress) {
   const bytes = await readFileBytes(file);
@@ -1200,13 +1200,6 @@ async function parseAndConvertPDFToWord(file, onProgress) {
   const docxChildren = [];
 
   const isRTLText = (text) => /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\u0590-\u05FF]/.test(text);
-
-  const normalizeArabic = (text) => {
-    const normalizationMap = {
-      '\uFE8F':'\u0628','\uFE91':'\u0628','\uFE92':'\u0628','\uFE93':'\u0629','\uFE94':'\u0629','\uFE95':'\u062A','\uFE97':'\u062A','\uFE98':'\u062A','\uFE99':'\u062B','\uFE9B':'\u062B','\uFE9C':'\u062B','\uFE9D':'\u062C','\uFE9F':'\u062C','\uFEA0':'\u062C','\uFEA1':'\u062D','\uFEA3':'\u062D','\uFEA4':'\u062D','\uFEA5':'\u062E','\uFEA7':'\u062E','\uFEA8':'\u062E','\uFEA9':'\u062F','\uFEAA':'\u062F','\uFEAB':'\u0630','\uFEAC':'\u0630','\uFEAD':'\u0631','\uFEAE':'\u0631','\uFEAF':'\u0632','\uFEB0':'\u0632','\uFEB1':'\u0633','\uFEB3':'\u0633','\uFEB4':'\u0633','\uFEB5':'\u0634','\uFEB7':'\u0634','\uFEB8':'\u0634','\uFEB9':'\u0635','\uFEBB':'\u0635','\uFEBC':'\u0635','\uFEBD':'\u0636','\uFEBF':'\u0636','\uFEC0':'\u0636','\uFEC1':'\u0637','\uFEC3':'\u0637','\uFEC4':'\u0637','\uFEC5':'\u0638','\uFEC7':'\u0638','\uFEC8':'\u0638','\uFEC9':'\u0639','\uFECB':'\u0639','\uFECC':'\u0639','\uFECD':'\u063A','\uFECF':'\u063A','\uFED0':'\u063A','\uFED1':'\u0641','\uFED3':'\u0641','\uFED4':'\u0641','\uFED5':'\u0642','\uFED7':'\u0642','\uFED8':'\u0642','\uFED9':'\u0643','\uFEDB':'\u0643','\uFEDC':'\u0643','\uFEDD':'\u0644','\uFEDF':'\u0644','\uFEE0':'\u0644','\uFEE1':'\u0645','\uFEE3':'\u0645','\uFEE4':'\u0645','\uFEE5':'\u0646','\uFEE7':'\u0646','\uFEE8':'\u0646','\uFEE9':'\u0647','\uFEEB':'\u0647','\uFEEC':'\u0647','\uFEED':'\u0648','\uFEEE':'\u0648','\uFEEF':'\u0649','\uFEF0':'\u0649','\uFEF1':'\u064A','\uFEF3':'\u064A','\uFEF4':'\u064A','\uFE8D':'\u0627','\uFE8E':'\u0627','\uFE81':'\u0622','\uFE82':'\u0622','\uFE83':'\u0623','\uFE84':'\u0623','\uFE85':'\u0624','\uFE86':'\u0624','\uFE87':'\u0625','\uFE88':'\u0625','\uFE89':'\u0626','\uFE8A':'\u0626','\uFE8B':'\u0626','\uFE80':'\u0621','\uFEF5':'\u0644\u0622','\uFEF6':'\u0644\u0622','\uFEF7':'\u0644\u0623','\uFEF8':'\u0644\u0623','\uFEF9':'\u0644\u0625','\uFEFA':'\u0644\u0625','\uFEFB':'\u0644\u0627','\uFEFC':'\u0644\u0627'
-    };
-    return text.replace(/[\uFE70-\uFEFC]/g, match => normalizationMap[match] || match);
-  };
 
   const rgbToHex = (r, g, b) => {
     return ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
@@ -1248,9 +1241,9 @@ async function parseAndConvertPDFToWord(file, onProgress) {
       const isRTL = isRTLText(lineStr);
 
       if (isRTL) {
-        line.sort((a, b) => b.transform[4] - a.transform[4]);
+        line.sort((a, b) => b.transform[4] - a.transform[4]); // Sort Right-to-Left
       } else {
-        line.sort((a, b) => a.transform[4] - b.transform[4]);
+        line.sort((a, b) => a.transform[4] - b.transform[4]); // Sort Left-to-Right
       }
 
       const runs = [];
@@ -1259,14 +1252,16 @@ async function parseAndConvertPDFToWord(file, onProgress) {
 
       const finishRun = () => {
         if (currentRunStr) {
-          const runStr = isRTL ? normalizeArabic(currentRunStr) : currentRunStr;
-          runs.push(new docx.TextRun({
-            text: runStr,
+          const runProps = {
+            text: currentRunStr,
             size: currentRunStyle.size * 2,
-            color: currentRunStyle.color,
             font: currentRunStyle.font,
             rightToLeft: isRTL
-          }));
+          };
+          if (currentRunStyle.color && currentRunStyle.color !== '000000') {
+            runProps.color = currentRunStyle.color;
+          }
+          runs.push(new docx.TextRun(runProps));
         }
       };
 
@@ -1279,7 +1274,14 @@ async function parseAndConvertPDFToWord(file, onProgress) {
         
         let colorHex = '000000';
         if (item.color && item.color.length >= 3) {
-          colorHex = rgbToHex(item.color[0], item.color[1], item.color[2]);
+          let [r, g, b] = item.color;
+          // Scale float colors (0.0 to 1.0) to 0-255 bounds
+          if (r <= 1 && g <= 1 && b <= 1 && (r > 0 || g > 0 || b > 0 || item.color.some(c => !Number.isInteger(c)))) {
+            r = Math.round(r * 255);
+            g = Math.round(g * 255);
+            b = Math.round(b * 255);
+          }
+          colorHex = rgbToHex(Math.round(r), Math.round(g), Math.round(b));
         }
         
         const itemStyle = { size: Math.round(Math.min(Math.max(fontSize, 8), 72)), color: colorHex, font: fontName };
@@ -1293,7 +1295,7 @@ async function parseAndConvertPDFToWord(file, onProgress) {
           } else {
             gap = item.transform[4] - (prev.transform[4] + (prev.width || 0));
           }
-          if (gap > fontSize * 0.2) {
+          if (gap > fontSize * 0.25) { // Use 25% of font size for stricter gap detection to avoid disconnecting cursive letters
             prependSpace = true;
           }
         }
@@ -1303,12 +1305,20 @@ async function parseAndConvertPDFToWord(file, onProgress) {
                              currentRunStyle.color !== itemStyle.color || 
                              currentRunStyle.font !== itemStyle.font;
 
+        let itemStr = item.str;
+        // PDF.js often extracts multi-character RTL words in visual LTR order. Reverse it for logical Word output.
+        if (isRTLText(itemStr)) {
+          itemStr = Array.from(itemStr).reverse().join('');
+        }
+        // Normalize any presentation forms into standard Unicode characters so Word can connect them automatically
+        itemStr = itemStr.normalize('NFKC');
+
         if (styleChanged) {
           finishRun();
           currentRunStyle = itemStyle;
-          currentRunStr = prependSpace ? ' ' + item.str : item.str;
+          currentRunStr = (prependSpace ? ' ' : '') + itemStr;
         } else {
-          currentRunStr += (prependSpace ? ' ' : '') + item.str;
+          currentRunStr += (prependSpace ? ' ' : '') + itemStr;
         }
       }
       finishRun();
