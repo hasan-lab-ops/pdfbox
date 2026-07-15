@@ -125,11 +125,29 @@ async function processPdfToWord(file) {
     // Use docx library to create the Word document
     const { Document, Packer, Paragraph, TextRun } = docx;
     
+    // Helper function to reverse Arabic text chunks
+    function processArabicText(text) {
+        // Match Arabic segments (including spaces and Arabic punctuation)
+        const arabicRegex = /[\u0600-\u06FF\s]+/g;
+        return text.replace(arabicRegex, (match) => {
+            // Reverse the matched Arabic segment so it flows Right-to-Left logically
+            return match.split('').reverse().join('');
+        });
+    }
+
     // Split text by lines to create paragraphs
     const paragraphs = fullText.split('\n').map(line => {
-        // Fix: docx v8 requires { text: string } rather than passing a string directly
+        const hasArabic = /[\u0600-\u06FF]/.test(line);
+        const processedLine = hasArabic ? processArabicText(line) : line;
+
         return new Paragraph({
-            children: [new TextRun({ text: line })]
+            bidirectional: hasArabic, // Set RTL at paragraph level
+            children: [
+                new TextRun({ 
+                    text: processedLine, 
+                    rightToLeft: hasArabic // Set RTL at text run level
+                })
+            ]
         });
     });
 
