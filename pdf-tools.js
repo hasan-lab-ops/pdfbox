@@ -105,26 +105,35 @@ async function processImageToPdf(imageFiles) {
 
 // ---------------- PDF to Word ----------------
 async function processPdfToWord(file) {
+    console.log("Starting PDF to Word conversion...");
     const fileBuffer = await fileToArrayBuffer(file);
     const pdf = await pdfjsLib.getDocument({ data: fileBuffer }).promise;
+    console.log(`PDF loaded. Total pages: ${pdf.numPages}`);
     let fullText = "";
     
     for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const content = await page.getTextContent();
         const strings = content.items.map(item => item.str);
-        fullText += strings.join(" ") + "\n\n";
+        const pageText = strings.join(" ");
+        console.log(`Page ${i} extracted text length: ${pageText.length} characters`);
+        fullText += pageText + "\n\n";
     }
+
+    console.log(`Total extracted text length: ${fullText.length} characters`);
 
     // Use docx library to create the Word document
     const { Document, Packer, Paragraph, TextRun } = docx;
     
     // Split text by lines to create paragraphs
     const paragraphs = fullText.split('\n').map(line => {
+        // Fix: docx v8 requires { text: string } rather than passing a string directly
         return new Paragraph({
-            children: [new TextRun(line)]
+            children: [new TextRun({ text: line })]
         });
     });
+
+    console.log(`Creating Word document with ${paragraphs.length} paragraphs...`);
 
     const doc = new Document({
         sections: [{
@@ -134,6 +143,7 @@ async function processPdfToWord(file) {
     });
 
     const blob = await Packer.toBlob(doc);
+    console.log(`Word document successfully generated. Size: ${blob.size} bytes`);
     downloadBlob(blob, file.name.replace('.pdf', '.docx'));
 }
 
