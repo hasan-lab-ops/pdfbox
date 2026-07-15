@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>API Required | PDF BOX</title>
+  <meta name="description" content="Tool requires a backend API.">
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+
+  <header>
+    <div class="container">
+      <div class="logo-container">
+        <div class="logo-box">PB</div>
+        <h1 class="logo-text">PDF <span class="text-aqua">BOX</span></h1>
+      </div>
+      <nav>
+        <a href="index.html" class="nav-link">Tools</a>
+        <a href="#" class="nav-link">Pricing</a>
+        <a href="#" class="nav-link">API</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="container animate-fade-in">
+      <div class="back-btn-container">
+        <a href="index.html" class="btn-secondary back-btn">&larr; Back to Tools</a>
+      </div>
+      
+      <div class="card static-card text-center">
+        <i data-lucide="server-crash" width="48" height="48" class="text-aqua mb-4" style="margin: 0 auto;"></i>
+        <h3 id="mock-title" style="margin-bottom: 16px;">API Required</h3>
+        <div class="alert-warning">
+          <i data-lucide="alert-circle" class="text-aqua"></i>
+          <div>
+            <strong>Backend Limitation:</strong> This tool requires a backend server for heavy file processing (e.g., extracting text, Word document conversions, or executing LibreOffice). Since this website is running purely as HTML in your browser without a backend, this tool is unavailable.
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="text-center">
+    <div class="container text-muted" style="color: var(--color-text-muted);">
+      <p>&copy; 2026 PDF BOX. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+  <script>
+    lucide.createIcons();
+    // Retrieve title from URL if passed
+    const urlParams = new URLSearchParams(window.location.search);
+    const tool = urlParams.get('tool');
+    if (tool) {
+      document.getElementById('mock-title').textContent = tool.replace(/-/g, ' ').toUpperCase() + " (API Required)";
+    }
+  </script>
+</body>
+</html>
