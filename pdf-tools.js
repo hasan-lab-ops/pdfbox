@@ -1,43 +1,123 @@
-async function convertWordToPdfAdvanced(file) {
-  try {
-    showLoading();
-    updateProgress(20);
+// Make sure PDFLib is loaded
+const { PDFDocument } = PDFLib;
 
-    const arrayBuffer = await file.arrayBuffer();
+// Helper to trigger download
+function downloadPdf(pdfBytes, filename) {
+    const blob = new Blob([pdfBytes], { type: 'application/pdf' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
 
-    const result = await mammoth.convertToHtml({ arrayBuffer });
-    let html = result.value;
+// Convert File to ArrayBuffer
+function fileToArrayBuffer(file) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsArrayBuffer(file);
+    });
+}
 
-    if (!html) throw "Empty file";
+// ---------------- Merge ----------------
+async function processMerge(files) {
+    const mergedPdf = await PDFDocument.create();
 
-    const container = document.createElement("div");
+    for (let i = 0; i < files.length; i++) {
+        const fileBuffer = await fileToArrayBuffer(files[i]);
+        const pdf = await PDFDocument.load(fileBuffer);
+        const copiedPages = await mergedPdf.copyPages(pdf, pdf.getPageIndices());
+        copiedPages.forEach((page) => mergedPdf.addPage(page));
+    }
 
-    container.innerHTML = html;
-    container.style.padding = "20px";
-    container.style.background = "white";
+    const pdfBytes = await mergedPdf.save();
+    downloadPdf(pdfBytes, 'merged-document.pdf');
+}
 
-    document.body.appendChild(container);
+// ---------------- Split ----------------
+function parseRangeStr(rangeStr, maxPages) {
+    if (!rangeStr.trim()) {
+        // If empty, return all pages
+        return Array.from({length: maxPages}, (_, i) => i);
+    }
 
-    updateProgress(60);
+    const pages = new Set();
+    const parts = rangeStr.split(',');
 
-    const pageSize = document.getElementById("page-size").value;
+    for (let part of parts) {
+        part = part.trim();
+        if (part.includes('-')) {
+            let [start, end] = part.split('-').map(Number);
+            if (isNaN(start) || isNaN(end)) throw new Error("Invalid range format");
+            
+            // Handle limits
+            start = Math.max(1, start);
+            end = Math.min(maxPages, end);
+            
+            if (start <= end) {
+                for (let i = start; i <= end; i++) pages.add(i - 1); // 0-indexed
+            }
+        } else {
+            const num = Number(part);
+            if (!isNaN(num) && num >= 1 && num <= maxPages) {
+                pages.add(num - 1);
+            }
+        }
+    }
 
-    await html2pdf()
-      .set({
-        filename: file.name.replace(".docx", ".pdf"),
-        html2canvas: { scale: 2 },
-        jsPDF: { format: pageSize }
-      })
-      .from(container)
-      .save();
+    if (pages.size === 0) throw new Error("No valid pages selected.");
+    return Array.from(pages).sort((a, b) => a - b);
+}
 
-    updateProgress(100);
+async function processSplit(file, rangeStr) {
+    const fileBuffer = await fileToArrayBuffer(file);
+    const sourcePdf = await PDFDocument.load(fileBuffer);
+    const totalPages = sourcePdf.getPageCount();
 
-    document.body.removeChild(container);
-    hideLoading();
+    const pagesToExtract = parseRangeStr(rangeStr, totalPages);
 
-  } catch (e) {
-    hideLoading();
-    alert("Error: " + e);
-  }
+    const splitPdf = await PDFDocument.create();
+    const copiedPages = await splitPdf.copyPages(sourcePdf, pagesToExtract);
+    copiedPages.forEach((page) => splitPdf.addPage(page));
+
+    const pdfBytes = await splitPdf.save();
+    downloadPdf(pdfBytes, `split-${file.name}`);
+}
+
+// ---------------- Image to PDF ----------------
+async function processImageToPdf(imageFiles) {
+    const pdfDoc = await PDFDocument.create();
+
+    for (let i = 0; i < imageFiles.length; i++) {
+        const file = imageFiles[i];
+        const imageBytes = await fileToArrayBuffer(file);
+        
+        let image;
+        if (file.type === 'image/jpeg' || file.type === 'image/jpg') {
+            image = await pdfDoc.embedJpg(imageBytes);
+        } else if (file.type === 'image/png') {
+            image = await pdfDoc.embedPng(imageBytes);
+        } else {
+            console.warn("Unsupported image type:", file.type);
+            continue;
+        }
+
+        const { width, height } = image.scale(1);
+        const page = pdfDoc.addPage([width, height]);
+        
+        page.drawImage(image, {
+            x: 0,
+            y: 0,
+            width: width,
+            height: height,
+        });
+    }
+
+    const pdfBytes = await pdfDoc.save();
+    downloadPdf(pdfBytes, 'images-converted.pdf');
 }
