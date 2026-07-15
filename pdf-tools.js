@@ -114,16 +114,56 @@ async function processPdfToWord(file) {
     for (let i = 1; i <= pdf.numPages; i++) {
         const page = await pdf.getPage(i);
         const content = await page.getTextContent();
-        const strings = content.items.map(item => item.str);
-        const pageText = strings.join(" ");
+        
+        // Horizontal Gap Detection (RTL) algorithm for Arabic
+        // Group elements that are at the same height (Y)
+        const linesMap = new Map();
+        content.items.forEach(item => {
+            // pdf.js transform[5] is the Y coordinate
+            const y = Math.round(item.transform[5]);
+            if (!linesMap.has(y)) {
+                linesMap.set(y, []);
+            }
+            linesMap.get(y).push(item);
+        });
+
+        // Sort Y coordinates descending (top to bottom on standard PDF coordinates)
+        const sortedY = Array.from(linesMap.keys()).sort((a, b) => b - a);
+        let pageText = "";
+
+        sortedY.forEach(y => {
+            const lineItems = linesMap.get(y);
+            // Sort words from right to left in descending order according to the X-coordinate (transform[4])
+            lineItems.sort((a, b) => b.transform[4] - a.transform[4]);
+
+            let lineStr = "";
+            for (let j = 0; j < lineItems.length; j++) {
+                const current = lineItems[j];
+                lineStr += current.str;
+
+                if (j < lineItems.length - 1) {
+                    const next = lineItems[j + 1];
+                    const currentX = current.transform[4];
+                    const nextX = next.transform[4];
+                    
+                    // Calculate distance between the end of the current word and the beginning of the next
+                    const gap = (currentX - current.width) - nextX;
+                    if (gap > 1.5) {
+                        lineStr += " ";
+                    }
+                }
+            }
+            pageText += lineStr + "\n";
+        });
+
         console.log(`Page ${i} extracted text length: ${pageText.length} characters`);
-        fullText += pageText + "\n\n";
+        fullText += pageText + "\n";
     }
 
     console.log(`Total extracted text length: ${fullText.length} characters`);
 
     // Use docx library to create the Word document
-    const { Document, Packer, Paragraph, TextRun } = docx;
+    const { Document, Packer, Paragraph, TextRun, AlignmentType } = docx;
     
     // Split text by lines to create paragraphs
     const paragraphs = fullText.split('\n').map(line => {
@@ -142,11 +182,10 @@ async function processPdfToWord(file) {
             });
         });
 
-        // Set the entire paragraph to RTL if the line starts with an Arabic character
-        const isParagraphRtl = /^\s*[\u0600-\u06FF]/.test(line);
-
         return new Paragraph({
-            bidirectional: isParagraphRtl,
+            bidirectional: true,
+            alignment: AlignmentType.RIGHT,
+            spacing: { line: 360 }, // 1.5 lines spacing
             children: runs
         });
     });
