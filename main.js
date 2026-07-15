@@ -1190,90 +1190,158 @@ async function viewerZoomOut() {
    ────────────────────────────────────────────────── */
 
 /**
- * Groups PDF text items into lines based on Y position proximity.
- * Returns array of arrays of text items.
+ * Isolated logic to parse PDF and convert to DOCX.
+ * Extracts text, normalizes Arabic presentation forms, detects RTL, handles gap spacing, and extracts styling.
  */
-function groupTextItemsIntoLines(items, tolerance = 4) {
-  if (!items.length) return [];
-  const sorted = [...items].sort((a, b) => b.transform[5] - a.transform[5]);
-  const lines = [];
-  let currentLine = [sorted[0]];
-  let currentY = sorted[0].transform[5];
+async function parseAndConvertPDFToWord(file, onProgress) {
+  const bytes = await readFileBytes(file);
+  const pdfDoc = await pdfjsLib.getDocument({ data: bytes }).promise;
+  const numPages = pdfDoc.numPages;
+  const docxChildren = [];
 
-  for (let i = 1; i < sorted.length; i++) {
-    const item = sorted[i];
-    if (Math.abs(item.transform[5] - currentY) <= tolerance) {
-      currentLine.push(item);
-    } else {
-      lines.push(currentLine);
-      currentLine = [item];
-      currentY = item.transform[5];
+  const isRTLText = (text) => /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\u0590-\u05FF]/.test(text);
+
+  const normalizeArabic = (text) => {
+    const normalizationMap = {
+      '\uFE8F':'\u0628','\uFE91':'\u0628','\uFE92':'\u0628','\uFE93':'\u0629','\uFE94':'\u0629','\uFE95':'\u062A','\uFE97':'\u062A','\uFE98':'\u062A','\uFE99':'\u062B','\uFE9B':'\u062B','\uFE9C':'\u062B','\uFE9D':'\u062C','\uFE9F':'\u062C','\uFEA0':'\u062C','\uFEA1':'\u062D','\uFEA3':'\u062D','\uFEA4':'\u062D','\uFEA5':'\u062E','\uFEA7':'\u062E','\uFEA8':'\u062E','\uFEA9':'\u062F','\uFEAA':'\u062F','\uFEAB':'\u0630','\uFEAC':'\u0630','\uFEAD':'\u0631','\uFEAE':'\u0631','\uFEAF':'\u0632','\uFEB0':'\u0632','\uFEB1':'\u0633','\uFEB3':'\u0633','\uFEB4':'\u0633','\uFEB5':'\u0634','\uFEB7':'\u0634','\uFEB8':'\u0634','\uFEB9':'\u0635','\uFEBB':'\u0635','\uFEBC':'\u0635','\uFEBD':'\u0636','\uFEBF':'\u0636','\uFEC0':'\u0636','\uFEC1':'\u0637','\uFEC3':'\u0637','\uFEC4':'\u0637','\uFEC5':'\u0638','\uFEC7':'\u0638','\uFEC8':'\u0638','\uFEC9':'\u0639','\uFECB':'\u0639','\uFECC':'\u0639','\uFECD':'\u063A','\uFECF':'\u063A','\uFED0':'\u063A','\uFED1':'\u0641','\uFED3':'\u0641','\uFED4':'\u0641','\uFED5':'\u0642','\uFED7':'\u0642','\uFED8':'\u0642','\uFED9':'\u0643','\uFEDB':'\u0643','\uFEDC':'\u0643','\uFEDD':'\u0644','\uFEDF':'\u0644','\uFEE0':'\u0644','\uFEE1':'\u0645','\uFEE3':'\u0645','\uFEE4':'\u0645','\uFEE5':'\u0646','\uFEE7':'\u0646','\uFEE8':'\u0646','\uFEE9':'\u0647','\uFEEB':'\u0647','\uFEEC':'\u0647','\uFEED':'\u0648','\uFEEE':'\u0648','\uFEEF':'\u0649','\uFEF0':'\u0649','\uFEF1':'\u064A','\uFEF3':'\u064A','\uFEF4':'\u064A','\uFE8D':'\u0627','\uFE8E':'\u0627','\uFE81':'\u0622','\uFE82':'\u0622','\uFE83':'\u0623','\uFE84':'\u0623','\uFE85':'\u0624','\uFE86':'\u0624','\uFE87':'\u0625','\uFE88':'\u0625','\uFE89':'\u0626','\uFE8A':'\u0626','\uFE8B':'\u0626','\uFE80':'\u0621','\uFEF5':'\u0644\u0622','\uFEF6':'\u0644\u0622','\uFEF7':'\u0644\u0623','\uFEF8':'\u0644\u0623','\uFEF9':'\u0644\u0625','\uFEFA':'\u0644\u0625','\uFEFB':'\u0644\u0627','\uFEFC':'\u0644\u0627'
+    };
+    return text.replace(/[\uFE70-\uFEFC]/g, match => normalizationMap[match] || match);
+  };
+
+  const rgbToHex = (r, g, b) => {
+    return ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
+  };
+
+  for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+    onProgress(5 + Math.round(((pageNum - 1) / numPages) * 80), `Extracting page ${pageNum} of ${numPages}…`);
+
+    const page = await pdfDoc.getPage(pageNum);
+    const textContent = await page.getTextContent({ includeMarkedContent: false });
+    const items = textContent.items.filter(item => item.str && item.str.trim() !== '');
+
+    if (items.length === 0) {
+      docxChildren.push(new docx.Paragraph({ children: [] }));
+      if (pageNum < numPages) docxChildren.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
+      continue;
+    }
+
+    const sortedItems = [...items].sort((a, b) => b.transform[5] - a.transform[5]);
+    const lines = [];
+    let currentLine = [sortedItems[0]];
+    let currentY = sortedItems[0].transform[5];
+    const tolerance = 4;
+
+    for (let i = 1; i < sortedItems.length; i++) {
+      const item = sortedItems[i];
+      if (Math.abs(item.transform[5] - currentY) <= tolerance) {
+        currentLine.push(item);
+      } else {
+        lines.push(currentLine);
+        currentLine = [item];
+        currentY = item.transform[5];
+      }
+    }
+    if (currentLine.length) lines.push(currentLine);
+
+    for (const line of lines) {
+      const lineStr = line.map(i => i.str).join('');
+      const isRTL = isRTLText(lineStr);
+
+      if (isRTL) {
+        line.sort((a, b) => b.transform[4] - a.transform[4]);
+      } else {
+        line.sort((a, b) => a.transform[4] - b.transform[4]);
+      }
+
+      const runs = [];
+      let currentRunStr = '';
+      let currentRunStyle = null;
+
+      const finishRun = () => {
+        if (currentRunStr) {
+          const runStr = isRTL ? normalizeArabic(currentRunStr) : currentRunStr;
+          runs.push(new docx.TextRun({
+            text: runStr,
+            size: currentRunStyle.size * 2,
+            color: currentRunStyle.color,
+            font: currentRunStyle.font,
+            rightToLeft: isRTL
+          }));
+        }
+      };
+
+      for (let i = 0; i < line.length; i++) {
+        const item = line[i];
+        const fontSize = Math.abs(item.transform[3]) || 12;
+        let fontName = textContent.styles[item.fontName]?.fontFamily || (isRTL ? 'Arial' : 'Calibri');
+        fontName = fontName.replace(/["']/g, '').split(',')[0].trim();
+        if (fontName === 'sans-serif') fontName = isRTL ? 'Arial' : 'Calibri';
+        
+        let colorHex = '000000';
+        if (item.color && item.color.length >= 3) {
+          colorHex = rgbToHex(item.color[0], item.color[1], item.color[2]);
+        }
+        
+        const itemStyle = { size: Math.round(Math.min(Math.max(fontSize, 8), 72)), color: colorHex, font: fontName };
+        let prependSpace = false;
+
+        if (i > 0) {
+          const prev = line[i - 1];
+          let gap = 0;
+          if (isRTL) {
+            gap = prev.transform[4] - (item.transform[4] + (item.width || 0));
+          } else {
+            gap = item.transform[4] - (prev.transform[4] + (prev.width || 0));
+          }
+          if (gap > fontSize * 0.2) {
+            prependSpace = true;
+          }
+        }
+
+        const styleChanged = !currentRunStyle || 
+                             currentRunStyle.size !== itemStyle.size || 
+                             currentRunStyle.color !== itemStyle.color || 
+                             currentRunStyle.font !== itemStyle.font;
+
+        if (styleChanged) {
+          finishRun();
+          currentRunStyle = itemStyle;
+          currentRunStr = prependSpace ? ' ' + item.str : item.str;
+        } else {
+          currentRunStr += (prependSpace ? ' ' : '') + item.str;
+        }
+      }
+      finishRun();
+
+      if (runs.length > 0) {
+        docxChildren.push(new docx.Paragraph({
+          children: runs,
+          bidirectional: isRTL,
+          alignment: isRTL ? docx.AlignmentType.RIGHT : docx.AlignmentType.LEFT,
+          spacing: { after: 100 }
+        }));
+      }
+    }
+
+    if (pageNum < numPages) {
+      docxChildren.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
     }
   }
-  if (currentLine.length) {
-    lines.push(currentLine);
-  }
 
-  lines.forEach(line => {
-    const lineStr = line.map(i => i.str).join('');
-    line.isRTL = isRTLText(lineStr);
-    if (line.isRTL) {
-      // Sort Right-to-Left (descending X)
-      line.sort((a, b) => b.transform[4] - a.transform[4]);
-    } else {
-      // Sort Left-to-Right (ascending X)
-      line.sort((a, b) => a.transform[4] - b.transform[4]);
-    }
+  onProgress(88, 'Building Word document…');
+
+  const document = new docx.Document({
+    creator: 'PDF BOX',
+    description: 'Converted from PDF by PDF BOX',
+    title: file.name.replace(/\.pdf$/i, ''),
+    sections: [{
+      properties: { page: { margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } },
+      children: docxChildren.length ? docxChildren : [new docx.Paragraph({ children: [new docx.TextRun('(No text found in this PDF)')] })]
+    }]
   });
 
-  return lines;
-}
-
-/** Detects if a string contains Arabic/RTL characters */
-function isRTLText(text) {
-  return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\u0590-\u05FF]/.test(text);
-}
-
-/**
- * Reconstruct words from a line of PDF text items,
- * respecting inter-word gaps.
- */
-function reconstructLineText(line) {
-  if (!line.length) return '';
-  let text = '';
-  const isRTL = line.isRTL;
-
-  for (let i = 0; i < line.length; i++) {
-    const item = line[i];
-    if (i > 0) {
-      const prev = line[i - 1];
-      let gap = 0;
-      if (isRTL) {
-        gap = prev.transform[4] - (item.transform[4] + (item.width || 0));
-      } else {
-        const prevEnd = prev.transform[4] + (prev.width || 0);
-        gap = item.transform[4] - prevEnd;
-      }
-      
-      const fontSize = Math.abs(item.transform[3]) || 12;
-      const spaceWidth = fontSize * 0.2;
-      if (gap > spaceWidth) text += ' ';
-    }
-    text += item.str;
-  }
-  
-  if (isRTL) {
-    text = normalizeArabic(text);
-  }
-  
-  return text;
-}
-
-function normalizeArabic(text) {
-  const normalizationMap = {
-    '\uFE8F':'\u0628','\uFE91':'\u0628','\uFE92':'\u0628','\uFE93':'\u0629','\uFE94':'\u0629','\uFE95':'\u062A','\uFE97':'\u062A','\uFE98':'\u062A','\uFE99':'\u062B','\uFE9B':'\u062B','\uFE9C':'\u062B','\uFE9D':'\u062C','\uFE9F':'\u062C','\uFEA0':'\u062C','\uFEA1':'\u062D','\uFEA3':'\u062D','\uFEA4':'\u062D','\uFEA5':'\u062E','\uFEA7':'\u062E','\uFEA8':'\u062E','\uFEA9':'\u062F','\uFEAA':'\u062F','\uFEAB':'\u0630','\uFEAC':'\u0630','\uFEAD':'\u0631','\uFEAE':'\u0631','\uFEAF':'\u0632','\uFEB0':'\u0632','\uFEB1':'\u0633','\uFEB3':'\u0633','\uFEB4':'\u0633','\uFEB5':'\u0634','\uFEB7':'\u0634','\uFEB8':'\u0634','\uFEB9':'\u0635','\uFEBB':'\u0635','\uFEBC':'\u0635','\uFEBD':'\u0636','\uFEBF':'\u0636','\uFEC0':'\u0636','\uFEC1':'\u0637','\uFEC3':'\u0637','\uFEC4':'\u0637','\uFEC5':'\u0638','\uFEC7':'\u0638','\uFEC8':'\u0638','\uFEC9':'\u0639','\uFECB':'\u0639','\uFECC':'\u0639','\uFECD':'\u063A','\uFECF':'\u063A','\uFED0':'\u063A','\uFED1':'\u0641','\uFED3':'\u0641','\uFED4':'\u0641','\uFED5':'\u0642','\uFED7':'\u0642','\uFED8':'\u0642','\uFED9':'\u0643','\uFEDB':'\u0643','\uFEDC':'\u0643','\uFEDD':'\u0644','\uFEDF':'\u0644','\uFEE0':'\u0644','\uFEE1':'\u0645','\uFEE3':'\u0645','\uFEE4':'\u0645','\uFEE5':'\u0646','\uFEE7':'\u0646','\uFEE8':'\u0646','\uFEE9':'\u0647','\uFEEB':'\u0647','\uFEEC':'\u0647','\uFEED':'\u0648','\uFEEE':'\u0648','\uFEEF':'\u0649','\uFEF0':'\u0649','\uFEF1':'\u064A','\uFEF3':'\u064A','\uFEF4':'\u064A','\uFE8D':'\u0627','\uFE8E':'\u0627','\uFE81':'\u0622','\uFE82':'\u0622','\uFE83':'\u0623','\uFE84':'\u0623','\uFE85':'\u0624','\uFE86':'\u0624','\uFE87':'\u0625','\uFE88':'\u0625','\uFE89':'\u0626','\uFE8A':'\u0626','\uFE8B':'\u0626','\uFE80':'\u0621','\uFEF5':'\u0644\u0622','\uFEF6':'\u0644\u0622','\uFEF7':'\u0644\u0623','\uFEF8':'\u0644\u0623','\uFEF9':'\u0644\u0625','\uFEFA':'\u0644\u0625','\uFEFB':'\u0644\u0627','\uFEFC':'\u0644\u0627'
-  };
-  return text.replace(/[\uFE70-\uFEFC]/g, match => normalizationMap[match] || match);
+  onProgress(95, 'Saving DOCX…');
+  return await docx.Packer.toBlob(document);
 }
 
 async function pdfToWord() {
@@ -1290,81 +1358,10 @@ async function pdfToWord() {
   setButtonEnabled('btn-pdf2word', false);
 
   try {
-    const bytes = await readFileBytes(file);
-    const pdfDoc = await pdfjsLib.getDocument({ data: bytes }).promise;
-    const numPages = pdfDoc.numPages;
-
-    const docxChildren = [];
-
-    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-      setProgress('pdf2word',
-        5 + Math.round(((pageNum - 1) / numPages) * 80),
-        `Extracting page ${pageNum} of ${numPages}…`
-      );
-
-      const page = await pdfDoc.getPage(pageNum);
-      const textContent = await page.getTextContent({ includeMarkedContent: false });
-      const items = textContent.items.filter(item => item.str && item.str.trim() !== '');
-
-      if (items.length === 0) {
-        // Empty page — add blank paragraph
-        docxChildren.push(new docx.Paragraph({ children: [] }));
-        continue;
-      }
-
-      const lines = groupTextItemsIntoLines(items);
-
-      for (const line of lines) {
-        const lineText = reconstructLineText(line);
-        if (!lineText.trim()) continue;
-
-        const rtl = line.isRTL;
-        const fontSize = Math.abs(line[0].transform[3]) || 12;
-        const fontSizePt = Math.round(Math.min(Math.max(fontSize, 8), 72));
-
-        docxChildren.push(new docx.Paragraph({
-          children: [
-            new docx.TextRun({
-              text: lineText,
-              size: fontSizePt * 2, // half-points
-              font: rtl ? 'Arial' : 'Calibri',
-              rtl: rtl,
-            }),
-          ],
-          bidirectional: rtl,
-          alignment: rtl ? docx.AlignmentType.RIGHT : docx.AlignmentType.LEFT,
-          spacing: { after: 100 },
-        }));
-      }
-
-      // Page break between pages
-      if (pageNum < numPages) {
-        docxChildren.push(new docx.Paragraph({
-          children: [new docx.PageBreak()],
-        }));
-      }
-    }
-
-    setProgress('pdf2word', 88, 'Building Word document…');
-
-    const document = new docx.Document({
-      creator: 'PDF BOX',
-      description: 'Converted from PDF by PDF BOX',
-      title: file.name.replace('.pdf', ''),
-      sections: [{
-        properties: {
-          page: {
-            margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 },
-          },
-        },
-        children: docxChildren.length ? docxChildren : [
-          new docx.Paragraph({ children: [new docx.TextRun('(No text found in this PDF)')] })
-        ],
-      }],
+    const blob = await parseAndConvertPDFToWord(file, (progress, msg) => {
+      setProgress('pdf2word', progress, msg);
     });
-
-    setProgress('pdf2word', 95, 'Saving DOCX…');
-    const blob = await docx.Packer.toBlob(document);
+    
     const name = file.name.replace(/\.pdf$/i, '') + '.docx';
     setProgress('pdf2word', 100, 'Complete!');
     showResult('pdf2word', successResult(name, blob, formatSize(blob.size)));
