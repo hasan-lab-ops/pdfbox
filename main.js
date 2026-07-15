@@ -2,7 +2,13 @@
 const state = {
     mergeFiles: [],
     splitFile: null,
-    imageFiles: []
+    imageFiles: [],
+    pdf2wordFile: null,
+    word2pdfFile: null,
+    compressFile: null,
+    protectFile: null,
+    unlockFile: null,
+    watermarkFile: null
 };
 
 // DOM Elements
@@ -14,11 +20,9 @@ const statusText = document.getElementById('status-text');
 // Navigation
 navItems.forEach(item => {
     item.addEventListener('click', () => {
-        // Remove active class from all
         navItems.forEach(nav => nav.classList.remove('active'));
         sections.forEach(sec => sec.classList.remove('active-section'));
 
-        // Add active class to clicked
         item.classList.add('active');
         const targetId = item.getAttribute('data-target');
         document.getElementById(targetId).classList.add('active-section');
@@ -73,8 +77,29 @@ function setupDragAndDrop(dropZoneId, inputId, onFiles) {
     });
 }
 
-// ---------------- Merge PDFs Logic ----------------
+function setupSingleFileUI(dropId, inputId, stateKey, expectedType, optionsId, fileInfoId, btnId) {
+    setupDragAndDrop(dropId, inputId, (files) => {
+        let validFiles = files;
+        if (expectedType === 'application/pdf') {
+            validFiles = files.filter(f => f.type === 'application/pdf');
+        } else if (expectedType === '.docx') {
+            validFiles = files.filter(f => f.name.endsWith('.docx') || f.type.includes('wordprocessingml'));
+        }
+        
+        if (validFiles.length > 0) {
+            state[stateKey] = validFiles[0];
+            const optionsPanel = document.getElementById(optionsId);
+            const fileInfo = document.getElementById(fileInfoId);
+            const btn = document.getElementById(btnId);
 
+            optionsPanel.classList.remove('hidden');
+            fileInfo.textContent = `Selected: ${state[stateKey].name} (${formatBytes(state[stateKey].size)})`;
+            btn.disabled = false;
+        }
+    });
+}
+
+// ---------------- Merge PDFs ----------------
 setupDragAndDrop('merge-drop-zone', 'merge-input', (files) => {
     const pdfFiles = files.filter(f => f.type === 'application/pdf');
     state.mergeFiles = [...state.mergeFiles, ...pdfFiles];
@@ -98,7 +123,6 @@ function renderMergeList() {
         `;
         list.appendChild(li);
     });
-
     btn.disabled = state.mergeFiles.length < 2;
 }
 
@@ -110,56 +134,22 @@ window.removeMergeFile = (index) => {
 document.getElementById('merge-btn').addEventListener('click', async () => {
     if (state.mergeFiles.length < 2) return;
     showStatus('Merging PDFs...');
-    try {
-        await processMerge(state.mergeFiles);
-    } catch (err) {
-        alert("Error merging PDFs: " + err.message);
-    }
+    try { await processMerge(state.mergeFiles); } catch (err) { alert("Error: " + err.message); }
     hideStatus();
 });
 
-
-// ---------------- Split PDF Logic ----------------
-
-setupDragAndDrop('split-drop-zone', 'split-input', (files) => {
-    const pdfFiles = files.filter(f => f.type === 'application/pdf');
-    if (pdfFiles.length > 0) {
-        state.splitFile = pdfFiles[0]; // only take the first one
-        renderSplitInfo();
-    }
-});
-
-function renderSplitInfo() {
-    const optionsPanel = document.getElementById('split-options');
-    const fileInfo = document.getElementById('split-file-info');
-    const btn = document.getElementById('split-btn');
-
-    if (state.splitFile) {
-        optionsPanel.classList.remove('hidden');
-        fileInfo.textContent = `Selected: ${state.splitFile.name} (${formatBytes(state.splitFile.size)})`;
-        btn.disabled = false;
-    } else {
-        optionsPanel.classList.add('hidden');
-        btn.disabled = true;
-    }
-}
+// ---------------- Split PDF ----------------
+setupSingleFileUI('split-drop-zone', 'split-input', 'splitFile', 'application/pdf', 'split-options', 'split-file-info', 'split-btn');
 
 document.getElementById('split-btn').addEventListener('click', async () => {
     const rangeInput = document.getElementById('split-range').value;
     if (!state.splitFile) return;
-    
     showStatus('Splitting PDF...');
-    try {
-        await processSplit(state.splitFile, rangeInput);
-    } catch (err) {
-        alert("Error splitting PDF: " + err.message);
-    }
+    try { await processSplit(state.splitFile, rangeInput); } catch (err) { alert("Error: " + err.message); }
     hideStatus();
 });
 
-
-// ---------------- Image to PDF Logic ----------------
-
+// ---------------- Image to PDF ----------------
 setupDragAndDrop('img2pdf-drop-zone', 'img2pdf-input', (files) => {
     const imageFiles = files.filter(f => f.type.startsWith('image/'));
     state.imageFiles = [...state.imageFiles, ...imageFiles];
@@ -174,20 +164,16 @@ function renderImageList() {
     state.imageFiles.forEach((file, index) => {
         const li = document.createElement('li');
         li.className = 'image-item';
-        
         const img = document.createElement('img');
         img.src = URL.createObjectURL(file);
-        
         const removeBtn = document.createElement('button');
         removeBtn.className = 'remove-btn';
         removeBtn.innerHTML = '<i class="fa-solid fa-xmark"></i>';
         removeBtn.onclick = () => removeImageFile(index);
-
         li.appendChild(img);
         li.appendChild(removeBtn);
         list.appendChild(li);
     });
-
     btn.disabled = state.imageFiles.length === 0;
 }
 
@@ -199,10 +185,65 @@ window.removeImageFile = (index) => {
 document.getElementById('img2pdf-btn').addEventListener('click', async () => {
     if (state.imageFiles.length === 0) return;
     showStatus('Generating PDF...');
-    try {
-        await processImageToPdf(state.imageFiles);
-    } catch (err) {
-        alert("Error generating PDF: " + err.message);
-    }
+    try { await processImageToPdf(state.imageFiles); } catch (err) { alert("Error: " + err.message); }
+    hideStatus();
+});
+
+// ---------------- PDF to Word ----------------
+setupSingleFileUI('pdf2word-drop-zone', 'pdf2word-input', 'pdf2wordFile', 'application/pdf', 'pdf2word-options', 'pdf2word-file-info', 'pdf2word-btn');
+document.getElementById('pdf2word-btn').addEventListener('click', async () => {
+    if (!state.pdf2wordFile) return;
+    showStatus('Converting to Word...');
+    try { await processPdfToWord(state.pdf2wordFile); } catch (err) { alert("Error: " + err.message); }
+    hideStatus();
+});
+
+// ---------------- Word to PDF ----------------
+setupSingleFileUI('word2pdf-drop-zone', 'word2pdf-input', 'word2pdfFile', '.docx', 'word2pdf-options', 'word2pdf-file-info', 'word2pdf-btn');
+document.getElementById('word2pdf-btn').addEventListener('click', async () => {
+    if (!state.word2pdfFile) return;
+    showStatus('Converting to PDF...');
+    try { await processWordToPdf(state.word2pdfFile); } catch (err) { alert("Error: " + err.message); }
+    hideStatus();
+});
+
+// ---------------- Compress PDF ----------------
+setupSingleFileUI('compress-drop-zone', 'compress-input', 'compressFile', 'application/pdf', 'compress-options', 'compress-file-info', 'compress-btn');
+document.getElementById('compress-btn').addEventListener('click', async () => {
+    if (!state.compressFile) return;
+    showStatus('Compressing PDF...');
+    try { await processCompressPdf(state.compressFile); } catch (err) { alert("Error: " + err.message); }
+    hideStatus();
+});
+
+// ---------------- Protect PDF ----------------
+setupSingleFileUI('protect-drop-zone', 'protect-input', 'protectFile', 'application/pdf', 'protect-options', 'protect-file-info', 'protect-btn');
+document.getElementById('protect-btn').addEventListener('click', async () => {
+    const pwd = document.getElementById('protect-password').value;
+    if (!state.protectFile) return;
+    if (!pwd) return alert("Please enter a password.");
+    showStatus('Protecting PDF...');
+    try { await processProtectPdf(state.protectFile, pwd); } catch (err) { alert("Error: " + err.message); }
+    hideStatus();
+});
+
+// ---------------- Unlock PDF ----------------
+setupSingleFileUI('unlock-drop-zone', 'unlock-input', 'unlockFile', 'application/pdf', 'unlock-options', 'unlock-file-info', 'unlock-btn');
+document.getElementById('unlock-btn').addEventListener('click', async () => {
+    const pwd = document.getElementById('unlock-password').value;
+    if (!state.unlockFile) return;
+    showStatus('Unlocking PDF...');
+    try { await processUnlockPdf(state.unlockFile, pwd); } catch (err) { alert("Error: " + err.message); }
+    hideStatus();
+});
+
+// ---------------- Watermark PDF ----------------
+setupSingleFileUI('watermark-drop-zone', 'watermark-input', 'watermarkFile', 'application/pdf', 'watermark-options', 'watermark-file-info', 'watermark-btn');
+document.getElementById('watermark-btn').addEventListener('click', async () => {
+    const text = document.getElementById('watermark-text').value;
+    if (!state.watermarkFile) return;
+    if (!text) return alert("Please enter watermark text.");
+    showStatus('Adding Watermark...');
+    try { await processWatermarkPdf(state.watermarkFile, text); } catch (err) { alert("Error: " + err.message); }
     hideStatus();
 });

@@ -4,15 +4,27 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description"
-    content="AquaPDF - Free, secure, client-side PDF tools. Merge, split, and convert to PDF directly in your browser.">
-  <title>AquaPDF - Modern PDF Tools</title>
+  <meta name="description" content="PDF BOX - Free, secure, client-side PDF tools. All your PDF needs in one place.">
+  <title>PDF BOX - Modern PDF Tools</title>
+  
   <!-- Google Fonts -->
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap" rel="stylesheet">
   <!-- FontAwesome for Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-  <!-- PDF-Lib Library -->
+  
+  <!-- PDF-Lib -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+  <!-- Mammoth (Word to HTML) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+  <!-- html2pdf (HTML to PDF) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <!-- docx (Text to Word) -->
+  <script src="https://unpkg.com/docx@8.2.3/build/index.js"></script>
+  <!-- PDF.js (Read PDF) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <!-- jsPDF (PDF Generation / Encryption) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  
   <link rel="stylesheet" href="style.css">
 </head>
 
@@ -21,19 +33,19 @@
     <!-- Sidebar Navigation -->
     <nav class="sidebar">
       <div class="brand">
-        <i class="fa-solid fa-file-pdf"></i>
-        <span>AquaPDF</span>
+        <i class="fa-solid fa-box-open"></i>
+        <span>PDF BOX</span>
       </div>
       <ul class="nav-links">
-        <li class="nav-item active" data-target="merge-section">
-          <i class="fa-solid fa-object-group"></i> Merge PDFs
-        </li>
-        <li class="nav-item" data-target="split-section">
-          <i class="fa-solid fa-scissors"></i> Split PDF
-        </li>
-        <li class="nav-item" data-target="img2pdf-section">
-          <i class="fa-solid fa-images"></i> Image to PDF
-        </li>
+        <li class="nav-item active" data-target="merge-section"><i class="fa-solid fa-object-group"></i> Merge PDFs</li>
+        <li class="nav-item" data-target="split-section"><i class="fa-solid fa-scissors"></i> Split PDF</li>
+        <li class="nav-item" data-target="img2pdf-section"><i class="fa-solid fa-images"></i> Image to PDF</li>
+        <li class="nav-item" data-target="pdf2word-section"><i class="fa-solid fa-file-word"></i> PDF to Word</li>
+        <li class="nav-item" data-target="word2pdf-section"><i class="fa-solid fa-file-pdf"></i> Word to PDF</li>
+        <li class="nav-item" data-target="compress-section"><i class="fa-solid fa-compress"></i> Compress PDF</li>
+        <li class="nav-item" data-target="protect-section"><i class="fa-solid fa-lock"></i> Protect PDF</li>
+        <li class="nav-item" data-target="unlock-section"><i class="fa-solid fa-lock-open"></i> Unlock PDF</li>
+        <li class="nav-item" data-target="watermark-section"><i class="fa-solid fa-droplet"></i> Watermark PDF</li>
       </ul>
     </nav>
 
@@ -107,11 +119,152 @@
         </div>
       </section>
 
+      <!-- PDF to Word Section -->
+      <section id="pdf2word-section" class="tool-section">
+        <div class="tool-header">
+          <h2>PDF to Word</h2>
+          <p>Extract text from a PDF and save it as a Word Document (.docx).</p>
+        </div>
+        <div class="drop-zone" id="pdf2word-drop-zone">
+          <i class="fa-solid fa-file-word"></i>
+          <p>Drag & drop a PDF here</p>
+          <span>or</span>
+          <label class="btn-primary" for="pdf2word-input">Select PDF</label>
+          <input type="file" id="pdf2word-input" accept="application/pdf" hidden>
+        </div>
+        <div id="pdf2word-options" class="options-panel hidden">
+          <div class="file-info" id="pdf2word-file-info"></div>
+        </div>
+        <div class="action-bar">
+          <button id="pdf2word-btn" class="btn-primary" disabled><i class="fa-solid fa-file-word"></i> Convert to Word</button>
+        </div>
+      </section>
+
+      <!-- Word to PDF Section -->
+      <section id="word2pdf-section" class="tool-section">
+        <div class="tool-header">
+          <h2>Word to PDF</h2>
+          <p>Convert a Word Document (.docx) into a PDF.</p>
+        </div>
+        <div class="drop-zone" id="word2pdf-drop-zone">
+          <i class="fa-solid fa-file-pdf"></i>
+          <p>Drag & drop a Word file here</p>
+          <span>or</span>
+          <label class="btn-primary" for="word2pdf-input">Select Word Doc</label>
+          <input type="file" id="word2pdf-input" accept=".docx" hidden>
+        </div>
+        <div id="word2pdf-options" class="options-panel hidden">
+          <div class="file-info" id="word2pdf-file-info"></div>
+        </div>
+        <div class="action-bar">
+          <button id="word2pdf-btn" class="btn-primary" disabled><i class="fa-solid fa-file-pdf"></i> Convert to PDF</button>
+        </div>
+      </section>
+
+      <!-- Compress PDF Section -->
+      <section id="compress-section" class="tool-section">
+        <div class="tool-header">
+          <h2>Compress PDF</h2>
+          <p>Reduce the file size of your PDF.</p>
+        </div>
+        <div class="drop-zone" id="compress-drop-zone">
+          <i class="fa-solid fa-compress"></i>
+          <p>Drag & drop a PDF here</p>
+          <span>or</span>
+          <label class="btn-primary" for="compress-input">Select PDF</label>
+          <input type="file" id="compress-input" accept="application/pdf" hidden>
+        </div>
+        <div id="compress-options" class="options-panel hidden">
+          <div class="file-info" id="compress-file-info"></div>
+        </div>
+        <div class="action-bar">
+          <button id="compress-btn" class="btn-primary" disabled><i class="fa-solid fa-compress"></i> Compress PDF</button>
+        </div>
+      </section>
+
+      <!-- Protect PDF Section -->
+      <section id="protect-section" class="tool-section">
+        <div class="tool-header">
+          <h2>Protect PDF</h2>
+          <p>Add a password to encrypt your PDF.</p>
+        </div>
+        <div class="drop-zone" id="protect-drop-zone">
+          <i class="fa-solid fa-lock"></i>
+          <p>Drag & drop a PDF here</p>
+          <span>or</span>
+          <label class="btn-primary" for="protect-input">Select PDF</label>
+          <input type="file" id="protect-input" accept="application/pdf" hidden>
+        </div>
+        <div id="protect-options" class="options-panel hidden">
+          <div class="file-info" id="protect-file-info"></div>
+          <div class="input-group">
+            <label for="protect-password">Set Password:</label>
+            <input type="password" id="protect-password" placeholder="Enter password">
+          </div>
+        </div>
+        <div class="action-bar">
+          <button id="protect-btn" class="btn-primary" disabled><i class="fa-solid fa-lock"></i> Protect PDF</button>
+        </div>
+      </section>
+
+      <!-- Unlock PDF Section -->
+      <section id="unlock-section" class="tool-section">
+        <div class="tool-header">
+          <h2>Unlock PDF</h2>
+          <p>Remove password protection from a PDF.</p>
+        </div>
+        <div class="drop-zone" id="unlock-drop-zone">
+          <i class="fa-solid fa-lock-open"></i>
+          <p>Drag & drop a protected PDF here</p>
+          <span>or</span>
+          <label class="btn-primary" for="unlock-input">Select PDF</label>
+          <input type="file" id="unlock-input" accept="application/pdf" hidden>
+        </div>
+        <div id="unlock-options" class="options-panel hidden">
+          <div class="file-info" id="unlock-file-info"></div>
+          <div class="input-group">
+            <label for="unlock-password">Current Password:</label>
+            <input type="password" id="unlock-password" placeholder="Enter the current password">
+          </div>
+        </div>
+        <div class="action-bar">
+          <button id="unlock-btn" class="btn-primary" disabled><i class="fa-solid fa-lock-open"></i> Unlock PDF</button>
+        </div>
+      </section>
+
+      <!-- Watermark PDF Section -->
+      <section id="watermark-section" class="tool-section">
+        <div class="tool-header">
+          <h2>Watermark PDF</h2>
+          <p>Add text watermarks to all pages of your PDF.</p>
+        </div>
+        <div class="drop-zone" id="watermark-drop-zone">
+          <i class="fa-solid fa-droplet"></i>
+          <p>Drag & drop a PDF here</p>
+          <span>or</span>
+          <label class="btn-primary" for="watermark-input">Select PDF</label>
+          <input type="file" id="watermark-input" accept="application/pdf" hidden>
+        </div>
+        <div id="watermark-options" class="options-panel hidden">
+          <div class="file-info" id="watermark-file-info"></div>
+          <div class="input-group">
+            <label for="watermark-text">Watermark Text:</label>
+            <input type="text" id="watermark-text" placeholder="CONFIDENTIAL">
+          </div>
+        </div>
+        <div class="action-bar">
+          <button id="watermark-btn" class="btn-primary" disabled><i class="fa-solid fa-droplet"></i> Add Watermark</button>
+        </div>
+      </section>
+
       <!-- Loader / Status -->
       <div id="status-overlay" class="overlay hidden">
         <div class="spinner"></div>
         <p id="status-text">Processing...</p>
       </div>
+      
+      <!-- Hidden div for processing HTML to PDF -->
+      <div id="hidden-html2pdf" style="display: none;"></div>
     </main>
   </div>
 
