@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
+    <title>PDFBox | Complete PDF & Document Converter Toolkit</title>
+    <meta name="description"
+        content="Professional PDF & Document conversion tools. Convert PDF to Word, Word to PDF, encrypt/decrypt PDFs with passwords. Fast, secure, client-side processing.">
+    <meta name="keywords"
+        content="pdf to word, word to pdf, pdf converter, pdf encryption, password protect pdf, pdf decrypt, document converter">
+    <link rel="canonical" href="https://pdfbox.online/">
+    <link rel="stylesheet" href="css/styles.css">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Core Libraries -->
+    <!-- PDF-Lib: Advanced PDF manipulation with encryption support -->
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+
+    <!-- pdf.js: PDF text extraction and rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script>
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.worker.min.js';
+    </script>
+<!-- Mammoth.js: DOCX → HTML -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+
+<!-- html2pdf: HTML → PDF -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- html2canvas: HTML to image conversion -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+    <!-- html2pdf.js: HTML to PDF export (pinned to stable v0.10.1) -->
+
+    <!-- Tesseract.js: OCR for scanned PDFs in the browser -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/6.0.1/tesseract.min.js"></script>
+
+    <!-- JSZip: bundle multiple converted images/pages into a downloadable archive -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+    <!-- مكتبة docx المخصصة للمتصفح مباشرة عبر ESM -->
+    <script type="module">
+        import * as docxModule from 'https://cdn.jsdelivr.net/npm/docx@9.7.1/+esm';
+        window.docx = docxModule;
+        window.docxReady = Promise.resolve(docxModule);
+    </script>
+
+    <!-- Mammoth.js: DOCX file reading -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+<!-- مكتبة تحويل الـ HTML إلى PDF بجودة عالية -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+</head>
+
+<body>
+
+    <!-- Header -->
+    <header>
+        <div class="container nav-container">
+            <a href="#home" class="logo">
+                <i data-lucide="file-text"></i> PDF Toolkit
+            </a>
+            <ul class="nav-links" id="nav-links">
+                <li><a href="#home">Home</a></li>
+                <li><a href="#tools">All Tools</a></li>
+                <li><a href="#about">About</a></li>
+                <li><a href="#contact">Contact</a></li>
+                <li id="nav-auth-container" style="display: flex; align-items: center;">
+                    <a href="#auth" id="nav-signin-btn" class="btn"
+                        style="padding: 6px 16px; font-size: 0.9rem; margin-left: 8px;">Sign In</a>
+                    <div id="nav-user-menu" class="header-user-menu hidden">
+                        <div class="header-avatar" id="nav-user-avatar">U</div>
+                        <span class="header-username" id="nav-user-name">User</span>
+                        <i data-lucide="chevron-down" style="width: 16px; height: 16px;"></i>
+                        <div class="user-dropdown" id="nav-user-dropdown">
+                            <div class="user-dropdown-header">
+                                <div class="user-dropdown-name" id="dropdown-user-name">User Name</div>
+                                <div class="user-dropdown-email" id="dropdown-user-email">user@example.com</div>
+                            </div>
+                            <button id="btn-signout">
+                                <i data-lucide="log-out" style="width: 16px; height: 16px;"></i> Sign Out
+                            </button>
+                        </div>
+                    </div>
+                </li>
+            </ul>
+        </div>
+    </header>
+
+    <!-- Main Content Area -->
+    <main class="container">
+
+        <!-- View: Home -->
+        <section id="view-home" class="view-section">
+            <div class="hero">
+                <h1>Free, Fast & Secure PDF Tools</h1>
+                <p>Everything you need to manage your PDF files. Processed securely in your browser so your files never
+                    leave your computer.</p>
+                <div class="trust-badges">
+                    <span class="badge"><i data-lucide="shield-check"></i> 100% Secure</span>
+                    <span class="badge"><i data-lucide="zap"></i> Lightning Fast</span>
+                    <span class="badge"><i data-lucide="browser"></i> In-Browser Processing</span>
+                </div>
+            </div>
+
+            <h2 style="text-align: center; margin-bottom: 24px;">Our Most Popular Tools</h2>
+            <div class="tools-grid" id="home-tools-grid">
+                <!-- Injected via JS -->
+            </div>
+            <div style="text-align: center; margin-bottom: 40px;">
+                <a href="#tools" class="btn">View All Tools <i data-lucide="arrow-right"></i></a>
+            </div>
+        </section>
+
+        <!-- View: All Tools -->
+        <section id="view-tools" class="view-section hidden">
+            <h1 style="margin-bottom: 32px; text-align: center;">All PDF Tools</h1>
+            <div class="tools-grid" id="all-tools-grid">
+                <!-- Injected via JS -->
+            </div>
+        </section>
+
+        <!-- View: Tool Detail -->
+        <section id="view-tool-detail" class="view-section hidden">
+            <div class="tool-header">
+                <div class="tool-icon" id="tool-detail-icon" style="margin: 0 auto 16px;"></div>
+                <h1 id="tool-detail-title"></h1>
+                <p id="tool-detail-desc"></p>
+            </div>
+
+            <div class="workspace">
+                <div class="dropzone" id="file-dropzone">
+                    <div class="dropzone-icon">
+                        <i data-lucide="upload-cloud"></i>
+                    </div>
+                    <h3>Drop your file here or browse</h3>
+                    <p>PDFs, images, and Word files are all supported for fast browser-based processing.</p>
+                    <div class="dropzone-chip-row">
+                        <span class="status-pill">Fast</span>
+                        <span class="status-pill">Secure</span>
+                        <span class="status-pill">No upload required</span>
+                    </div>
+                    <input type="file" id="file-input" style="display: none;" multiple accept=".pdf,.doc,.docx,image/*">
+                </div>
+
+                <div id="file-list" class="hidden" style="margin-top: 24px;"></div>
+                <div id="page-preview-grid" class="page-preview-grid hidden"></div>
+
+                <div id="tool-options" class="hidden" style="margin-top: 24px; text-align: center;">
+                    <!-- Dynamic options like password input will be injected here -->
+                </div>
+
+                <div id="conversion-notice" class="conversion-notice hidden" role="alert" aria-live="polite"></div>
+
+                <div style="text-align: center; margin-top: 32px;">
+                    <button id="process-btn" class="btn hidden">
+                        <span>Process PDF</span> <i data-lucide="settings"></i>
+                    </button>
+                    <div id="loading-indicator" class="hidden" aria-live="polite">
+                        <div class="spinner"></div>
+                        <div class="loading-copy">
+                            <strong id="loading-message">Processing...</strong>
+                            <div class="progress-track" aria-hidden="true">
+                                <div id="progress-fill" class="progress-fill"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Result Screen -->
+                <div id="result-screen" class="result-screen hidden">
+                    <div class="result-card">
+                        <div class="result-icon">
+                            <i data-lucide="check-circle"></i>
+                        </div>
+                        <h2>Your file is ready</h2>
+                        <p id="result-filename" class="result-filename"></p>
+                        <div class="result-actions">
+                            <button id="result-download-btn" class="btn result-download-btn">
+                                <i data-lucide="download"></i> Download File
+                            </button>
+                            <button id="result-delete-btn" class="btn btn-outline result-delete-btn">
+                                <i data-lucide="trash-2"></i> Delete File
+                            </button>
+                            <button id="result-startover-btn" class="btn btn-outline result-startover-btn">
+                                <i data-lucide="rotate-ccw"></i> Start Over
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="continue-in-section">
+                        <h3>Continue in:</h3>
+                        <div class="continue-tools-grid" id="continue-tools-grid">
+                            <!-- Related tools injected here -->
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Dynamic SEO Content injected here -->
+                <div id="tool-detail-article" class="text-page" style="margin-top: 60px;"></div>
+            </div>
+        </section>
+
+        <!-- View: About -->
+        <section id="view-about" class="view-section hidden text-page">
+            <h1>About Us</h1>
+            <p>Welcome to PDF Toolkit, your secure, free, and fast platform for managing PDF files.</p>
+            <p>Our mission is to provide simple yet powerful tools to merge, split, compress, and edit PDFs without
+                compromising your privacy. Unlike many other services that require you to upload your sensitive
+                documents to their servers, our tools leverage modern web technologies to process your files directly in
+                your web browser.</p>
+            <h2>Our Commitment to Privacy</h2>
+            <p>Your privacy is our top priority. Because all processing happens locally on your device, we never see,
+                store, or share your files. Your data remains strictly yours.</p>
+        </section>
+
+        <!-- View: Contact -->
+        <section id="view-contact" class="view-section hidden text-page">
+            <h1>Contact Us</h1>
+            <p>Have questions, suggestions, or experiencing issues? We'd love to hear from you.</p>
+            <form onsubmit="event.preventDefault(); alert('Message sent! (Mock)');">
+                <div class="form-group">
+                    <label>Name</label>
+                    <input type="text" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label>Message</label>
+                    <textarea class="form-control" rows="5" required></textarea>
+                </div>
+                <button type="submit" class="btn">Send Message</button>
+            </form>
+            <p style="margin-top: 24px;">Alternative contact: <a
+                    href="https://mail.google.com/mail/?view=cm&fs=1&to=hasan.saad898@gmail.com" target="_blank"
+                    rel="noopener noreferrer">hasan.saad898@gmail.com</a></p>
+        </section>
+
+        <!-- View: Privacy -->
+        <section id="view-privacy" class="view-section hidden text-page">
+            <h1>Privacy Policy</h1>
+            <p>Last updated: July 2026</p>
+            <p>At PDFBox, the privacy and security of your data are our top priorities. We build our PDF tools so users
+                can process documents safely and confidently without exposing sensitive files to unnecessary risk.</p>
+            <h2>1. Information We Collect</h2>
+            <p>We collect as little information as possible. Our priority is to keep your data private and minimize any
+                personal information stored or processed.</p>
+            <ul>
+                <li><strong>Files and Documents:</strong> We do NOT store or access any PDF files, images, or documents
+                    you process with our tools. All uploaded items are processed securely and are removed immediately
+                    after the conversion or merging workflow completes.</li>
+                <li><strong>Processing Security:</strong> When files are handled through any communication channels, we
+                    use fully encrypted and secure protocols. This ensures that data remains protected during the
+                    processing session.</li>
+                <li><strong>Log Files:</strong> We may use standard server logs for monitoring site health. These logs
+                    can include IP address, browser type, ISP, date/time stamp, and referring pages. This information is
+                    not linked to personally identifiable information.</li>
+            </ul>
+        </section>
+
+        <!-- View: Terms -->
+        <section id="view-terms" class="view-section hidden text-page">
+            <h1>Terms of Service</h1>
+            <p>Last updated: July 2026</p>
+            <p>Welcome to PDF Toolkit!</p>
+            <h2>1. Acceptance of Terms</h2>
+            <p>By accessing this website we assume you accept these terms and conditions. Do not continue to use PDF
+                Toolkit if you do not agree to take all of the terms and conditions stated on this page.</p>
+            <h2>2. License and Usage</h2>
+            <p>Unless otherwise stated, PDF Toolkit and/or its licensors own the intellectual property rights for all
+                material on PDF Toolkit. All intellectual property rights are reserved.</p>
+        </section>
+
+        <!-- View: Auth (Sign In / Sign Up) -->
+        <section id="view-auth" class="view-section hidden">
+            <div class="auth-container">
+                <!-- Loading Overlay -->
+                <div class="auth-loading-overlay hidden" id="auth-loading-overlay">
+                    <div class="spinner"
+                        style="border-color: rgba(14, 165, 233, 0.2); border-top-color: var(--primary);"></div>
+                    <h3 id="loading-overlay-text">Signing in securely...</h3>
+                    <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 6px;">Verifying browser
+                        credentials</p>
+                </div>
+
+                <!-- Sign In Form -->
+                <div id="form-signin-container" class="auth-form-pane">
+                    <h2 class="auth-title">Welcome Back</h2>
+                    <p class="auth-subtitle">Sign in to manage your PDFs and access more features.</p>
+                    <button type="button" class="btn-google" id="google-signin-btn">
+                        <svg viewBox="0 0 24 24" width="24" height="24" xmlns="http://www.w3.org/2000/svg">
+                            <g transform="matrix(1, 0, 0, 1, 0, 0)">
+                                <path
+                                    d="M21.35,11.1H12v2.7h5.38c-0.24,1.28 -0.96,2.37 -2.04,3.1v2.58h3.3c1.93,-1.78 3.04,-4.4 3.04,-7.38c0,-0.68 -0.06,-1.34 -0.18,-2H21.35z"
+                                    fill="#4285F4" />
+                                <path
+                                    d="M12,20.6c2.43,0 4.47,-0.8 5.96,-2.2l-3.3,-2.58c-0.92,0.62 -2.1,1 -2.66,1c-2.43,0 -4.5,-1.64 -5.23,-3.85H3.37v2.67C4.85,18.06 8.13,20.6 12,20.6z"
+                                    fill="#34A853" />
+                                <path
+                                    d="M6.77,12.97c-0.18,-0.54 -0.28,-1.11 -0.28,-1.7c0,-0.59 0.1,-1.16 0.28,-1.7V6.9H3.37C2.73,8.19 2.37,9.65 2.37,11.27c0,1.62 0.36,3.08 1.01,4.37l3.39,-2.67z"
+                                    fill="#FBBC05" />
+                                <path
+                                    d="M12,5.7c1.32,0 2.5,0.45 3.44,1.35l2.58,-2.58C16.46,3.02 14.43,2.3 12,2.3C8.13,2.3 4.85,4.84 3.37,7.52l3.39,2.67C7.5,7.98 9.57,5.7 12,5.7z"
+                                    fill="#EA4335" />
+                            </g>
+                        </svg>
+                        Sign in with Google
+                    </button>
+                    <div class="auth-divider">or sign in with email</div>
+                    <form id="form-signin">
+                        <div class="form-group">
+                            <label for="signin-email">Email Address</label>
+                            <div class="input-group">
+                                <i data-lucide="mail"></i>
+                                <input type="email" id="signin-email" class="form-control"
+                                    placeholder="name@example.com" required>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="signin-password">Password</label>
+                            <div class="input-group">
+                                <i data-lucide="lock"></i>
+                                <input type="password" id="signin-password" class="form-control" placeholder="••••••••"
+                                    required>
+                            </div>
+                        </div>
+                        <button type="submit" class="btn"
+                            style="width: 100%; justify-content: center; margin-top: 8px;">
+                            Sign In
+                        </button>
+                    </form>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-col">
+                    <div class="logo" style="margin-bottom: 16px;">
+                        <i data-lucide="file-text"></i> PDF Toolkit
+                    </div>
+                    <p style="color: var(--text-muted); font-size: 0.9rem;">The simplest, most secure way to manage your
+                        PDF files. Processed entirely in your browser.</p>
+                </div>
+                <div class="footer-col">
+                    <h4>Quick Links</h4>
+                    <ul class="footer-links">
+                        <li><a href="#home">Home</a></li>
+                        <li><a href="#tools">All Tools</a></li>
+                        <li><a href="#about">About Us</a></li>
+                    </ul>
+                </div>
+                <div class="footer-col">
+                    <h4>Legal</h4>
+                    <ul class="footer-links">
+                        <li><a href="#privacy">Privacy Policy</a></li>
+                        <li><a href="#terms">Terms of Service</a></li>
+                        <li><a href="#contact">Contact</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="copyright">
+                &copy; 2026 PDF Toolkit. All rights reserved.
+            </div>
+        </div>
+    </footer>
+
+    <!-- Global Loading Overlay -->
+    <div id="global-loader" class="modal-backdrop">
+        <div
+            style="background: white; border-radius: 12px; padding: 40px; text-align: center; box-shadow: var(--shadow-lg); border: 1px solid var(--border); max-width: 320px; width: 100%;">
+            <div class="spinner"
+                style="border-color: rgba(14, 165, 233, 0.2); border-top-color: var(--primary); width: 40px; height: 40px; border-width: 3px; margin-bottom: 16px;">
+            </div>
+            <h3 id="global-loader-text"
+                style="font-weight: 600; margin-bottom: 6px; font-size: 1.15rem; color: var(--text-main);">Signing
+                out...</h3>
+            <p style="color: var(--text-muted); font-size: 0.85rem;">Clearing secure session</p>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <!-- Google Account Chooser Modal -->
+    <div id="google-modal" class="modal-backdrop">
+        <div class="google-modal-content">
+            <button class="google-modal-close" id="google-modal-close" aria-label="Close modal">
+                <i data-lucide="x" style="width: 20px; height: 20px;"></i>
+            </button>
+            <div class="google-header" style="text-align: center; margin-bottom: 20px;">
+                <svg viewBox="0 0 24 24" width="40" height="40" xmlns="http://www.w3.org/2000/svg">
+                    <g transform="matrix(1, 0, 0, 1, 0, 0)">
+                        <path
+                            d="M21.35,11.1H12v2.7h5.38c-0.24,1.28 -0.96,2.37 -2.04,3.1v2.58h3.3c1.93,-1.78 3.04,-4.4 3.04,-7.38c0,-0.68 -0.06,-1.34 -0.18,-2H21.35z"
+                            fill="#4285F4" />
+                        <path
+                            d="M12,20.6c2.43,0 4.47,-0.8 5.96,-2.2l-3.3,-2.58c-0.92,0.62 -2.1,1 -2.66,1c-2.43,0 -4.5,-1.64 -5.23,-3.85H3.37v2.67C4.85,18.06 8.13,20.6 12,20.6z"
+                            fill="#34A853" />
+                        <path
+                            d="M6.77,12.97c-0.18,-0.54 -0.28,-1.11 -0.28,-1.7c0,-0.59 0.1,-1.16 0.28,-1.7V6.9H3.37C2.73,8.19 2.37,9.65 2.37,11.27c0,1.62 0.36,3.08 1.01,4.37l3.39,-2.67z"
+                            fill="#FBBC05" />
+                        <path
+                            d="M12,5.7c1.32,0 2.5,0.45 3.44,1.35l2.58,-2.58C16.46,3.02 14.43,2.3 12,2.3C8.13,2.3 4.85,4.84 3.37,7.52l3.39,2.67C7.5,7.98 9.57,5.7 12,5.7z"
+                            fill="#EA4335" />
+                    </g>
+                </svg>
+                <h3 style="margin-top: 10px;">Sign in with Google</h3>
+            </div>
+            <!-- سيتم حقن الحسابات هنا بواسطة الجافاسكريبت -->
+            <div id="google-accounts-list" class="google-accounts-list"></div>
+        </div>
+    </div>
+
+    <!-- Scripts (main.js first — UI/routing/auth; pdf-tools.js — converters + legacy PDF ops) -->
+    <script src="js/main.js"></script>
+    <script src="js/pdf-tools.js"></script>
+    <script src="js/tool-content.js"></script>
+
+    <!-- تهيئة أيقونات Lucide -->
+    <script>
+        lucide.createIcons();
+    </script>
+</body>
+
+</html>
