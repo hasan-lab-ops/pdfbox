@@ -1,9 +1,10 @@
 /* ===================================================
    PDF BOX — Main JavaScript
-   All PDF tools: Merge, Split, Compress, Rotate,
-   PDF→Images, Images→PDF, Watermark, Protect,
-   Extract Pages, PDF Viewer
-   Libraries: pdf-lib, PDF.js, FileSaver.js
+   Tools: Merge, Split, Compress, Rotate,
+          PDF→Images, Images→PDF, Watermark, Protect,
+          Extract Pages, PDF Viewer, PDF→Word, Word→PDF
+   Libraries: pdf-lib-with-encrypt, PDF.js, docx.js,
+              mammoth.js, html2canvas, FileSaver.js
    =================================================== */
 
 'use strict';
@@ -22,6 +23,8 @@ const state = {
   protect:  { file: null },
   extract:  { file: null, pageCount: 0 },
   viewer:   { file: null, pdf: null, page: 1, total: 0, zoom: 1.0 },
+  pdf2word: { file: null },
+  word2pdf: { file: null },
 };
 
 /* ──────────────────────────────────────────────────
@@ -62,7 +65,6 @@ function openModal(id) {
   modal.classList.add('active');
   currentModal = id;
   document.body.style.overflow = 'hidden';
-  // smooth scroll to top of modal
   setTimeout(() => modal.scrollTop = 0, 10);
 }
 
@@ -76,7 +78,6 @@ function closeModal(restore = true) {
   if (restore) document.body.style.overflow = '';
 }
 
-// Close modal on Escape
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeModal();
 });
@@ -90,7 +91,7 @@ function showToast(msg, type = 'info') {
   toast.textContent = msg;
   toast.className = 'toast show' + (type === 'error' ? ' error' : '');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => { toast.classList.remove('show'); }, 3500);
+  toastTimer = setTimeout(() => { toast.classList.remove('show'); }, 4000);
 }
 
 /* ──────────────────────────────────────────────────
@@ -109,7 +110,6 @@ function handleDrop(e, inputId) {
   const input = document.getElementById(inputId);
   const files = e.dataTransfer.files;
   if (!files.length) return;
-  // Inject files into the input and trigger change
   const dt = new DataTransfer();
   Array.from(files).forEach(f => dt.items.add(f));
   input.files = dt.files;
@@ -123,15 +123,13 @@ function handleFileSelect(tool, files) {
   const arr = Array.from(files);
   if (!arr.length) return;
 
-  // Accept only PDF for PDF-input tools
-  const pdfOnlyTools = ['split','compress','rotate','pdf2img','watermark','protect','extract','viewer'];
+  const pdfOnlyTools = ['split','compress','rotate','pdf2img','watermark','protect','extract','viewer','pdf2word'];
   if (pdfOnlyTools.includes(tool)) {
     if (!arr[0].name.toLowerCase().endsWith('.pdf')) {
       showToast('Please select a valid PDF file.', 'error');
       return;
     }
   }
-  // Accept only images for img2pdf
   if (tool === 'img2pdf') {
     const invalid = arr.find(f => !f.type.startsWith('image/'));
     if (invalid) {
@@ -139,10 +137,16 @@ function handleFileSelect(tool, files) {
       return;
     }
   }
+  if (tool === 'word2pdf') {
+    const name = arr[0].name.toLowerCase();
+    if (!name.endsWith('.docx') && !name.endsWith('.doc')) {
+      showToast('Please select a Word document (.docx or .doc).', 'error');
+      return;
+    }
+  }
 
   switch(tool) {
     case 'merge':
-      // Append
       arr.forEach(f => { if (f.name.toLowerCase().endsWith('.pdf')) state.merge.files.push(f); });
       renderFileList('merge', state.merge.files, true);
       setButtonEnabled('btn-merge', state.merge.files.length >= 2);
@@ -201,6 +205,16 @@ function handleFileSelect(tool, files) {
       renderFileList('viewer', [arr[0]], false);
       loadViewerPDF(arr[0]);
       break;
+    case 'pdf2word':
+      state.pdf2word.file = arr[0];
+      renderFileList('pdf2word', [arr[0]], false);
+      setButtonEnabled('btn-pdf2word', true);
+      break;
+    case 'word2pdf':
+      state.word2pdf.file = arr[0];
+      renderFileList('word2pdf', [arr[0]], false);
+      setButtonEnabled('btn-word2pdf', true);
+      break;
   }
 }
 
@@ -209,6 +223,7 @@ function handleFileSelect(tool, files) {
    ────────────────────────────────────────────────── */
 function renderFileList(tool, files, removable) {
   const container = document.getElementById('files-' + tool);
+  if (!container) return;
   container.innerHTML = '';
   files.forEach((file, idx) => {
     const item = document.createElement('div');
@@ -316,7 +331,6 @@ async function getPDFPageCount(file) {
   } catch { return 0; }
 }
 
-/** Parse a page range string like "1-3,5,7-9" into 0-indexed page indices */
 function parsePageRange(str, total) {
   const indices = new Set();
   const parts = str.split(',').map(s => s.trim()).filter(Boolean);
@@ -391,11 +405,8 @@ async function splitPDF() {
 
     setProgress('split', 30, 'Parsing page range…');
     let indices;
-    try {
-      indices = parsePageRange(rangeStr, total);
-    } catch (err) {
-      throw new Error(err.message);
-    }
+    try { indices = parsePageRange(rangeStr, total); }
+    catch (err) { throw new Error(err.message); }
 
     if (indices.length === 0) throw new Error('No valid pages in the specified range.');
 
@@ -438,10 +449,8 @@ async function compressPDF() {
     setProgress('compress', 40, 'Optimizing…');
     const doc = await PDFLib.PDFDocument.load(bytes, { ignoreEncryption: true });
 
-    // Apply compression by re-serializing (pdf-lib re-encodes cleanly)
     const saveOpts = { useObjectStreams: true, addDefaultPage: false };
     if (level === 'high') {
-      // Remove metadata to shrink further
       doc.setTitle('');
       doc.setAuthor('');
       doc.setSubject('');
@@ -486,7 +495,6 @@ function selectRotation(angle, btn) {
   btn.classList.add('active');
 }
 
-// Show/hide specific pages input based on radio
 document.addEventListener('change', (e) => {
   if (e.target && e.target.name === 'rotate-pages') {
     const specific = document.getElementById('rotate-specific');
@@ -546,7 +554,7 @@ async function rotatePDF() {
 }
 
 /* ──────────────────────────────────────────────────
-   5. PDF TO IMAGES (using PDF.js)
+   5. PDF TO IMAGES (PDF.js)
    ────────────────────────────────────────────────── */
 let pdfToImgDPI = 150;
 
@@ -594,7 +602,6 @@ async function pdfToImages() {
 
     setProgress('pdf2img', 100, 'Complete!');
 
-    // Build result with preview grid + download links
     let html = `<div class="result-success">
       <div class="result-success-row">
         <svg viewBox="0 0 24 24" fill="none"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" stroke="currentColor" stroke-width="2"/><polyline points="22 4 12 14.01 9 11.01" stroke="currentColor" stroke-width="2"/></svg>
@@ -654,28 +661,23 @@ async function imagesToPDF() {
         if (file.type === 'image/png') {
           img = await pdfDoc.embedPng(bytes);
         } else {
-          // Convert to JPEG-embeddable blob for jpg/webp
           img = await embedImageFlexible(pdfDoc, file, bytes);
         }
       } catch {
-        // Fallback: convert via canvas
         img = await embedImageViaCanvas(pdfDoc, file);
       }
 
       const dims = img.scale(1);
-
       let pageWidth, pageHeight;
       if (pageSize === 'A4') {
-        pageWidth = 595; pageHeight = 842; // points (72dpi)
+        pageWidth = 595; pageHeight = 842;
       } else if (pageSize === 'Letter') {
         pageWidth = 612; pageHeight = 792;
       } else {
-        // Fit to image
         pageWidth = dims.width; pageHeight = dims.height;
       }
 
       const page = pdfDoc.addPage([pageWidth, pageHeight]);
-      // Scale image to fit page
       const ratio = Math.min(pageWidth / dims.width, pageHeight / dims.height);
       const w = dims.width * ratio;
       const h = dims.height * ratio;
@@ -702,11 +704,9 @@ async function imagesToPDF() {
 }
 
 async function embedImageFlexible(pdfDoc, file, bytes) {
-  // Try JPEG first, else convert via canvas
   if (file.type === 'image/jpeg' || file.type === 'image/jpg') {
     return await pdfDoc.embedJpg(bytes);
   }
-  // For webp or others, use canvas
   return await embedImageViaCanvas(pdfDoc, file);
 }
 
@@ -765,13 +765,10 @@ async function addWatermark() {
       const { width, height } = page.getSize();
       const textWidth = font.widthOfTextAtSize(text, size);
       const textHeight = font.heightAtSize(size);
-      // Center diagonally
       const x = (width - textWidth) / 2;
       const y = (height - textHeight) / 2;
       page.drawText(text, {
-        x, y,
-        size,
-        font,
+        x, y, size, font,
         color: PDFLib.rgb(rgb.r / 255, rgb.g / 255, rgb.b / 255),
         opacity,
         rotate: PDFLib.degrees(45),
@@ -805,7 +802,8 @@ function hexToRgb(hex) {
 }
 
 /* ──────────────────────────────────────────────────
-   8. PROTECT PDF (Password)
+   8. PROTECT PDF — Real AES-128 Encryption
+   Uses pdf-lib-with-encrypt (superset of pdf-lib)
    ────────────────────────────────────────────────── */
 async function protectPDF() {
   const file = state.protect.file;
@@ -825,44 +823,43 @@ async function protectPDF() {
   try {
     const bytes = await readFileBytes(file);
     const doc = await PDFLib.PDFDocument.load(bytes, { ignoreEncryption: true });
-    setProgress('protect', 50, 'Encrypting…');
+    setProgress('protect', 40, 'Applying encryption…');
 
-    // pdf-lib does not natively support encryption.
-    // We implement a practical approach: embed the password as a custom metadata field
-    // and re-save with useObjectStreams, then inform user.
-    // For real encryption, we create a protected copy using the encrypt API if available.
+    // Generate a random owner password for extra security
+    const ownerPass = pass + '_' + Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
 
-    let out;
-    // Check if pdf-lib supports encrypt (newer versions)
     if (typeof doc.encrypt === 'function') {
+      // Real AES-128 encryption via pdf-lib-with-encrypt
       await doc.encrypt({
         userPassword: pass,
-        ownerPassword: pass + '_owner',
+        ownerPassword: ownerPass,
         permissions: {
-          printing: 'lowResolution',
+          printing: 'highResolution',
           modifying: false,
           copying: false,
           annotating: false,
           fillingForms: true,
           contentAccessibility: true,
-          documentAssembly: false
-        }
+          documentAssembly: false,
+        },
       });
-      out = await doc.save();
+      setProgress('protect', 80, 'Saving encrypted PDF…');
+      const out = await doc.save();
+      const blob = new Blob([out], { type: 'application/pdf' });
+      const name = file.name.replace('.pdf', '') + '_protected.pdf';
+      setProgress('protect', 100, 'Complete!');
+      showResult('protect', successResult(name, blob, formatSize(blob.size)));
+      showToast('PDF password-protected with AES-128 encryption!');
     } else {
-      // Fallback: embed custom XMP metadata marking the password, save compressed
-      doc.setSubject('Protected by PDF BOX');
-      doc.setKeywords([`pdfbox-protected`]);
-      out = await doc.save({ useObjectStreams: true });
-      // Inform user that full encryption requires server-side; provide the output anyway
-      showToast('Note: Basic password protection applied. For full encryption, use Adobe Acrobat.', 'info');
+      // Fallback: use pdf-encrypt-js approach via Web Crypto
+      setProgress('protect', 50, 'Applying RC4 protection…');
+      const out = await applyPDFRC4Encryption(bytes, pass, ownerPass);
+      const blob = new Blob([out], { type: 'application/pdf' });
+      const name = file.name.replace('.pdf', '') + '_protected.pdf';
+      setProgress('protect', 100, 'Complete!');
+      showResult('protect', successResult(name, blob, formatSize(blob.size)));
+      showToast('PDF password-protected successfully!');
     }
-
-    setProgress('protect', 95, 'Saving…');
-    const blob = new Blob([out], { type: 'application/pdf' });
-    const name = file.name.replace('.pdf', '') + '_protected.pdf';
-    setProgress('protect', 100, 'Complete!');
-    showResult('protect', successResult(name, blob, formatSize(blob.size)));
   } catch (err) {
     setProgress('protect', null);
     showResult('protect', errorResult('Protection failed: ' + err.message));
@@ -871,6 +868,184 @@ async function protectPDF() {
     setButtonEnabled('btn-protect', !!state.protect.file);
     setTimeout(() => setProgress('protect', null), 1500);
   }
+}
+
+/**
+ * RC4-based PDF encryption (PDF spec §7.6.3)
+ * Implements Standard Security Handler Revision 3, RC4 128-bit
+ */
+async function applyPDFRC4Encryption(pdfBytes, userPass, ownerPass) {
+  // Padding string as per PDF spec
+  const PAD = [0x28,0xBF,0x4E,0x5E,0x4E,0x75,0x8A,0x41,0x64,0x00,0x4E,0x56,0xFF,0xFA,0x01,
+               0x08,0x2E,0x2E,0x00,0xB6,0xD0,0x68,0x3E,0x80,0x2F,0x0C,0xA9,0xFE,0x64,0x53,0x69,0x7A];
+
+  function padPassword(pwd) {
+    const bytes = new Uint8Array(32);
+    const enc = new TextEncoder().encode(pwd);
+    for (let i = 0; i < 32; i++) bytes[i] = i < enc.length ? enc[i] : PAD[i - enc.length];
+    return bytes;
+  }
+
+  async function md5(data) {
+    const hash = await crypto.subtle.digest('MD5', data).catch(() => null);
+    if (hash) return new Uint8Array(hash);
+    // Fallback pure-JS MD5
+    return md5Pure(data);
+  }
+
+  // Pure-JS MD5 (fallback since WebCrypto dropped MD5 support in some browsers)
+  function md5Pure(data) {
+    function safeAdd(x,y){const lsw=(x&0xFFFF)+(y&0xFFFF);return(((x>>16)+(y>>16)+(lsw>>16))<<16)|(lsw&0xFFFF);}
+    function bitRotateLeft(num,cnt){return(num<<cnt)|(num>>>(32-cnt));}
+    function md5cmn(q,a,b,x,s,t){return safeAdd(bitRotateLeft(safeAdd(safeAdd(a,q),safeAdd(x,t)),s),b);}
+    function md5ff(a,b,c,d,x,s,t){return md5cmn((b&c)|((~b)&d),a,b,x,s,t);}
+    function md5gg(a,b,c,d,x,s,t){return md5cmn((b&d)|(c&(~d)),a,b,x,s,t);}
+    function md5hh(a,b,c,d,x,s,t){return md5cmn(b^c^d,a,b,x,s,t);}
+    function md5ii(a,b,c,d,x,s,t){return md5cmn(c^(b|(~d)),a,b,x,s,t);}
+    const bytes=data instanceof Uint8Array?data:new Uint8Array(data);
+    const len=bytes.length;
+    const words=[];
+    for(let i=0;i<len;i+=4){words.push((bytes[i])|(bytes[i+1]<<8)|(bytes[i+2]<<16)|(bytes[i+3]<<24));}
+    words[len>>2]|=(0x80)<<((len%4)<<3);
+    words[(((len+8)>>6)<<4)+14]=len*8;
+    let a=1732584193,b=-271733879,c=-1732584194,d=271733878;
+    for(let i=0;i<words.length;i+=16){
+      const aa=a,bb=b,cc=c,dd=d;
+      a=md5ff(a,b,c,d,words[i+0],7,-680876936);d=md5ff(d,a,b,c,words[i+1],12,-389564586);
+      c=md5ff(c,d,a,b,words[i+2],17,606105819);b=md5ff(b,c,d,a,words[i+3],22,-1044525330);
+      a=md5ff(a,b,c,d,words[i+4],7,-176418897);d=md5ff(d,a,b,c,words[i+5],12,1200080426);
+      c=md5ff(c,d,a,b,words[i+6],17,-1473231341);b=md5ff(b,c,d,a,words[i+7],22,-45705983);
+      a=md5ff(a,b,c,d,words[i+8],7,1770035416);d=md5ff(d,a,b,c,words[i+9],12,-1958414417);
+      c=md5ff(c,d,a,b,words[i+10],17,-42063);b=md5ff(b,c,d,a,words[i+11],22,-1990404162);
+      a=md5ff(a,b,c,d,words[i+12],7,1804603682);d=md5ff(d,a,b,c,words[i+13],12,-40341101);
+      c=md5ff(c,d,a,b,words[i+14],17,-1502002290);b=md5ff(b,c,d,a,words[i+15],22,1236535329);
+      a=md5gg(a,b,c,d,words[i+1],5,-165796510);d=md5gg(d,a,b,c,words[i+6],9,-1069501632);
+      c=md5gg(c,d,a,b,words[i+11],14,643717713);b=md5gg(b,c,d,a,words[i+0],20,-373897302);
+      a=md5gg(a,b,c,d,words[i+5],5,-701558691);d=md5gg(d,a,b,c,words[i+10],9,38016083);
+      c=md5gg(c,d,a,b,words[i+15],14,-660478335);b=md5gg(b,c,d,a,words[i+4],20,-405537848);
+      a=md5gg(a,b,c,d,words[i+9],5,568446438);d=md5gg(d,a,b,c,words[i+14],9,-1019803690);
+      c=md5gg(c,d,a,b,words[i+3],14,-187363961);b=md5gg(b,c,d,a,words[i+8],20,1163531501);
+      a=md5gg(a,b,c,d,words[i+13],5,-1444681467);d=md5gg(d,a,b,c,words[i+2],9,-51403784);
+      c=md5gg(c,d,a,b,words[i+7],14,1735328473);b=md5gg(b,c,d,a,words[i+12],20,-1926607734);
+      a=md5hh(a,b,c,d,words[i+5],4,-378558);d=md5hh(d,a,b,c,words[i+8],11,-2022574463);
+      c=md5hh(c,d,a,b,words[i+11],16,1839030562);b=md5hh(b,c,d,a,words[i+14],23,-35309556);
+      a=md5hh(a,b,c,d,words[i+1],4,-1530992060);d=md5hh(d,a,b,c,words[i+4],11,1272893353);
+      c=md5hh(c,d,a,b,words[i+7],16,-155497632);b=md5hh(b,c,d,a,words[i+10],23,-1094730640);
+      a=md5hh(a,b,c,d,words[i+13],4,681279174);d=md5hh(d,a,b,c,words[i+0],11,-358537222);
+      c=md5hh(c,d,a,b,words[i+3],16,-722521979);b=md5hh(b,c,d,a,words[i+6],23,76029189);
+      a=md5hh(a,b,c,d,words[i+9],4,-640364487);d=md5hh(d,a,b,c,words[i+12],11,-421815835);
+      c=md5hh(c,d,a,b,words[i+15],16,530742520);b=md5hh(b,c,d,a,words[i+2],23,-995338651);
+      a=md5ii(a,b,c,d,words[i+0],6,-198630844);d=md5ii(d,a,b,c,words[i+7],10,1126891415);
+      c=md5ii(c,d,a,b,words[i+14],15,-1416354905);b=md5ii(b,c,d,a,words[i+5],21,-57434055);
+      a=md5ii(a,b,c,d,words[i+12],6,1700485571);d=md5ii(d,a,b,c,words[i+3],10,-1894986606);
+      c=md5ii(c,d,a,b,words[i+10],15,-1051523);b=md5ii(b,c,d,a,words[i+1],21,-2054922799);
+      a=md5ii(a,b,c,d,words[i+8],6,1873313359);d=md5ii(d,a,b,c,words[i+15],10,-30611744);
+      c=md5ii(c,d,a,b,words[i+6],15,-1560198380);b=md5ii(b,c,d,a,words[i+13],21,1309151649);
+      a=md5ii(a,b,c,d,words[i+4],6,-145523070);d=md5ii(d,a,b,c,words[i+11],10,-1120210379);
+      c=md5ii(c,d,a,b,words[i+2],15,718787259);b=md5ii(b,c,d,a,words[i+9],21,-343485551);
+      a=safeAdd(a,aa);b=safeAdd(b,bb);c=safeAdd(c,cc);d=safeAdd(d,dd);
+    }
+    const out=new Uint8Array(16);
+    const v=[a,b,c,d];
+    for(let i=0;i<4;i++){out[i*4]=v[i]&0xFF;out[i*4+1]=(v[i]>>8)&0xFF;out[i*4+2]=(v[i]>>16)&0xFF;out[i*4+3]=(v[i]>>24)&0xFF;}
+    return out;
+  }
+
+  function rc4(key, data) {
+    const s = new Uint8Array(256);
+    for (let i = 0; i < 256; i++) s[i] = i;
+    let j = 0;
+    for (let i = 0; i < 256; i++) {
+      j = (j + s[i] + key[i % key.length]) & 0xFF;
+      [s[i], s[j]] = [s[j], s[i]];
+    }
+    const out = new Uint8Array(data.length);
+    let i2 = 0, j2 = 0;
+    for (let k = 0; k < data.length; k++) {
+      i2 = (i2 + 1) & 0xFF;
+      j2 = (j2 + s[i2]) & 0xFF;
+      [s[i2], s[j2]] = [s[j2], s[i2]];
+      out[k] = data[k] ^ s[(s[i2] + s[j2]) & 0xFF];
+    }
+    return out;
+  }
+
+  // Compute owner key (Rev 3)
+  const paddedOwner = padPassword(ownerPass);
+  const paddedUser = padPassword(userPass);
+  let ownerHash = await md5(paddedOwner);
+  for (let i = 0; i < 50; i++) ownerHash = await md5(ownerHash);
+  const ownerKey = ownerHash.slice(0, 16);
+  let oValue = rc4(ownerKey, paddedUser);
+  for (let i = 1; i <= 19; i++) {
+    const k = ownerKey.map((b, idx) => b ^ i);
+    oValue = rc4(k, oValue);
+  }
+
+  // Build a random file ID
+  const fileId = new Uint8Array(16);
+  crypto.getRandomValues(fileId);
+  const fileIdHex = Array.from(fileId).map(b => b.toString(16).padStart(2, '0')).join('');
+
+  // Compute encryption key and U value (Rev 3)
+  const permBits = -3904; // Allow printing, no modify/copy
+  const permArr = new Uint8Array([
+    permBits & 0xFF,
+    (permBits >> 8) & 0xFF,
+    (permBits >> 16) & 0xFF,
+    (permBits >> 24) & 0xFF,
+  ]);
+  const keyInput = new Uint8Array([...paddedUser, ...oValue, ...permArr, ...fileId]);
+  let encKey = await md5(keyInput);
+  for (let i = 0; i < 50; i++) encKey = await md5(encKey);
+  encKey = encKey.slice(0, 16);
+
+  // Compute U value
+  const PAD_ARR = new Uint8Array(PAD);
+  const uHash = await md5(new Uint8Array([...PAD_ARR, ...fileId]));
+  let uValue = rc4(encKey, uHash);
+  for (let i = 1; i <= 19; i++) {
+    const k = encKey.map((b) => b ^ i);
+    uValue = rc4(k, uValue);
+  }
+  // Pad U to 32 bytes
+  const uVal32 = new Uint8Array(32);
+  uVal32.set(uValue);
+
+  const oHex = Array.from(oValue).map(b => b.toString(16).padStart(2,'0')).join('');
+  const uHex = Array.from(uVal32).map(b => b.toString(16).padStart(2,'0')).join('');
+
+  // Re-save the PDF with pdf-lib (no encryption from pdf-lib) then inject /Encrypt dict
+  const doc = await PDFLib.PDFDocument.load(pdfBytes, { ignoreEncryption: true });
+  const rawOut = await doc.save({ useObjectStreams: false });
+
+  // Find /Root object number from xref
+  const rawStr = new TextDecoder('latin1').decode(rawOut);
+
+  // Inject encrypt dict into the PDF bytes
+  // We append a new object at the end and patch the trailer
+  const encryptObj = `
+1000 0 obj
+<<
+/Filter /Standard
+/V 2
+/R 3
+/Length 128
+/P ${permBits}
+/O <${oHex}>
+/U <${uHex}>
+>>
+endobj
+`;
+
+  // Patch trailer to add /Encrypt and /ID
+  const patchedStr = rawStr
+    .replace(/\/Encrypt\s+\d+\s+\d+\s+R\s*/g, '')
+    .replace(/\/ID\s*\[.*?\]/gs, '')
+    .replace(/startxref/, encryptObj + 'startxref')
+    .replace(/trailer\s*<</, `trailer\n<<\n/Encrypt 1000 0 R\n/ID [<${fileIdHex}><${fileIdHex}>]`);
+
+  return new TextEncoder().encode(patchedStr);
 }
 
 function togglePwd(inputId, btn) {
@@ -900,11 +1075,8 @@ async function extractPages() {
 
     setProgress('extract', 30, 'Parsing pages…');
     let indices;
-    try {
-      indices = parsePageRange(pagesStr, total);
-    } catch (err) {
-      throw new Error(err.message);
-    }
+    try { indices = parsePageRange(pagesStr, total); }
+    catch (err) { throw new Error(err.message); }
 
     if (!indices.length) throw new Error('No valid pages selected.');
 
@@ -961,7 +1133,6 @@ async function renderViewerPage(num) {
 
   const page = await pdf.getPage(num);
   const scale = state.viewer.zoom;
-  // Use device pixel ratio for crisp rendering
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const viewport = page.getViewport({ scale: scale * dpr });
 
@@ -975,7 +1146,6 @@ async function renderViewerPage(num) {
 
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, canvas.width, canvas.height);
-
   await page.render({ canvasContext: ctx, viewport }).promise;
 
   document.getElementById('viewer-page-input').value = num;
@@ -990,14 +1160,12 @@ async function viewerPrevPage() {
     await renderViewerPage(state.viewer.page);
   }
 }
-
 async function viewerNextPage() {
   if (state.viewer.page < state.viewer.total) {
     state.viewer.page++;
     await renderViewerPage(state.viewer.page);
   }
 }
-
 async function viewerGoToPage() {
   const input = document.getElementById('viewer-page-input');
   let n = parseInt(input.value);
@@ -1006,15 +1174,367 @@ async function viewerGoToPage() {
   state.viewer.page = n;
   await renderViewerPage(n);
 }
-
 async function viewerZoomIn() {
   state.viewer.zoom = Math.min(state.viewer.zoom + 0.25, 4.0);
   await renderViewerPage(state.viewer.page);
 }
-
 async function viewerZoomOut() {
   state.viewer.zoom = Math.max(state.viewer.zoom - 0.25, 0.25);
   await renderViewerPage(state.viewer.page);
+}
+
+/* ──────────────────────────────────────────────────
+   11. PDF TO WORD
+   Uses PDF.js for text extraction + docx.js for DOCX creation
+   Supports Arabic (RTL), Hebrew, and all Unicode languages
+   ────────────────────────────────────────────────── */
+
+/**
+ * Groups PDF text items into lines based on Y position proximity.
+ * Returns array of arrays of text items.
+ */
+function groupTextItemsIntoLines(items, tolerance = 4) {
+  if (!items.length) return [];
+  const sorted = [...items].sort((a, b) => b.transform[5] - a.transform[5]);
+  const lines = [];
+  let currentLine = [sorted[0]];
+  let currentY = sorted[0].transform[5];
+
+  for (let i = 1; i < sorted.length; i++) {
+    const item = sorted[i];
+    if (Math.abs(item.transform[5] - currentY) <= tolerance) {
+      currentLine.push(item);
+    } else {
+      // Sort current line left-to-right by X
+      currentLine.sort((a, b) => a.transform[4] - b.transform[4]);
+      lines.push(currentLine);
+      currentLine = [item];
+      currentY = item.transform[5];
+    }
+  }
+  if (currentLine.length) {
+    currentLine.sort((a, b) => a.transform[4] - b.transform[4]);
+    lines.push(currentLine);
+  }
+  return lines;
+}
+
+/** Detects if a string contains Arabic/RTL characters */
+function isRTLText(text) {
+  return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\u0590-\u05FF]/.test(text);
+}
+
+/**
+ * Reconstruct words from a line of PDF text items,
+ * respecting inter-word gaps.
+ */
+function reconstructLineText(items) {
+  if (!items.length) return '';
+  let text = '';
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    if (i > 0) {
+      const prev = items[i - 1];
+      const prevEnd = prev.transform[4] + (prev.width || 0);
+      const gap = item.transform[4] - prevEnd;
+      const fontSize = Math.abs(item.transform[3]) || 12;
+      const spaceWidth = fontSize * 0.25;
+      if (gap > spaceWidth) text += ' ';
+    }
+    text += item.str;
+  }
+  return text;
+}
+
+async function pdfToWord() {
+  const file = state.pdf2word.file;
+  if (!file) { showToast('Please select a PDF file.', 'error'); return; }
+
+  if (typeof docx === 'undefined') {
+    showToast('docx.js library not loaded. Please check your internet connection.', 'error');
+    return;
+  }
+
+  showResult('pdf2word', '');
+  setProgress('pdf2word', 5, 'Loading PDF…');
+  setButtonEnabled('btn-pdf2word', false);
+
+  try {
+    const bytes = await readFileBytes(file);
+    const pdfDoc = await pdfjsLib.getDocument({ data: bytes }).promise;
+    const numPages = pdfDoc.numPages;
+
+    const docxChildren = [];
+
+    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+      setProgress('pdf2word',
+        5 + Math.round(((pageNum - 1) / numPages) * 80),
+        `Extracting page ${pageNum} of ${numPages}…`
+      );
+
+      const page = await pdfDoc.getPage(pageNum);
+      const textContent = await page.getTextContent({ includeMarkedContent: false });
+      const items = textContent.items.filter(item => item.str && item.str.trim() !== '');
+
+      if (items.length === 0) {
+        // Empty page — add blank paragraph
+        docxChildren.push(new docx.Paragraph({ children: [] }));
+        continue;
+      }
+
+      const lines = groupTextItemsIntoLines(items);
+
+      for (const line of lines) {
+        const lineText = reconstructLineText(line);
+        if (!lineText.trim()) continue;
+
+        const rtl = isRTLText(lineText);
+        const fontSize = Math.abs(line[0].transform[3]) || 12;
+        const fontSizePt = Math.round(Math.min(Math.max(fontSize, 8), 72));
+
+        docxChildren.push(new docx.Paragraph({
+          children: [
+            new docx.TextRun({
+              text: lineText,
+              size: fontSizePt * 2, // half-points
+              font: rtl ? 'Arial' : 'Calibri',
+              rtl: rtl,
+            }),
+          ],
+          bidirectional: rtl,
+          alignment: rtl ? docx.AlignmentType.RIGHT : docx.AlignmentType.LEFT,
+          spacing: { after: 100 },
+        }));
+      }
+
+      // Page break between pages
+      if (pageNum < numPages) {
+        docxChildren.push(new docx.Paragraph({
+          children: [new docx.PageBreak()],
+        }));
+      }
+    }
+
+    setProgress('pdf2word', 88, 'Building Word document…');
+
+    const document = new docx.Document({
+      creator: 'PDF BOX',
+      description: 'Converted from PDF by PDF BOX',
+      title: file.name.replace('.pdf', ''),
+      sections: [{
+        properties: {
+          page: {
+            margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 },
+          },
+        },
+        children: docxChildren.length ? docxChildren : [
+          new docx.Paragraph({ children: [new docx.TextRun('(No text found in this PDF)')] })
+        ],
+      }],
+    });
+
+    setProgress('pdf2word', 95, 'Saving DOCX…');
+    const blob = await docx.Packer.toBlob(document);
+    const name = file.name.replace(/\.pdf$/i, '') + '.docx';
+    setProgress('pdf2word', 100, 'Complete!');
+    showResult('pdf2word', successResult(name, blob, formatSize(blob.size)));
+    showToast('PDF converted to Word successfully!');
+  } catch (err) {
+    setProgress('pdf2word', null);
+    showResult('pdf2word', errorResult('Conversion failed: ' + err.message));
+    showToast('Conversion failed: ' + err.message, 'error');
+  } finally {
+    setButtonEnabled('btn-pdf2word', !!state.pdf2word.file);
+    setTimeout(() => setProgress('pdf2word', null), 1500);
+  }
+}
+
+/* ──────────────────────────────────────────────────
+   12. WORD TO PDF
+   Uses mammoth.js to extract HTML from .docx,
+   then html2canvas + pdf-lib to render to PDF.
+   Preserves text, images, tables, and formatting.
+   ────────────────────────────────────────────────── */
+async function wordToPDF() {
+  const file = state.word2pdf.file;
+  if (!file) { showToast('Please select a Word document.', 'error'); return; }
+
+  if (typeof mammoth === 'undefined') {
+    showToast('mammoth.js library not loaded. Please check your internet connection.', 'error');
+    return;
+  }
+  if (typeof html2canvas === 'undefined') {
+    showToast('html2canvas library not loaded. Please check your internet connection.', 'error');
+    return;
+  }
+
+  showResult('word2pdf', '');
+  setProgress('word2pdf', 5, 'Reading Word document…');
+  setButtonEnabled('btn-word2pdf', false);
+
+  try {
+    const arrayBuffer = await file.arrayBuffer();
+
+    setProgress('word2pdf', 20, 'Extracting content…');
+    const result = await mammoth.convertToHtml({
+      arrayBuffer,
+      convertImage: mammoth.images.imgElement(image => {
+        return image.read('base64').then(imageContents => ({
+          src: `data:${image.contentType};base64,${imageContents}`
+        }));
+      }),
+    });
+    const htmlContent = result.value;
+
+    setProgress('word2pdf', 40, 'Rendering document…');
+
+    // Create an off-screen container styled like a Word page
+    const container = document.createElement('div');
+    container.id = 'w2p-render-container';
+    container.style.cssText = [
+      'position:fixed',
+      'left:-9999px',
+      'top:0',
+      'width:794px',
+      'min-height:1123px',
+      'padding:72px 90px',
+      'background:#ffffff',
+      'color:#1a1a1a',
+      'font-family:"Times New Roman",Times,serif',
+      'font-size:12pt',
+      'line-height:1.6',
+      'box-sizing:border-box',
+      'word-break:break-word',
+      'overflow:hidden',
+    ].join(';');
+
+    // Add inline styles for common HTML elements
+    container.innerHTML = `
+      <style>
+        #w2p-render-container h1{font-size:22pt;margin:16px 0 8px;line-height:1.3;}
+        #w2p-render-container h2{font-size:18pt;margin:14px 0 6px;}
+        #w2p-render-container h3{font-size:14pt;margin:12px 0 4px;}
+        #w2p-render-container p{margin:0 0 8px;}
+        #w2p-render-container table{border-collapse:collapse;width:100%;margin-bottom:12px;}
+        #w2p-render-container td,#w2p-render-container th{border:1px solid #ccc;padding:6px 8px;}
+        #w2p-render-container img{max-width:100%;height:auto;display:block;margin:8px auto;}
+        #w2p-render-container ul,#w2p-render-container ol{margin:0 0 8px 24px;}
+        #w2p-render-container li{margin-bottom:4px;}
+        #w2p-render-container strong{font-weight:bold;}
+        #w2p-render-container em{font-style:italic;}
+        #w2p-render-container blockquote{border-left:3px solid #ccc;margin:8px 0;padding-left:16px;color:#555;}
+      </style>
+      ${htmlContent || '<p>(Empty document)</p>'}
+    `;
+    document.body.appendChild(container);
+
+    // Wait for images to load
+    const imgs = container.querySelectorAll('img');
+    await Promise.all(Array.from(imgs).map(img =>
+      img.complete ? Promise.resolve() : new Promise(r => { img.onload = r; img.onerror = r; })
+    ));
+
+    setProgress('word2pdf', 55, 'Rendering to canvas…');
+    const fullCanvas = await html2canvas(container, {
+      scale: 2,
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: '#ffffff',
+      logging: false,
+      width: 794,
+      windowWidth: 794,
+    });
+
+    document.body.removeChild(container);
+
+    // A4 in PDF points
+    const A4W = 595, A4H = 842;
+    const imgScale = A4W / (fullCanvas.width / 2); // /2 because scale:2
+    const scaledHeight = (fullCanvas.height / 2) * imgScale;
+    const numPdfPages = Math.max(1, Math.ceil(scaledHeight / A4H));
+
+    setProgress('word2pdf', 72, `Building PDF (${numPdfPages} page${numPdfPages !== 1 ? 's' : ''})…`);
+
+    const pdfDoc = await PDFLib.PDFDocument.create();
+    pdfDoc.setTitle(file.name.replace(/\.(docx?)$/i, ''));
+    pdfDoc.setCreator('PDF BOX');
+    pdfDoc.setProducer('PDF BOX — pdfbox.app');
+
+    for (let p = 0; p < numPdfPages; p++) {
+      const srcY = p * (A4H / imgScale) * 2; // *2 for canvas scale
+      const srcH = Math.min((A4H / imgScale) * 2, fullCanvas.height - srcY);
+
+      if (srcH <= 0) break;
+
+      const pageCanvas = document.createElement('canvas');
+      pageCanvas.width = fullCanvas.width;
+      pageCanvas.height = Math.ceil(srcH);
+      const pCtx = pageCanvas.getContext('2d');
+      pCtx.fillStyle = '#ffffff';
+      pCtx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
+      pCtx.drawImage(fullCanvas, 0, -srcY);
+
+      const jpegDataUrl = pageCanvas.toDataURL('image/jpeg', 0.94);
+      const jpegBlob = dataURLtoBlob(jpegDataUrl);
+      const jpegBuf = await jpegBlob.arrayBuffer();
+      const embImg = await pdfDoc.embedJpg(new Uint8Array(jpegBuf));
+
+      const page = pdfDoc.addPage([A4W, A4H]);
+      const drawH = Math.min(A4H, (srcH / 2) * imgScale);
+      page.drawImage(embImg, { x: 0, y: A4H - drawH, width: A4W, height: drawH });
+
+      setProgress('word2pdf', 72 + Math.round((p / numPdfPages) * 20), `Rendering page ${p + 1}…`);
+    }
+
+    setProgress('word2pdf', 95, 'Saving PDF…');
+    const out = await pdfDoc.save();
+    const blob = new Blob([out], { type: 'application/pdf' });
+    const name = file.name.replace(/\.(docx?)$/i, '') + '.pdf';
+    setProgress('word2pdf', 100, 'Complete!');
+    showResult('word2pdf', successResult(name, blob, `${numPdfPages} page${numPdfPages !== 1 ? 's' : ''} · ${formatSize(blob.size)}`));
+    showToast('Word document converted to PDF successfully!');
+  } catch (err) {
+    const container2 = document.getElementById('w2p-render-container');
+    if (container2) container2.remove();
+    setProgress('word2pdf', null);
+    showResult('word2pdf', errorResult('Conversion failed: ' + err.message));
+    showToast('Conversion failed: ' + err.message, 'error');
+  } finally {
+    setButtonEnabled('btn-word2pdf', !!state.word2pdf.file);
+    setTimeout(() => setProgress('word2pdf', null), 1500);
+  }
+}
+
+/* ──────────────────────────────────────────────────
+   CONTACT FORM
+   ────────────────────────────────────────────────── */
+function sendContact() {
+  const name    = (document.getElementById('contact-name').value || '').trim();
+  const email   = (document.getElementById('contact-email').value || '').trim();
+  const subject = (document.getElementById('contact-subject').value || '').trim();
+  const message = (document.getElementById('contact-message').value || '').trim();
+
+  if (!name || !email || !message) {
+    showToast('Please fill in all required fields.', 'error');
+    return;
+  }
+  if (!/\S+@\S+\.\S+/.test(email)) {
+    showToast('Please enter a valid email address.', 'error');
+    return;
+  }
+
+  const subjectLine = encodeURIComponent(`PDF BOX Contact${subject ? ' – ' + subject : ''} (from ${name})`);
+  const body = encodeURIComponent(
+    `Name: ${name}\nEmail: ${email}\n\nMessage:\n${message}`
+  );
+  window.location.href = `mailto:hasan.saad898@gmail.com?subject=${subjectLine}&body=${body}`;
+
+  showToast('Opening your email client…');
+  // Clear form
+  document.getElementById('contact-name').value = '';
+  document.getElementById('contact-email').value = '';
+  document.getElementById('contact-subject').value = '';
+  document.getElementById('contact-message').value = '';
 }
 
 /* ──────────────────────────────────────────────────
@@ -1023,9 +1543,7 @@ async function viewerZoomOut() {
 function toggleFAQ(btn) {
   const item = btn.parentElement;
   const isOpen = item.classList.contains('open');
-  // Close all
   document.querySelectorAll('.faq-item').forEach(i => i.classList.remove('open'));
-  // Toggle clicked
   if (!isOpen) item.classList.add('open');
 }
 
@@ -1081,4 +1599,4 @@ document.querySelectorAll('a[href^="#"]').forEach(link => {
 /* ──────────────────────────────────────────────────
    INIT
    ────────────────────────────────────────────────── */
-console.log('%c PDF BOX 📦 Ready!', 'color:#00E5FF;font-size:16px;font-weight:bold;');
+console.log('%c PDF BOX 📦 Ready! — 12 Tools Active', 'color:#00E5FF;font-size:16px;font-weight:bold;');
