@@ -125,29 +125,29 @@ async function processPdfToWord(file) {
     // Use docx library to create the Word document
     const { Document, Packer, Paragraph, TextRun } = docx;
     
-    // Helper function to reverse Arabic text chunks
-    function processArabicText(text) {
-        // Match Arabic segments (including spaces and Arabic punctuation)
-        const arabicRegex = /[\u0600-\u06FF\s]+/g;
-        return text.replace(arabicRegex, (match) => {
-            // Reverse the matched Arabic segment so it flows Right-to-Left logically
-            return match.split('').reverse().join('');
-        });
-    }
-
     // Split text by lines to create paragraphs
     const paragraphs = fullText.split('\n').map(line => {
-        const hasArabic = /[\u0600-\u06FF]/.test(line);
-        const processedLine = hasArabic ? processArabicText(line) : line;
+        // Regex to match Arabic segments (including Arabic punctuation) and spaces between them
+        const segmentRegex = /([\u0600-\u06FF\u060C\u061F]+(?:\s+[\u0600-\u06FF\u060C\u061F]+)*)/g;
+        
+        // Split the line into English and Arabic chunks to prevent LTR/RTL collision
+        const segments = line.split(segmentRegex).filter(s => s.length > 0);
+        
+        const runs = segments.map(segment => {
+            const isArabic = /[\u0600-\u06FF]/.test(segment);
+            return new TextRun({
+                text: segment,
+                // MS Word natively handles Arabic shaping and Bidi if we flag the run as RTL!
+                rightToLeft: isArabic 
+            });
+        });
+
+        // Set the entire paragraph to RTL if the line starts with an Arabic character
+        const isParagraphRtl = /^\s*[\u0600-\u06FF]/.test(line);
 
         return new Paragraph({
-            bidirectional: hasArabic, // Set RTL at paragraph level
-            children: [
-                new TextRun({ 
-                    text: processedLine, 
-                    rightToLeft: hasArabic // Set RTL at text run level
-                })
-            ]
+            bidirectional: isParagraphRtl,
+            children: runs
         });
     });
 
