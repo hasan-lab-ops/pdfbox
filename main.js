@@ -1628,6 +1628,7 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
         let avgFontSize = line.reduce((sum, it) => sum + Math.abs(it.transform[0]), 0) / line.length;
 
         let textRuns = [];
+        let rawTexts = []; // parallel plain-string list, avoids accessing .text on docx instances
         let pIndent = {};
         let align = docx.AlignmentType.LEFT;
 
@@ -1645,6 +1646,7 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
           for (let item of line) {
             if (!item.str.trim()) {
               textRuns.push(new docx.TextRun({ text: item.str, size: Math.round(avgFontSize * 2), font: "Calibri" }));
+              rawTexts.push(item.str);
               continue;
             }
             
@@ -1674,8 +1676,10 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
               }
             }
 
+            const cleanText = replaceBullets(item.str);
+            rawTexts.push(cleanText);
             textRuns.push(new docx.TextRun({
-              text: replaceBullets(item.str),
+              text: cleanText,
               size: Math.round(fontSize * 2), // Half-points
               color: colorHex,
               bold: isBold,
@@ -1724,8 +1728,10 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
                 }
               }
 
+              const cleanWord = replaceBullets(word.text) + " ";
+              rawTexts.push(cleanWord);
               textRuns.push(new docx.TextRun({
-                text: replaceBullets(word.text) + " ",
+                text: cleanWord,
                 size: Math.round(avgFontSize * 2), // PERFECT SIZE FROM PDF.JS
                 color: colorHex,
                 underline: isUnderlined ? { type: "single", color: colorHex } : undefined,
@@ -1735,9 +1741,10 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
             }
           } else {
             // Fallback if Tesseract missed the line: use PDF.js garbage text so it's not entirely lost
-            let textStr = line.map(i => i.str).join('');
+            let fbText = line.map(i => i.str).join('');
+            rawTexts.push(fbText);
             textRuns.push(new docx.TextRun({
-              text: textStr,
+              text: fbText,
               size: Math.round(avgFontSize * 2),
               color: '000000',
               rightToLeft: true,
@@ -1751,6 +1758,7 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
           yTop: avgY - avgFontSize, // Top of the text
           yBottom: avgY, // Baseline
           textRuns: textRuns,
+          textRaws: rawTexts, // plain strings for safe inspection
           bidirectional: isArabic,
           alignment: align,
           indent: pIndent
@@ -1770,7 +1778,7 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
           continue;
         }
 
-        let textStr = block.textRuns.map(r => r.text).join('').trim();
+        let textStr = block.textRaws ? block.textRaws.join('').trim() : '';
         let isBullet = /^[➢•■✓✉\-\u2022]/.test(textStr) || textStr.match(/^\d+[\)\.]/);
 
         let startNew = false;
@@ -1809,6 +1817,7 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
             yTop: block.yTop,
             yBottom: block.yBottom,
             textRuns: [...block.textRuns],
+            textRaws: [...(block.textRaws || [])],
             alignment: block.alignment,
             bidirectional: block.bidirectional,
             indent: pIndent,
@@ -1817,11 +1826,13 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
           paragraphs.push(currentParagraph);
         } else {
           // Append line to current paragraph for natural native wrapping
-          let lastRun = currentParagraph.textRuns[currentParagraph.textRuns.length - 1];
-          if (lastRun && !lastRun.text.endsWith(' ') && !lastRun.text.endsWith('-')) {
+          let lastRaw = currentParagraph.textRaws[currentParagraph.textRaws.length - 1] || '';
+          if (!lastRaw.endsWith(' ') && !lastRaw.endsWith('-')) {
              currentParagraph.textRuns.push(new docx.TextRun({ text: " " }));
+             currentParagraph.textRaws.push(' ');
           }
           currentParagraph.textRuns.push(...block.textRuns);
+          currentParagraph.textRaws.push(...block.textRaws);
           currentParagraph.yBottom = block.yBottom;
         }
       }
