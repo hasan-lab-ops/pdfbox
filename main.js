@@ -1591,14 +1591,21 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
 
       // 4. Extract Text with PDF.js (Hybrid Approach)
       const textContent = await page.getTextContent({ normalizeWhitespace: true });
-      const items = textContent.items;
+      let items = textContent.items.filter(item => item.str);
+      
+      // Sort items top-to-bottom, then left-to-right to fix layout order
+      items.sort((a, b) => {
+         let yDiff = b.transform[5] - a.transform[5]; 
+         if (Math.abs(yDiff) > 5) return yDiff;
+         return a.transform[4] - b.transform[4];
+      });
+
       let pdfLines = [];
       let currentLine = [];
       let currentY = null;
 
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
-        if (!item.str) continue;
 
         const y = item.transform[5];
         if (currentY === null) {
@@ -1708,37 +1715,33 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
             pIndent.right = Math.round(marginRight * 20);
             align = docx.AlignmentType.RIGHT;
 
-            for (let word of closestTessLine.words) {
-              if (!word.text || !word.text.trim()) continue;
-              
-              let left = word.bbox.x0 / 2.0;
-              let right = word.bbox.x1 / 2.0;
-              let baselineY = word.bbox.y1 / 2.0;
+            let baselineY = closestTessLine.bbox.y1 / 2.0;
+            let left = minX;
+            let right = maxX;
 
-              // Sample color using OCR bounding box
-              let colorHex = sampleColor(word.bbox.x0, word.bbox.y0, word.bbox.x1 - word.bbox.x0, word.bbox.y1 - word.bbox.y0);
-              
-              let isUnderlined = false;
-              for (let dl of drawnLines) {
-                if (dl.y >= baselineY - 8 && dl.y <= baselineY + 8) {
-                  let overlap = Math.min(right, dl.x1) - Math.max(left, dl.x0);
-                  if (overlap > (right - left) * 0.4) {
-                    isUnderlined = true; break;
-                  }
+            // Sample color of the entire Arabic line
+            let colorHex = sampleColor(closestTessLine.bbox.x0, closestTessLine.bbox.y0, closestTessLine.bbox.x1 - closestTessLine.bbox.x0, closestTessLine.bbox.y1 - closestTessLine.bbox.y0);
+
+            let isUnderlined = false;
+            for (let dl of drawnLines) {
+              if (dl.y >= baselineY - 8 && dl.y <= baselineY + 8) {
+                let overlap = Math.min(right, dl.x1) - Math.max(left, dl.x0);
+                if (overlap > (right - left) * 0.4) {
+                  isUnderlined = true; break;
                 }
               }
-
-              const cleanWord = replaceBullets(word.text) + " ";
-              rawTexts.push(cleanWord);
-              textRuns.push(new docx.TextRun({
-                text: cleanWord,
-                size: Math.round(avgFontSize * 2), // PERFECT SIZE FROM PDF.JS
-                color: colorHex,
-                underline: isUnderlined ? { type: "single", color: colorHex } : undefined,
-                rightToLeft: true, // Native BiDi
-                font: "Arial"
-              }));
             }
+
+            const cleanLine = replaceBullets(closestTessLine.text.replace(/\n/g, ' ')).trim() + " ";
+            rawTexts.push(cleanLine);
+            textRuns.push(new docx.TextRun({
+              text: cleanLine,
+              size: Math.round(avgFontSize * 2), // PERFECT SIZE FROM PDF.JS
+              color: colorHex,
+              underline: isUnderlined ? { type: "single", color: colorHex } : undefined,
+              rightToLeft: true, // Native BiDi
+              font: "Arial"
+            }));
           } else {
             // Fallback if Tesseract missed the line: use PDF.js garbage text so it's not entirely lost
             let fbText = line.map(i => i.str).join('');
@@ -1793,11 +1796,6 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
             startNew = true;
             if (diff > 0) spacingBefore = Math.round(diff * 20);
           }
-        }
-
-        // Filter out isolated page numbers at the bottom of the page
-        if (startNew && textStr.length > 0 && textStr.length < 4 && !isNaN(parseInt(textStr)) && block.yTop > pageHeight - 70) {
-           continue; 
         }
 
         if (startNew) {
@@ -1873,22 +1871,6 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
         properties: {
           page: { margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } },
         },
-        footers: typeof docx.PageNumber !== 'undefined' ? {
-           default: new docx.Footer({
-              children: [
-                 new docx.Paragraph({
-                    alignment: docx.AlignmentType.CENTER,
-                    children: [
-                       new docx.TextRun({
-                          children: ["Page ", docx.PageNumber.CURRENT],
-                          font: "Calibri",
-                          size: 20
-                       })
-                    ]
-                 })
-              ]
-           })
-        } : undefined,
         children: docxChildren.length ? docxChildren : [new docx.Paragraph({ children: [new docx.TextRun('(No text or images found)')] })]
       }]
     });
