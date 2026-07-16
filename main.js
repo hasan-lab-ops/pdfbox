@@ -1395,22 +1395,29 @@ window.convertPDFToWordIsolated = async function(arrayBuffer) {
   try {
     if (typeof pdfjsLib === 'undefined') throw new Error('PDF.js library is not loaded.');
     if (typeof docx === 'undefined') throw new Error('docx.js library is not loaded.');
+    if (typeof Tesseract === 'undefined') throw new Error('Tesseract.js library is not loaded.');
 
     const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     const numPages = pdfDoc.numPages;
 
     let docxChildren = [];
 
+    // Initialize Tesseract worker for Arabic and English
+    if (typeof setProgress === 'function') setProgress('pdf2word', 15, 'Loading OCR Engine (this may take a moment)...');
+    const worker = await Tesseract.createWorker('ara+eng');
+
     for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+      if (typeof setProgress === 'function') setProgress('pdf2word', 20 + Math.floor((pageNum/numPages)*70), `Processing Page ${pageNum} of ${numPages}...`);
+      
       const page = await pdfDoc.getPage(pageNum);
-      const textContent = await page.getTextContent({ normalizeWhitespace: true });
-      const opList = await page.getOperatorList();
+      const viewport = page.getViewport({ scale: 2.0 }); // 2x scale for high-res OCR
       const pageWidth = page.view[2];
       const pageHeight = page.view[3];
       
       let pageBlocks = [];
 
-      // 1. Extract Images
+      // 1. Extract Images (Preserve original image extraction logic)
+      const opList = await page.getOperatorList();
       let ctm = [1, 0, 0, 1, 0, 0];
       const ctmStack = [];
       for (let i = 0; i < opList.fnArray.length; i++) {
@@ -1445,19 +1452,19 @@ window.convertPDFToWordIsolated = async function(arrayBuffer) {
             });
 
             if (imgObj) {
-              const canvas = document.createElement('canvas');
-              canvas.width = imgObj.width;
-              canvas.height = imgObj.height;
-              const ctx = canvas.getContext('2d');
+              const imgCanvas = document.createElement('canvas');
+              imgCanvas.width = imgObj.width;
+              imgCanvas.height = imgObj.height;
+              const imgCtx = imgCanvas.getContext('2d');
               if (imgObj.data) {
                 const imgData = new ImageData(new Uint8ClampedArray(imgObj.data), imgObj.width, imgObj.height);
-                ctx.putImageData(imgData, 0, 0);
+                imgCtx.putImageData(imgData, 0, 0);
               } else if (imgObj.bitmap) {
-                ctx.drawImage(imgObj.bitmap, 0, 0);
+                imgCtx.drawImage(imgObj.bitmap, 0, 0);
               } else {
-                ctx.drawImage(imgObj, 0, 0);
+                imgCtx.drawImage(imgObj, 0, 0);
               }
-              const dataUrl = canvas.toDataURL('image/png');
+              const dataUrl = imgCanvas.toDataURL('image/png');
               const res = await fetch(dataUrl);
               const arrayBuf = await res.arrayBuffer();
               
@@ -1473,50 +1480,122 @@ window.convertPDFToWordIsolated = async function(arrayBuffer) {
         }
       }
 
-      // 2. Extract Text
-      const items = textContent.items;
-      let lines = [];
-      let currentLine = [];
-      let currentY = null;
+      // 2. Render Page to Canvas for OCR and Color Sampling
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d', { willReadFrequently: true });
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      
+      const renderContext = { canvasContext: ctx, viewport: viewport };
+      await page.render(renderContext).promise;
 
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        if (!item.str || item.str.trim() === '') {
-          if (item.str === ' ' && currentLine.length > 0) currentLine.push(item);
-          continue;
-        }
-        
-        const y = item.transform[5];
-        if (currentY === null) {
-          currentY = y;
-          currentLine.push(item);
-        } else {
-          if (Math.abs(y - currentY) <= 5) {
-            currentLine.push(item);
-            currentY = (currentY * (currentLine.length - 1) + y) / currentLine.length;
-          } else {
-            lines.push(currentLine);
-            currentLine = [item];
-            currentY = y;
-          }
-        }
-      }
-      if (currentLine.length > 0) lines.push(currentLine);
+      // 3. Perform Tesseract OCR on the Canvas
+      const imgDataUrl = canvas.toDataURL('image/png');
+      const { data: { lines } } = await worker.recognize(imgDataUrl);
+
+      // 4. Process OCR Text Lines, Color Sampling, and Spacing
+      let prevY = null;
+      const RTL_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
 
       for (let line of lines) {
-        let avgY = line.reduce((sum, it) => sum + it.transform[5], 0) / line.length;
-        let top = pageHeight - avgY;
-        pageBlocks.push({ type: 'text', y: top, line: line });
+        if (!line.text || !line.text.trim()) continue;
+
+        // Bounding boxes are in 2x scaled coordinates, convert to PDF points
+        let lineY = line.bbox.y0 / 2.0;
+        
+        let spacingBefore = 60; // Default spacing
+        if (prevY !== null) {
+          let diff = lineY - prevY;
+          if (diff > 0) spacingBefore = Math.round(diff * 20); // convert pt diff to twips
+        }
+        prevY = line.bbox.y1 / 2.0;
+
+        let isArabic = RTL_REGEX.test(line.text);
+        
+        let minX = line.bbox.x0 / 2.0;
+        let maxX = line.bbox.x1 / 2.0;
+        
+        let pIndent = {};
+        let align = docx.AlignmentType.LEFT;
+        
+        if (isArabic) {
+          let marginRight = Math.max(0, pageWidth - maxX - 72);
+          pIndent.right = Math.round(marginRight * 20);
+          align = docx.AlignmentType.RIGHT;
+        } else {
+          let marginLeft = Math.max(0, minX - 72);
+          pIndent.left = Math.round(marginLeft * 20);
+        }
+
+        let textRuns = [];
+        
+        for (let word of line.words) {
+          if (!word.text || !word.text.trim()) continue;
+
+          let wBox = Math.max(1, Math.ceil(word.bbox.x1 - word.bbox.x0));
+          let hBox = Math.max(1, Math.ceil(word.bbox.y1 - word.bbox.y0));
+          let startX = Math.max(0, Math.floor(word.bbox.x0));
+          let startY = Math.max(0, Math.floor(word.bbox.y0));
+          
+          // Ensure we don't sample out of bounds
+          wBox = Math.min(wBox, canvas.width - startX);
+          hBox = Math.min(hBox, canvas.height - startY);
+
+          let colorHex = '000000'; // Default black
+
+          if (wBox > 0 && hBox > 0) {
+            let imgData = ctx.getImageData(startX, startY, wBox, hBox);
+            let pixels = imgData.data;
+            let r = 0, g = 0, b = 0, minL = 255;
+            
+            // Find darkest pixel in bounding box to get exact font color
+            for (let j = 0; j < pixels.length; j += 4) {
+              let pr = pixels[j], pg = pixels[j+1], pb = pixels[j+2];
+              let l = 0.299*pr + 0.587*pg + 0.114*pb;
+              if (l < minL) {
+                minL = l;
+                r = pr; g = pg; b = pb;
+              }
+            }
+            
+            // If the darkest pixel is not pure white background, use it
+            if (minL < 240) {
+              const toHex = (c) => c.toString(16).padStart(2, '0');
+              colorHex = `${toHex(r)}${toHex(g)}${toHex(b)}`;
+            }
+          }
+
+          let fontSizePts = (word.bbox.y1 - word.bbox.y0) / 2.0;
+
+          textRuns.push(new docx.TextRun({
+            text: word.text + " ",
+            size: Math.round(fontSizePts * 2), // docx API expects half-points
+            color: colorHex,
+            rightToLeft: isArabic,
+            font: isArabic ? "Arial" : "Calibri"
+          }));
+        }
+
+        pageBlocks.push({
+          type: 'text',
+          y: lineY,
+          paragraph: new docx.Paragraph({
+            children: textRuns,
+            bidirectional: isArabic,
+            alignment: align,
+            indent: pIndent,
+            spacing: { before: spacingBefore, after: 0 }
+          })
+        });
       }
 
-      // Sort blocks top-to-bottom
+      // 5. Merge images and text blocks sequentially top-to-bottom
       pageBlocks.sort((a, b) => a.y - b.y);
 
-      const RTL_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
-      const LTR_TOKENS_REGEX = /([a-zA-Z0-9\u0660-\u0669_\-\.\/\:\+\(\)\[\]\,\s]+)/;
-
       for (let block of pageBlocks) {
-        if (block.type === 'image') {
+        if (block.type === 'text') {
+          docxChildren.push(block.paragraph);
+        } else if (block.type === 'image') {
           docxChildren.push(new docx.Paragraph({
             children: [
               new docx.ImageRun({
@@ -1525,94 +1604,7 @@ window.convertPDFToWordIsolated = async function(arrayBuffer) {
               })
             ],
             alignment: docx.AlignmentType.CENTER,
-            spacing: { before: 120, after: 120 }
-          }));
-        } else if (block.type === 'text') {
-          let line = block.line;
-          line.sort((a, b) => a.transform[4] - b.transform[4]);
-          
-          const textStr = line.map(i => i.str).join('');
-          if (!textStr.trim()) continue;
-
-          const isArabic = RTL_REGEX.test(textStr);
-
-          let minX = pageWidth, maxX = 0;
-          for (let it of line) {
-            let rightEdge = it.transform[4] + (it.width || 0);
-            if (it.transform[4] < minX) minX = it.transform[4];
-            if (rightEdge > maxX) maxX = rightEdge;
-          }
-
-          let pIndent = {};
-          let align = docx.AlignmentType.LEFT;
-          if (isArabic) {
-            let marginRight = Math.max(0, pageWidth - maxX - 72);
-            pIndent.right = Math.round(marginRight * 20);
-            align = docx.AlignmentType.RIGHT;
-          } else {
-            let marginLeft = Math.max(0, minX - 72);
-            pIndent.left = Math.round(marginLeft * 20);
-          }
-
-          if (isArabic) line.reverse();
-
-          let textRuns = [];
-
-          for (let item of line) {
-            if (!item.str) continue;
-
-            let str = item.str;
-            if (isArabic) {
-              const parts = str.split(LTR_TOKENS_REGEX);
-              let result = [];
-              for (let i = 0; i < parts.length; i++) {
-                if (!parts[i]) continue;
-                if (i % 2 === 1) result.push(parts[i]);
-                else result.push(parts[i].split('').reverse().join(''));
-              }
-              str = result.reverse().join('');
-            }
-
-            let fontSize = Math.round(Math.abs(item.transform[0]) || 12);
-
-            let color = '000000';
-            if (item.color) {
-              if (item.color.length === 3) {
-                const toHex = (c) => c.toString(16).padStart(2, '0');
-                color = `${toHex(item.color[0])}${toHex(item.color[1])}${toHex(item.color[2])}`;
-              } else if (typeof item.color === 'string') {
-                color = item.color.replace('#', '');
-              }
-            } else if (item.fillColor) {
-              color = item.fillColor.replace('#', '');
-            }
-
-            let fontName = (item.fontName || '').toLowerCase();
-            let isBold = fontName.includes('bold');
-            let isItalic = fontName.includes('italic');
-            
-            if (textContent.styles && textContent.styles[item.fontName]) {
-                const style = textContent.styles[item.fontName];
-                if (style.fontFamily && style.fontFamily.toLowerCase().includes('bold')) isBold = true;
-            }
-
-            textRuns.push(new docx.TextRun({
-              text: str,
-              size: fontSize * 2,
-              color: color,
-              bold: isBold,
-              italics: isItalic,
-              rightToLeft: isArabic,
-              font: isArabic ? "Arial" : "Calibri"
-            }));
-          }
-
-          docxChildren.push(new docx.Paragraph({
-            children: textRuns,
-            bidirectional: isArabic,
-            alignment: align,
-            indent: pIndent,
-            spacing: { before: 60, after: 60 }
+            spacing: { before: 240, after: 240 }
           }));
         }
       }
@@ -1621,6 +1613,8 @@ window.convertPDFToWordIsolated = async function(arrayBuffer) {
         docxChildren.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
       }
     }
+
+    await worker.terminate();
 
     const wordDoc = new docx.Document({
       creator: 'PDF BOX',
@@ -1632,6 +1626,7 @@ window.convertPDFToWordIsolated = async function(arrayBuffer) {
       }]
     });
 
+    if (typeof setProgress === 'function') setProgress('pdf2word', 95, 'Saving DOCX format...');
     return await docx.Packer.toBlob(wordDoc);
   } catch (error) {
     console.error("PDF to Word Conversion Error:", error);
