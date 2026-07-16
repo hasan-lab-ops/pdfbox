@@ -1416,8 +1416,10 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
 
       let pageBlocks = [];
       let imageRects = []; // Used to blind Tesseract to screenshots
+      let drawnLines = []; // Used to detect vector underlines
+      let currentPath = [];
 
-      // 1. Extract Images
+      // 1. Extract Images and Vector Lines
       const opList = await page.getOperatorList();
       let ctm = [1, 0, 0, 1, 0, 0];
       const ctmStack = [];
@@ -1475,15 +1477,58 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
 
               pageBlocks.push({
                 type: 'image',
-                y: top, // absolute Y in points for sorting
+                yTop: top,
+                yBottom: top + h,
                 data: arrayBuf,
                 width: Math.round(w * 1.3333), // Convert points to docx pixels
                 height: Math.round(h * 1.3333)
               });
             }
           } catch (err) { console.warn("Image extraction error", err); }
+        } else if (fn === pdfjsLib.OPS.rectangle) {
+          currentPath.push({ type: 'rect', x: args[0], y: args[1], w: args[2], h: args[3] });
+        } else if (fn === pdfjsLib.OPS.moveTo) {
+          currentPath.push({ type: 'moveTo', x: args[0], y: args[1] });
+        } else if (fn === pdfjsLib.OPS.lineTo) {
+          currentPath.push({ type: 'lineTo', x: args[0], y: args[1] });
+        } else if (fn === pdfjsLib.OPS.fill || fn === pdfjsLib.OPS.stroke || fn === pdfjsLib.OPS.eoFill) {
+          for (let seg of currentPath) {
+            if (seg.type === 'rect') {
+               let px0 = seg.x * ctm[0] + seg.y * ctm[2] + ctm[4];
+               let py0 = seg.x * ctm[1] + seg.y * ctm[3] + ctm[5]; // bottom-left
+               let px1 = (seg.x + seg.w) * ctm[0] + (seg.y + seg.h) * ctm[2] + ctm[4];
+               let py1 = (seg.x + seg.w) * ctm[1] + (seg.y + seg.h) * ctm[3] + ctm[5]; // top-right
+               
+               let minX = Math.min(px0, px1);
+               let maxX = Math.max(px0, px1);
+               let minY = Math.min(py0, py1);
+               let maxY = Math.max(py0, py1);
+               
+               let w = maxX - minX;
+               let h = maxY - minY;
+               
+               // If it's a thin horizontal line
+               if (h < 4 && w > 5) { 
+                 drawnLines.push({ x0: minX, x1: maxX, y: pageHeight - Math.max(py0, py1), thickness: h });
+               }
+            }
+          }
+          if (fn !== pdfjsLib.OPS.stroke) currentPath = [];
+        } else if (fn === pdfjsLib.OPS.beginPath || fn === pdfjsLib.OPS.closePath || fn === pdfjsLib.OPS.endPath) {
+          if (fn === pdfjsLib.OPS.beginPath) currentPath = [];
         }
       }
+
+      // Bullet & Symbol mapper
+      const replaceBullets = (str) => {
+        return str.replace(/\uF0D8/g, '➢')
+                  .replace(/\uF0B7/g, '•')
+                  .replace(/\uF0A7/g, '■')
+                  .replace(/\uF0FC/g, '✓')
+                  .replace(/\uF0E0/g, '✉')
+                  .replace(/\uF020/g, ' ')
+                  .replace(/\u2022/g, '•');
+      };
 
       // 2. Render Page to Canvas
       const canvas = document.createElement('canvas');
@@ -1595,10 +1640,12 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
               textRuns.push(new docx.TextRun({ text: item.str, size: Math.round(avgFontSize * 2), font: "Calibri" }));
               continue;
             }
-
+            
             let fontSize = Math.abs(item.transform[0]) || 12;
             let left = item.transform[4];
-            let top = pageHeight - item.transform[5] - fontSize;
+            let right = left + (item.width || 0);
+            let baselineY = pageHeight - item.transform[5];
+            let top = baselineY - fontSize;
 
             // Sample color from canvas
             let colorHex = sampleColor(left * 2.0, top * 2.0, (item.width || fontSize) * 2.0, fontSize * 2.0);
@@ -1609,11 +1656,23 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
               if (style.fontFamily && style.fontFamily.toLowerCase().includes('bold')) isBold = true;
             }
 
+            // Check for underlines
+            let isUnderlined = false;
+            for (let dl of drawnLines) {
+              if (dl.y >= baselineY - 3 && dl.y <= baselineY + 6) {
+                let overlap = Math.min(right, dl.x1) - Math.max(left, dl.x0);
+                if (overlap > (right - left) * 0.4) {
+                  isUnderlined = true; break;
+                }
+              }
+            }
+
             textRuns.push(new docx.TextRun({
-              text: item.str,
+              text: replaceBullets(item.str),
               size: Math.round(fontSize * 2), // Half-points
               color: colorHex,
               bold: isBold,
+              underline: isUnderlined ? { type: "single", color: colorHex } : undefined,
               font: "Calibri"
             }));
           }
@@ -1640,14 +1699,29 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
 
             for (let word of closestTessLine.words) {
               if (!word.text || !word.text.trim()) continue;
+              
+              let left = word.bbox.x0 / 2.0;
+              let right = word.bbox.x1 / 2.0;
+              let baselineY = word.bbox.y1 / 2.0;
 
               // Sample color using OCR bounding box
               let colorHex = sampleColor(word.bbox.x0, word.bbox.y0, word.bbox.x1 - word.bbox.x0, word.bbox.y1 - word.bbox.y0);
+              
+              let isUnderlined = false;
+              for (let dl of drawnLines) {
+                if (dl.y >= baselineY - 6 && dl.y <= baselineY + 6) {
+                  let overlap = Math.min(right, dl.x1) - Math.max(left, dl.x0);
+                  if (overlap > (right - left) * 0.4) {
+                    isUnderlined = true; break;
+                  }
+                }
+              }
 
               textRuns.push(new docx.TextRun({
-                text: word.text + " ",
+                text: replaceBullets(word.text) + " ",
                 size: Math.round(avgFontSize * 2), // PERFECT SIZE FROM PDF.JS
                 color: colorHex,
+                underline: isUnderlined ? { type: "single", color: colorHex } : undefined,
                 rightToLeft: true, // Native BiDi
                 font: "Arial"
               }));
@@ -1667,7 +1741,8 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
 
         pageBlocks.push({
           type: 'text',
-          y: avgY,
+          yTop: avgY - avgFontSize, // Top of the text
+          yBottom: avgY, // Baseline
           textRuns: textRuns,
           bidirectional: isArabic,
           alignment: align,
@@ -1676,18 +1751,19 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
       }
 
       // 5. Merge images and text blocks by absolute Y coordinate
-      pageBlocks.sort((a, b) => a.y - b.y);
+      pageBlocks.sort((a, b) => a.yTop - b.yTop);
 
-      let prevY = null;
+      let prevBottom = null;
       for (let block of pageBlocks) {
-        if (block.type === 'text') {
-          let spacingBefore = 60;
-          if (prevY !== null) {
-            let diff = block.y - prevY;
-            if (diff > 0) spacingBefore = Math.round(diff * 20); // convert pt diff to twips
-          }
-          prevY = block.y;
+        let spacingBefore = 0; // Default to natural line spacing
 
+        if (prevBottom !== null) {
+          let diff = block.yTop - prevBottom;
+          if (diff > 0) spacingBefore = Math.round(diff * 20); // Add physical space gap
+        }
+
+        if (block.type === 'text') {
+          prevBottom = block.yBottom;
           docxChildren.push(new docx.Paragraph({
             children: block.textRuns,
             bidirectional: block.bidirectional,
@@ -1696,8 +1772,8 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
             spacing: { before: spacingBefore, after: 0 }
           }));
         } else if (block.type === 'image') {
-          // Images take up space, update prevY to bottom of image in points
-          prevY = block.y + (block.height / 1.3333);
+          // Images take up space, update prevBottom to bottom of image in points
+          prevBottom = block.yBottom;
           docxChildren.push(new docx.Paragraph({
             children: [
               new docx.ImageRun({
