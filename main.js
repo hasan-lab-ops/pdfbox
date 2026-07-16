@@ -1462,7 +1462,7 @@ async function pdfToWord() {
   setButtonEnabled('btn-pdf2word', false);
 
   try {
-    const blob = await convertPDFToWordIsolated(file, (progress, msg) => {
+    const blob = await safeConvertPDFToWord(file, (progress, msg) => {
       setProgress('pdf2word', progress, msg);
     });
     
