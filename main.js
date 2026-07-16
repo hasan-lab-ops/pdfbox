@@ -1185,268 +1185,206 @@ async function viewerZoomOut() {
 
 /* ──────────────────────────────────────────────────
    11. PDF TO WORD
-   Uses PDF.js for text extraction + docx.js for DOCX creation
-   Supports Arabic (RTL), Hebrew, and all Unicode languages
+   Hybrid approach:
+   - Arabic/Hebrew PDFs → Tesseract.js OCR (only reliable method for RTL)
+   - Latin/LTR PDFs    → PDF.js direct text extraction
    ────────────────────────────────────────────────── */
 
-/**
- * Safe, defensively-programmed DOM-based PDF to DOCX converter.
- * Wraps advanced textLayer rendering in try-catch and silently falls back to standard text extraction if it fails.
- */
 async function safeConvertPDFToWord(file, onProgress) {
 
-  // ── Dependency checks ──────────────────────────────────────────
   if (typeof pdfjsLib === 'undefined') throw new Error('PDF.js library is not loaded.');
   if (typeof docx    === 'undefined') throw new Error('docx.js library is not loaded.');
 
-  // ── Arabic Presentation Forms → Base Arabic mapping ────────────
-  // Many Arabic PDFs encode glyphs as Presentation Forms (FE70-FEFF, FB50-FDFF).
-  // NFKC handles some, but not all. This table covers what NFKC misses.
-  // We map each presentation form to its canonical base character(s).
-  function fixArabicPresentationForms(str) {
-    // Step 1: NFKC decomposes most Arabic Presentation Forms to base forms
-    str = str.normalize('NFKC');
-
-    // Step 2: Map any remaining FE70-FEFF forms to base Arabic
-    // These are isolated/initial/medial/final forms — all map to base char
-    const FE_MAP = {
-      '\uFE70':'\u064B','\uFE71':'\u0651\u064B','\uFE72':'\u064C','\uFE74':'\u064D',
-      '\uFE76':'\u064E','\uFE77':'\u0651\u064E','\uFE78':'\u064F','\uFE79':'\u0651\u064F',
-      '\uFE7A':'\u0650','\uFE7B':'\u0651\u0650','\uFE7C':'\u0651','\uFE7D':'\u0651',
-      '\uFE7E':'\u0652','\uFE7F':'\u0651\u0652',
-      '\uFE80':'\u0621','\uFE81':'\u0622','\uFE82':'\u0622','\uFE83':'\u0623',
-      '\uFE84':'\u0623','\uFE85':'\u0624','\uFE86':'\u0624','\uFE87':'\u0625',
-      '\uFE88':'\u0625','\uFE89':'\u0626','\uFE8A':'\u0626','\uFE8B':'\u0626',
-      '\uFE8C':'\u0626','\uFE8D':'\u0627','\uFE8E':'\u0627','\uFE8F':'\u0628',
-      '\uFE90':'\u0628','\uFE91':'\u0628','\uFE92':'\u0628','\uFE93':'\u0629',
-      '\uFE94':'\u0629','\uFE95':'\u062A','\uFE96':'\u062A','\uFE97':'\u062A',
-      '\uFE98':'\u062A','\uFE99':'\u062B','\uFE9A':'\u062B','\uFE9B':'\u062B',
-      '\uFE9C':'\u062B','\uFE9D':'\u062C','\uFE9E':'\u062C','\uFE9F':'\u062C',
-      '\uFEA0':'\u062C','\uFEA1':'\u062D','\uFEA2':'\u062D','\uFEA3':'\u062D',
-      '\uFEA4':'\u062D','\uFEA5':'\u062E','\uFEA6':'\u062E','\uFEA7':'\u062E',
-      '\uFEA8':'\u062E','\uFEA9':'\u062F','\uFEAA':'\u062F','\uFEAB':'\u0630',
-      '\uFEAC':'\u0630','\uFEAD':'\u0631','\uFEAE':'\u0631','\uFEAF':'\u0632',
-      '\uFEB0':'\u0632','\uFEB1':'\u0633','\uFEB2':'\u0633','\uFEB3':'\u0633',
-      '\uFEB4':'\u0633','\uFEB5':'\u0634','\uFEB6':'\u0634','\uFEB7':'\u0634',
-      '\uFEB8':'\u0634','\uFEB9':'\u0635','\uFEBA':'\u0635','\uFEBB':'\u0635',
-      '\uFEBC':'\u0635','\uFEBD':'\u0636','\uFEBE':'\u0636','\uFEBF':'\u0636',
-      '\uFEC0':'\u0636','\uFEC1':'\u0637','\uFEC2':'\u0637','\uFEC3':'\u0637',
-      '\uFEC4':'\u0637','\uFEC5':'\u0638','\uFEC6':'\u0638','\uFEC7':'\u0638',
-      '\uFEC8':'\u0638','\uFEC9':'\u0639','\uFECA':'\u0639','\uFECB':'\u0639',
-      '\uFECC':'\u0639','\uFECD':'\u063A','\uFECE':'\u063A','\uFECF':'\u063A',
-      '\uFED0':'\u063A','\uFED1':'\u0641','\uFED2':'\u0641','\uFED3':'\u0641',
-      '\uFED4':'\u0641','\uFED5':'\u0642','\uFED6':'\u0642','\uFED7':'\u0642',
-      '\uFED8':'\u0642','\uFED9':'\u0643','\uFEDA':'\u0643','\uFEDB':'\u0643',
-      '\uFEDC':'\u0643','\uFEDD':'\u0644','\uFEDE':'\u0644','\uFEDF':'\u0644',
-      '\uFEE0':'\u0644','\uFEE1':'\u0645','\uFEE2':'\u0645','\uFEE3':'\u0645',
-      '\uFEE4':'\u0645','\uFEE5':'\u0646','\uFEE6':'\u0646','\uFEE7':'\u0646',
-      '\uFEE8':'\u0646','\uFEE9':'\u0647','\uFEEA':'\u0647','\uFEEB':'\u0647',
-      '\uFEEC':'\u0647','\uFEED':'\u0648','\uFEEE':'\u0648','\uFEEF':'\u0649',
-      '\uFEF0':'\u0649','\uFEF1':'\u064A','\uFEF2':'\u064A','\uFEF3':'\u064A',
-      '\uFEF4':'\u064A','\uFEF5':'\u0644\u0622','\uFEF6':'\u0644\u0622',
-      '\uFEF7':'\u0644\u0623','\uFEF8':'\u0644\u0623','\uFEF9':'\u0644\u0625',
-      '\uFEFA':'\u0644\u0625','\uFEFB':'\u0644\u0627','\uFEFC':'\u0644\u0627',
-    };
-    return str.replace(/[\uFE70-\uFEFC]/g, ch => FE_MAP[ch] || ch);
-  }
-
-  // ── Helpers ─────────────────────────────────────────────────────
-  const isRTLChar = (ch) => /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\u0590-\u05FF\uFB1D-\uFDFF\uFE70-\uFEFF]/.test(ch);
+  // ── Helpers ───────────────────────────────────────────────────────
   const isRTLText = (str) => {
-    // Count RTL vs LTR strong characters to decide direction
     let rtl = 0, ltr = 0;
     for (const ch of str) {
-      if (/[\u0600-\u06FF\u0750-\u077F\u0590-\u05FF]/.test(ch)) rtl++;
+      if (/[\u0600-\u06FF\u0750-\u077F\u0590-\u05FF\u08A0-\u08FF]/.test(ch)) rtl++;
       else if (/[A-Za-z]/.test(ch)) ltr++;
     }
     return rtl > ltr;
   };
-  const sanitize = (str) => str.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
 
-  // ── Load PDF ────────────────────────────────────────────────────
+  const makeParagraph = (text, isRTL, fontSize = 24) => new docx.Paragraph({
+    children: [new docx.TextRun({
+      text,
+      font: isRTL ? 'Arial' : 'Times New Roman',
+      size: fontSize,
+      rightToLeft: isRTL,
+    })],
+    bidirectional: isRTL,
+    alignment: isRTL ? docx.AlignmentType.RIGHT : docx.AlignmentType.LEFT,
+    spacing: { after: 100 },
+  });
+
+  // ── Load PDF ──────────────────────────────────────────────────────
+  onProgress(3, 'Opening PDF…');
   const bytes = await readFileBytes(file);
-  const pdfDoc = await pdfjsLib.getDocument({
-    data: bytes,
-    // Ask PDF.js to fix up glyphs to Unicode where possible
-    disableFontFace: false,
-    useSystemFonts: true,
-  }).promise;
+  const pdfDoc = await pdfjsLib.getDocument({ data: bytes }).promise;
   const numPages = pdfDoc.numPages;
+
+  // ── Detect if PDF contains Arabic/Hebrew ─────────────────────────
+  // Sample first page text content
+  let hasRTL = false;
+  try {
+    const p1 = await pdfDoc.getPage(1);
+    const tc = await p1.getTextContent({ includeMarkedContent: false });
+    const sample = tc.items.map(i => i.str).join('');
+    hasRTL = /[\u0600-\u06FF\u0750-\u077F\u0590-\u05FF\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(sample);
+  } catch (_) {}
+
   const docxChildren = [];
 
-  // ── Process each page ───────────────────────────────────────────
-  for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-    onProgress(5 + Math.round(((pageNum - 1) / numPages) * 80), `Extracting page ${pageNum} of ${numPages}…`);
+  // ══════════════════════════════════════════════════════════════════
+  //  PATH A: OCR via Tesseract.js — for Arabic / Hebrew PDFs
+  //  This is the ONLY method that correctly handles RTL glyph order,
+  //  Arabic shaping, and Bidi without a full Unicode layout engine.
+  // ══════════════════════════════════════════════════════════════════
+  if (hasRTL && typeof Tesseract !== 'undefined') {
+    onProgress(6, 'Initializing Arabic OCR engine (downloading model if first time)…');
 
-    const page = await pdfDoc.getPage(pageNum);
-
-    // disableCombineTextItems:false = let PDF.js merge adjacent same-style chars (default)
-    // includeMarkedContent:false    = skip tag markers, get only real text items
-    const textContent = await page.getTextContent({
-      includeMarkedContent: false,
-      disableCombineTextItems: false,
-    });
-
-    // Filter to real text items only
-    const rawItems = textContent.items.filter(item => item.str != null && item.str !== '');
-
-    if (rawItems.length === 0) {
-      docxChildren.push(new docx.Paragraph({ children: [] }));
-      if (pageNum < numPages) docxChildren.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
-      continue;
-    }
-
-    // ── Group items into visual lines by Y coordinate ─────────────
-    // PDF coordinate system: Y increases upward. Items on the same line
-    // have the same transform[5] (baseline Y). Use font-size-aware tolerance.
-    const lineMap = new Map(); // key = rounded Y, value = [items]
-    for (const item of rawItems) {
-      const y = item.transform[5];
-      const fontSize = Math.abs(item.transform[0]); // scale = fontSize in PDF units
-      const tol = Math.max(2, fontSize * 0.4);
-      // Find existing line within tolerance
-      let matched = null;
-      for (const [ky] of lineMap) {
-        if (Math.abs(ky - y) <= tol) { matched = ky; break; }
-      }
-      const key = matched !== null ? matched : y;
-      if (!lineMap.has(key)) lineMap.set(key, []);
-      lineMap.get(key).push(item);
-    }
-
-    // Sort lines top-to-bottom (PDF Y is bottom-up, so descending Y = top of page first)
-    const sortedLines = [...lineMap.entries()].sort((a, b) => b[0] - a[0]);
-
-    for (const [, lineItems] of sortedLines) {
-      // ── Determine line direction ─────────────────────────────────
-      // PDF.js sets item.dir = 'rtl' | 'ltr' | 'ttb' on each item (v3+)
-      // Prefer that; fall back to Unicode analysis
-      const rtlCount = lineItems.filter(i => i.dir === 'rtl').length;
-      const ltrCount = lineItems.filter(i => i.dir === 'ltr').length;
-      let isRTL;
-      if (rtlCount > 0 || ltrCount > 0) {
-        isRTL = rtlCount >= ltrCount;
-      } else {
-        isRTL = isRTLText(lineItems.map(i => i.str).join(''));
-      }
-
-      // ── Sort items within line for reading order ─────────────────
-      // RTL: rightmost first (largest X first)
-      // LTR: leftmost first (smallest X first)
-      lineItems.sort((a, b) => isRTL
-        ? b.transform[4] - a.transform[4]
-        : a.transform[4] - b.transform[4]
-      );
-
-      // ── Build the text string with correct spacing ───────────────
-      // Strategy: append each item's text, then decide whether to add a space
-      // before the next item based on:
-      //   1. item.hasEOL (PDF marked this as end of a space-separated word)
-      //   2. The gap between item's rendered end and next item's start
-      //      exceeds ~25% of the font size → word boundary → add space
-      const runs = [];
-      let runText = '';
-      let runFontSize = 12;
-      let runBold = false;
-
-      const flushRun = () => {
-        if (!runText) return;
-        runs.push(new docx.TextRun({
-          text: runText,
-          font: isRTL ? 'Arial' : 'Times New Roman',
-          size: Math.round(runFontSize * 2),  // half-points
-          bold: runBold,
-          rightToLeft: isRTL,
-        }));
-        runText = '';
-      };
-
-      for (let k = 0; k < lineItems.length; k++) {
-        const item = lineItems[k];
-
-        // ── Fix Arabic characters ──────────────────────────────────
-        let text = fixArabicPresentationForms(item.str);
-        text = sanitize(text);
-        if (!text) continue;
-
-        // Font info from transform matrix: transform[0] = scaleX ≈ fontSize
-        const fontSize = Math.abs(item.transform[0]) || 12;
-        const isBold = !!(item.fontName && /bold/i.test(item.fontName));
-
-        // Start a new run if style changes significantly
-        if (Math.abs(fontSize - runFontSize) > 1 || isBold !== runBold) {
-          flushRun();
-          runFontSize = fontSize;
-          runBold = isBold;
-        }
-
-        runText += text;
-
-        // ── Space detection ────────────────────────────────────────
-        if (k < lineItems.length - 1) {
-          const next = lineItems[k + 1];
-
-          // item's rendered width in PDF user units
-          const itemRenderedWidth = item.width || 0;
-          const nextX = next.transform[4];
-          const itemEndX = item.transform[4];
-
-          // For RTL: item is to the right, next is to the left
-          // gap = left edge of current item  minus  right edge of next item
-          // For LTR: gap = left edge of next minus  right edge of current
-          const gap = isRTL
-            ? (itemEndX - (nextX + (next.width || 0)))
-            : (nextX - (itemEndX + itemRenderedWidth));
-
-          // A gap larger than ~1/3 of the font size means a word space
-          const spaceThreshold = fontSize * 0.3;
-          if (item.hasEOL || gap > spaceThreshold) {
-            runText += ' ';
+    let worker = null;
+    try {
+      // Create Tesseract worker with Arabic + English language support
+      worker = await Tesseract.createWorker(['ara', 'eng'], 1, {
+        logger: m => {
+          if (m.status === 'recognizing text') {
+            // m.progress is 0..1 during recognition
           }
+        },
+        // Use CDN for language training data
+        langPath: 'https://tessdata.projectnaptha.com/4.0.0',
+        workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js',
+        corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core-simd-lstm.wasm.js',
+      });
+
+      for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+        const pct = 10 + Math.round(((pageNum - 1) / numPages) * 78);
+        onProgress(pct, `Recognizing page ${pageNum} of ${numPages}…`);
+
+        const page = await pdfDoc.getPage(pageNum);
+        // Render at 2× scale for better OCR accuracy
+        const viewport = page.getViewport({ scale: 2.0 });
+        const canvas = document.createElement('canvas');
+        canvas.width  = viewport.width;
+        canvas.height = viewport.height;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        await page.render({ canvasContext: ctx, viewport }).promise;
+
+        // Run OCR on the rendered canvas
+        const { data } = await worker.recognize(canvas);
+
+        // data.lines: each line has .text and .words[].bbox
+        for (const line of data.lines) {
+          const rawText = line.text.replace(/\n/g, '').trim();
+          if (!rawText) continue;
+
+          const rtl = isRTLText(rawText);
+
+          // Estimate font size from bounding box height
+          const lineHeightPx = (line.bbox.y1 - line.bbox.y0);
+          // OCR is at 2× scale, convert to points (72pt/inch, 96dpi screen)
+          const fontSizePt = Math.max(8, Math.round((lineHeightPx / 2) * 0.75));
+
+          docxChildren.push(makeParagraph(rawText, rtl, fontSizePt * 2));
+        }
+
+        if (pageNum < numPages) {
+          docxChildren.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
         }
       }
-      flushRun();
 
-      if (runs.length === 0) continue;
-
-      docxChildren.push(new docx.Paragraph({
-        children: runs,
-        bidirectional: isRTL,
-        alignment: isRTL ? docx.AlignmentType.RIGHT : docx.AlignmentType.LEFT,
-        spacing: { after: 120 },
-      }));
+    } finally {
+      if (worker) {
+        try { await worker.terminate(); } catch (_) {}
+      }
     }
 
-    if (pageNum < numPages) {
-      docxChildren.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
+  // ══════════════════════════════════════════════════════════════════
+  //  PATH B: Direct PDF.js text extraction — for Latin / LTR PDFs
+  //  Fast and accurate for English, French, German, etc.
+  // ══════════════════════════════════════════════════════════════════
+  } else {
+    const sanitize = (s) => s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
+
+    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+      onProgress(5 + Math.round(((pageNum - 1) / numPages) * 83), `Extracting page ${pageNum} of ${numPages}…`);
+
+      const page = await pdfDoc.getPage(pageNum);
+      const textContent = await page.getTextContent({ includeMarkedContent: false });
+      const items = textContent.items.filter(i => i.str && i.str.trim());
+
+      if (!items.length) {
+        docxChildren.push(new docx.Paragraph({ children: [] }));
+      } else {
+        // Group by Y baseline into lines
+        const lineMap = new Map();
+        for (const item of items) {
+          const y = item.transform[5];
+          const tol = Math.max(3, Math.abs(item.transform[0]) * 0.45);
+          let found = null;
+          for (const [ky] of lineMap) {
+            if (Math.abs(ky - y) <= tol) { found = ky; break; }
+          }
+          const key = found !== null ? found : y;
+          if (!lineMap.has(key)) lineMap.set(key, []);
+          lineMap.get(key).push(item);
+        }
+
+        const sortedLines = [...lineMap.entries()].sort((a, b) => b[0] - a[0]);
+        for (const [, lineItems] of sortedLines) {
+          lineItems.sort((a, b) => a.transform[4] - b.transform[4]);
+
+          let lineText = '';
+          for (let k = 0; k < lineItems.length; k++) {
+            const item = lineItems[k];
+            lineText += sanitize(item.str.normalize('NFKC'));
+            if (k < lineItems.length - 1) {
+              const next = lineItems[k + 1];
+              const gap = next.transform[4] - (item.transform[4] + (item.width || 0));
+              if (item.hasEOL || gap > Math.abs(item.transform[0]) * 0.3) lineText += ' ';
+            }
+          }
+
+          lineText = lineText.trim();
+          if (!lineText) continue;
+
+          const fontSize = Math.abs(lineItems[0].transform[0]) || 12;
+          docxChildren.push(makeParagraph(lineText, false, Math.round(fontSize * 2)));
+        }
+      }
+
+      if (pageNum < numPages) {
+        docxChildren.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
+      }
     }
   }
 
-  // ── Build DOCX document ─────────────────────────────────────────
-  onProgress(90, 'Building Word document…');
+  // ── Build DOCX ────────────────────────────────────────────────────
+  onProgress(92, 'Building Word document…');
 
   const wordDoc = new docx.Document({
     creator: 'PDF BOX',
     title: file.name.replace(/\.pdf$/i, ''),
     styles: {
       default: {
-        document: {
-          run: { font: 'Arial', size: 24 }
-        }
+        document: { run: { font: 'Arial', size: 24 } }
       }
     },
     sections: [{
       properties: {
         page: { margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } },
-        bidi: true,   // enable document-level bidirectional support
+        bidi: true,
       },
       children: docxChildren.length
         ? docxChildren
-        : [new docx.Paragraph({ children: [new docx.TextRun('(No text found in this PDF)')] })]
+        : [new docx.Paragraph({ children: [new docx.TextRun('(No extractable text found in this PDF)')] })]
     }]
   });
 
-  onProgress(96, 'Saving DOCX…');
+  onProgress(97, 'Saving DOCX…');
   return await docx.Packer.toBlob(wordDoc);
 }
 
