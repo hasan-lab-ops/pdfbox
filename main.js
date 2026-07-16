@@ -1492,28 +1492,35 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
         } else if (fn === pdfjsLib.OPS.lineTo) {
           currentPath.push({ type: 'lineTo', x: args[0], y: args[1] });
         } else if (fn === pdfjsLib.OPS.fill || fn === pdfjsLib.OPS.stroke || fn === pdfjsLib.OPS.eoFill) {
+          let lastX = null, lastY = null;
           for (let seg of currentPath) {
             if (seg.type === 'rect') {
                let px0 = seg.x * ctm[0] + seg.y * ctm[2] + ctm[4];
-               let py0 = seg.x * ctm[1] + seg.y * ctm[3] + ctm[5]; // bottom-left
+               let py0 = seg.x * ctm[1] + seg.y * ctm[3] + ctm[5];
                let px1 = (seg.x + seg.w) * ctm[0] + (seg.y + seg.h) * ctm[2] + ctm[4];
-               let py1 = (seg.x + seg.w) * ctm[1] + (seg.y + seg.h) * ctm[3] + ctm[5]; // top-right
+               let py1 = (seg.x + seg.w) * ctm[1] + (seg.y + seg.h) * ctm[3] + ctm[5];
+               let w = Math.max(px0, px1) - Math.min(px0, px1);
+               let h = Math.max(py0, py1) - Math.min(py0, py1);
                
-               let minX = Math.min(px0, px1);
-               let maxX = Math.max(px0, px1);
-               let minY = Math.min(py0, py1);
-               let maxY = Math.max(py0, py1);
-               
-               let w = maxX - minX;
-               let h = maxY - minY;
-               
-               // If it's a thin horizontal line
-               if (h < 4 && w > 5) { 
-                 drawnLines.push({ x0: minX, x1: maxX, y: pageHeight - Math.max(py0, py1), thickness: h });
+               if (h < 5 && w > 5) { 
+                 drawnLines.push({ x0: Math.min(px0, px1), x1: Math.max(px0, px1), y: pageHeight - Math.max(py0, py1), thickness: h });
                }
+            } else if (seg.type === 'moveTo') {
+               lastX = seg.x; lastY = seg.y;
+            } else if (seg.type === 'lineTo') {
+               if (lastX !== null && lastY !== null) {
+                  let px0 = lastX * ctm[0] + lastY * ctm[2] + ctm[4];
+                  let py0 = lastX * ctm[1] + lastY * ctm[3] + ctm[5];
+                  let px1 = seg.x * ctm[0] + seg.y * ctm[2] + ctm[4];
+                  let py1 = seg.x * ctm[1] + seg.y * ctm[3] + ctm[5];
+                  if (Math.abs(py0 - py1) < 5 && Math.abs(px0 - px1) > 5) {
+                     drawnLines.push({ x0: Math.min(px0, px1), x1: Math.max(px0, px1), y: pageHeight - Math.max(py0, py1), thickness: 1 });
+                  }
+               }
+               lastX = seg.x; lastY = seg.y;
             }
           }
-          if (fn !== pdfjsLib.OPS.stroke) currentPath = [];
+          currentPath = [];
         } else if (fn === pdfjsLib.OPS.beginPath || fn === pdfjsLib.OPS.closePath || fn === pdfjsLib.OPS.endPath) {
           if (fn === pdfjsLib.OPS.beginPath) currentPath = [];
         }
@@ -1659,7 +1666,7 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
             // Check for underlines
             let isUnderlined = false;
             for (let dl of drawnLines) {
-              if (dl.y >= baselineY - 3 && dl.y <= baselineY + 6) {
+              if (dl.y >= baselineY - 5 && dl.y <= baselineY + 8) {
                 let overlap = Math.min(right, dl.x1) - Math.max(left, dl.x0);
                 if (overlap > (right - left) * 0.4) {
                   isUnderlined = true; break;
@@ -1709,7 +1716,7 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
               
               let isUnderlined = false;
               for (let dl of drawnLines) {
-                if (dl.y >= baselineY - 6 && dl.y <= baselineY + 6) {
+                if (dl.y >= baselineY - 8 && dl.y <= baselineY + 8) {
                   let overlap = Math.min(right, dl.x1) - Math.max(left, dl.x0);
                   if (overlap > (right - left) * 0.4) {
                     isUnderlined = true; break;
@@ -1750,35 +1757,90 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
         });
       }
 
-      // 5. Merge images and text blocks by absolute Y coordinate
+      // 5. Group blocks into native Paragraphs for professional line wrapping
       pageBlocks.sort((a, b) => a.yTop - b.yTop);
 
-      let prevBottom = null;
-      for (let block of pageBlocks) {
-        let spacingBefore = 0; // Default to natural line spacing
+      let paragraphs = [];
+      let currentParagraph = null;
 
-        if (prevBottom !== null) {
-          let diff = block.yTop - prevBottom;
-          if (diff > 0) spacingBefore = Math.round(diff * 20); // Add physical space gap
+      for (let block of pageBlocks) {
+        if (block.type === 'image') {
+          paragraphs.push({ type: 'image', block: block });
+          currentParagraph = null;
+          continue;
         }
 
-        if (block.type === 'text') {
-          prevBottom = block.yBottom;
-          docxChildren.push(new docx.Paragraph({
-            children: block.textRuns,
-            bidirectional: block.bidirectional,
+        let textStr = block.textRuns.map(r => r.text).join('').trim();
+        let isBullet = /^[➢•■✓✉\-\u2022]/.test(textStr) || textStr.match(/^\d+[\)\.]/);
+
+        let startNew = false;
+        let spacingBefore = 0;
+
+        if (!currentParagraph) {
+          startNew = true;
+        } else {
+          let diff = block.yTop - currentParagraph.yBottom;
+          // Group lines into paragraphs if gap is small and properties match
+          if (diff > 8 || isBullet || block.alignment !== currentParagraph.alignment || block.bidirectional !== currentParagraph.bidirectional) {
+            startNew = true;
+            if (diff > 0) spacingBefore = Math.round(diff * 20);
+          }
+        }
+
+        // Filter out isolated page numbers at the bottom of the page
+        if (startNew && textStr.length > 0 && textStr.length < 4 && !isNaN(parseInt(textStr)) && block.yTop > pageHeight - 70) {
+           continue; 
+        }
+
+        if (startNew) {
+          let pIndent = { ...block.indent };
+          if (isBullet) {
+             if (block.bidirectional) {
+                pIndent.right = (pIndent.right || 0) + 360;
+                pIndent.hanging = 360;
+             } else {
+                pIndent.left = (pIndent.left || 0) + 360;
+                pIndent.hanging = 360;
+             }
+          }
+
+          currentParagraph = {
+            type: 'text',
+            yTop: block.yTop,
+            yBottom: block.yBottom,
+            textRuns: [...block.textRuns],
             alignment: block.alignment,
-            indent: block.indent,
-            spacing: { before: spacingBefore, after: 0 }
+            bidirectional: block.bidirectional,
+            indent: pIndent,
+            spacingBefore: spacingBefore
+          };
+          paragraphs.push(currentParagraph);
+        } else {
+          // Append line to current paragraph for natural native wrapping
+          let lastRun = currentParagraph.textRuns[currentParagraph.textRuns.length - 1];
+          if (lastRun && !lastRun.text.endsWith(' ') && !lastRun.text.endsWith('-')) {
+             currentParagraph.textRuns.push(new docx.TextRun({ text: " " }));
+          }
+          currentParagraph.textRuns.push(...block.textRuns);
+          currentParagraph.yBottom = block.yBottom;
+        }
+      }
+
+      for (let p of paragraphs) {
+        if (p.type === 'text') {
+          docxChildren.push(new docx.Paragraph({
+            children: p.textRuns,
+            bidirectional: p.bidirectional,
+            alignment: p.alignment,
+            indent: p.indent,
+            spacing: { before: p.spacingBefore, after: 0, line: 360 } // Professional 1.5 line spacing
           }));
-        } else if (block.type === 'image') {
-          // Images take up space, update prevBottom to bottom of image in points
-          prevBottom = block.yBottom;
+        } else if (p.type === 'image') {
           docxChildren.push(new docx.Paragraph({
             children: [
               new docx.ImageRun({
-                data: block.data,
-                transformation: { width: block.width, height: block.height }
+                data: p.block.data,
+                transformation: { width: p.block.width, height: p.block.height }
               })
             ],
             alignment: docx.AlignmentType.CENTER,
@@ -1800,6 +1862,22 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
         properties: {
           page: { margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } },
         },
+        footers: typeof docx.PageNumber !== 'undefined' ? {
+           default: new docx.Footer({
+              children: [
+                 new docx.Paragraph({
+                    alignment: docx.AlignmentType.CENTER,
+                    children: [
+                       new docx.TextRun({
+                          children: ["Page ", docx.PageNumber.CURRENT],
+                          font: "Calibri",
+                          size: 20
+                       })
+                    ]
+                 })
+              ]
+           })
+        } : undefined,
         children: docxChildren.length ? docxChildren : [new docx.Paragraph({ children: [new docx.TextRun('(No text or images found)')] })]
       }]
     });
