@@ -13,16 +13,16 @@
    STATE
    ────────────────────────────────────────────────── */
 const state = {
-  merge:    { files: [] },
-  split:    { file: null, pageCount: 0 },
+  merge: { files: [] },
+  split: { file: null, pageCount: 0 },
   compress: { file: null },
-  rotate:   { file: null, angle: 90 },
-  pdf2img:  { file: null, dpi: 150 },
-  img2pdf:  { files: [] },
-  watermark:{ file: null },
-  protect:  { file: null },
-  extract:  { file: null, pageCount: 0 },
-  viewer:   { file: null, pdf: null, page: 1, total: 0, zoom: 1.0 },
+  rotate: { file: null, angle: 90 },
+  pdf2img: { file: null, dpi: 150 },
+  img2pdf: { files: [] },
+  watermark: { file: null },
+  protect: { file: null },
+  extract: { file: null, pageCount: 0 },
+  viewer: { file: null, pdf: null, page: 1, total: 0, zoom: 1.0 },
   pdf2word: { file: null },
   word2pdf: { file: null },
 };
@@ -123,7 +123,7 @@ function handleFileSelect(tool, files) {
   const arr = Array.from(files);
   if (!arr.length) return;
 
-  const pdfOnlyTools = ['split','compress','rotate','pdf2img','watermark','protect','extract','viewer','pdf2word'];
+  const pdfOnlyTools = ['split', 'compress', 'rotate', 'pdf2img', 'watermark', 'protect', 'extract', 'viewer', 'pdf2word'];
   if (pdfOnlyTools.includes(tool)) {
     if (!arr[0].name.toLowerCase().endsWith('.pdf')) {
       showToast('Please select a valid PDF file.', 'error');
@@ -145,7 +145,7 @@ function handleFileSelect(tool, files) {
     }
   }
 
-  switch(tool) {
+  switch (tool) {
     case 'merge':
       arr.forEach(f => { if (f.name.toLowerCase().endsWith('.pdf')) state.merge.files.push(f); });
       renderFileList('merge', state.merge.files, true);
@@ -267,7 +267,7 @@ function formatSize(bytes) {
 }
 
 function escHtml(str) {
-  return str.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function setButtonEnabled(id, enabled) {
@@ -278,10 +278,10 @@ function setButtonEnabled(id, enabled) {
 function setProgress(tool, pct, text) {
   const wrap = document.getElementById('progress-' + tool);
   const fill = document.getElementById('pf-' + tool);
-  const pt   = document.getElementById('pt-' + tool);
+  const pt = document.getElementById('pt-' + tool);
   if (wrap) wrap.style.display = pct === null ? 'none' : 'block';
   if (fill) fill.style.width = (pct || 0) + '%';
-  if (pt)   pt.textContent = text || '';
+  if (pt) pt.textContent = text || '';
 }
 
 function showResult(tool, html) {
@@ -418,7 +418,7 @@ async function splitPDF() {
     setProgress('split', 90, 'Saving…');
     const out = await newDoc.save();
     const blob = new Blob([out], { type: 'application/pdf' });
-    const name = file.name.replace('.pdf', '') + `_pages_${rangeStr.replace(/,/g,'-')}.pdf`;
+    const name = file.name.replace('.pdf', '') + `_pages_${rangeStr.replace(/,/g, '-')}.pdf`;
     setProgress('split', 100, 'Complete!');
     showResult('split', successResult(name, blob, `${indices.length} pages · ${formatSize(blob.size)}`));
     showToast('PDF split successfully!');
@@ -610,8 +610,8 @@ async function pdfToImages() {
       <div class="img-preview-grid">
     `;
     imageLinks.forEach((img, i) => {
-      html += `<a href="${img.url}" download="${escHtml(img.name)}" title="Download page ${i+1}">
-        <img src="${img.dataUrl}" alt="Page ${i+1}" />
+      html += `<a href="${img.url}" download="${escHtml(img.name)}" title="Download page ${i + 1}">
+        <img src="${img.dataUrl}" alt="Page ${i + 1}" />
       </a>`;
     });
     html += `</div><small style="color:var(--text-muted);font-size:.78rem;">Click any image to download it.</small></div>`;
@@ -743,8 +743,8 @@ async function addWatermark() {
   const file = state.watermark.file;
   if (!file) { showToast('Please select a PDF file.', 'error'); return; }
 
-  const text    = document.getElementById('wm-text').value.trim() || 'WATERMARK';
-  const size    = parseInt(document.getElementById('wm-size').value) || 50;
+  const text = document.getElementById('wm-text').value.trim() || 'WATERMARK';
+  const size = parseInt(document.getElementById('wm-size').value) || 50;
   const opacity = parseInt(document.getElementById('wm-opacity').value) / 100;
   const hexColor = document.getElementById('wm-color').value;
   const rgb = hexToRgb(hexColor);
@@ -809,7 +809,7 @@ async function protectPDF() {
   const file = state.protect.file;
   if (!file) { showToast('Please select a PDF file.', 'error'); return; }
 
-  const pass  = document.getElementById('protect-pass').value;
+  const pass = document.getElementById('protect-pass').value;
   const pass2 = document.getElementById('protect-pass2').value;
 
   if (!pass) { showToast('Enter a password.', 'error'); return; }
@@ -876,8 +876,8 @@ async function protectPDF() {
  */
 async function applyPDFRC4Encryption(pdfBytes, userPass, ownerPass) {
   // Padding string as per PDF spec
-  const PAD = [0x28,0xBF,0x4E,0x5E,0x4E,0x75,0x8A,0x41,0x64,0x00,0x4E,0x56,0xFF,0xFA,0x01,
-               0x08,0x2E,0x2E,0x00,0xB6,0xD0,0x68,0x3E,0x80,0x2F,0x0C,0xA9,0xFE,0x64,0x53,0x69,0x7A];
+  const PAD = [0x28, 0xBF, 0x4E, 0x5E, 0x4E, 0x75, 0x8A, 0x41, 0x64, 0x00, 0x4E, 0x56, 0xFF, 0xFA, 0x01,
+    0x08, 0x2E, 0x2E, 0x00, 0xB6, 0xD0, 0x68, 0x3E, 0x80, 0x2F, 0x0C, 0xA9, 0xFE, 0x64, 0x53, 0x69, 0x7A];
 
   function padPassword(pwd) {
     const bytes = new Uint8Array(32);
@@ -895,59 +895,59 @@ async function applyPDFRC4Encryption(pdfBytes, userPass, ownerPass) {
 
   // Pure-JS MD5 (fallback since WebCrypto dropped MD5 support in some browsers)
   function md5Pure(data) {
-    function safeAdd(x,y){const lsw=(x&0xFFFF)+(y&0xFFFF);return(((x>>16)+(y>>16)+(lsw>>16))<<16)|(lsw&0xFFFF);}
-    function bitRotateLeft(num,cnt){return(num<<cnt)|(num>>>(32-cnt));}
-    function md5cmn(q,a,b,x,s,t){return safeAdd(bitRotateLeft(safeAdd(safeAdd(a,q),safeAdd(x,t)),s),b);}
-    function md5ff(a,b,c,d,x,s,t){return md5cmn((b&c)|((~b)&d),a,b,x,s,t);}
-    function md5gg(a,b,c,d,x,s,t){return md5cmn((b&d)|(c&(~d)),a,b,x,s,t);}
-    function md5hh(a,b,c,d,x,s,t){return md5cmn(b^c^d,a,b,x,s,t);}
-    function md5ii(a,b,c,d,x,s,t){return md5cmn(c^(b|(~d)),a,b,x,s,t);}
-    const bytes=data instanceof Uint8Array?data:new Uint8Array(data);
-    const len=bytes.length;
-    const words=[];
-    for(let i=0;i<len;i+=4){words.push((bytes[i])|(bytes[i+1]<<8)|(bytes[i+2]<<16)|(bytes[i+3]<<24));}
-    words[len>>2]|=(0x80)<<((len%4)<<3);
-    words[(((len+8)>>6)<<4)+14]=len*8;
-    let a=1732584193,b=-271733879,c=-1732584194,d=271733878;
-    for(let i=0;i<words.length;i+=16){
-      const aa=a,bb=b,cc=c,dd=d;
-      a=md5ff(a,b,c,d,words[i+0],7,-680876936);d=md5ff(d,a,b,c,words[i+1],12,-389564586);
-      c=md5ff(c,d,a,b,words[i+2],17,606105819);b=md5ff(b,c,d,a,words[i+3],22,-1044525330);
-      a=md5ff(a,b,c,d,words[i+4],7,-176418897);d=md5ff(d,a,b,c,words[i+5],12,1200080426);
-      c=md5ff(c,d,a,b,words[i+6],17,-1473231341);b=md5ff(b,c,d,a,words[i+7],22,-45705983);
-      a=md5ff(a,b,c,d,words[i+8],7,1770035416);d=md5ff(d,a,b,c,words[i+9],12,-1958414417);
-      c=md5ff(c,d,a,b,words[i+10],17,-42063);b=md5ff(b,c,d,a,words[i+11],22,-1990404162);
-      a=md5ff(a,b,c,d,words[i+12],7,1804603682);d=md5ff(d,a,b,c,words[i+13],12,-40341101);
-      c=md5ff(c,d,a,b,words[i+14],17,-1502002290);b=md5ff(b,c,d,a,words[i+15],22,1236535329);
-      a=md5gg(a,b,c,d,words[i+1],5,-165796510);d=md5gg(d,a,b,c,words[i+6],9,-1069501632);
-      c=md5gg(c,d,a,b,words[i+11],14,643717713);b=md5gg(b,c,d,a,words[i+0],20,-373897302);
-      a=md5gg(a,b,c,d,words[i+5],5,-701558691);d=md5gg(d,a,b,c,words[i+10],9,38016083);
-      c=md5gg(c,d,a,b,words[i+15],14,-660478335);b=md5gg(b,c,d,a,words[i+4],20,-405537848);
-      a=md5gg(a,b,c,d,words[i+9],5,568446438);d=md5gg(d,a,b,c,words[i+14],9,-1019803690);
-      c=md5gg(c,d,a,b,words[i+3],14,-187363961);b=md5gg(b,c,d,a,words[i+8],20,1163531501);
-      a=md5gg(a,b,c,d,words[i+13],5,-1444681467);d=md5gg(d,a,b,c,words[i+2],9,-51403784);
-      c=md5gg(c,d,a,b,words[i+7],14,1735328473);b=md5gg(b,c,d,a,words[i+12],20,-1926607734);
-      a=md5hh(a,b,c,d,words[i+5],4,-378558);d=md5hh(d,a,b,c,words[i+8],11,-2022574463);
-      c=md5hh(c,d,a,b,words[i+11],16,1839030562);b=md5hh(b,c,d,a,words[i+14],23,-35309556);
-      a=md5hh(a,b,c,d,words[i+1],4,-1530992060);d=md5hh(d,a,b,c,words[i+4],11,1272893353);
-      c=md5hh(c,d,a,b,words[i+7],16,-155497632);b=md5hh(b,c,d,a,words[i+10],23,-1094730640);
-      a=md5hh(a,b,c,d,words[i+13],4,681279174);d=md5hh(d,a,b,c,words[i+0],11,-358537222);
-      c=md5hh(c,d,a,b,words[i+3],16,-722521979);b=md5hh(b,c,d,a,words[i+6],23,76029189);
-      a=md5hh(a,b,c,d,words[i+9],4,-640364487);d=md5hh(d,a,b,c,words[i+12],11,-421815835);
-      c=md5hh(c,d,a,b,words[i+15],16,530742520);b=md5hh(b,c,d,a,words[i+2],23,-995338651);
-      a=md5ii(a,b,c,d,words[i+0],6,-198630844);d=md5ii(d,a,b,c,words[i+7],10,1126891415);
-      c=md5ii(c,d,a,b,words[i+14],15,-1416354905);b=md5ii(b,c,d,a,words[i+5],21,-57434055);
-      a=md5ii(a,b,c,d,words[i+12],6,1700485571);d=md5ii(d,a,b,c,words[i+3],10,-1894986606);
-      c=md5ii(c,d,a,b,words[i+10],15,-1051523);b=md5ii(b,c,d,a,words[i+1],21,-2054922799);
-      a=md5ii(a,b,c,d,words[i+8],6,1873313359);d=md5ii(d,a,b,c,words[i+15],10,-30611744);
-      c=md5ii(c,d,a,b,words[i+6],15,-1560198380);b=md5ii(b,c,d,a,words[i+13],21,1309151649);
-      a=md5ii(a,b,c,d,words[i+4],6,-145523070);d=md5ii(d,a,b,c,words[i+11],10,-1120210379);
-      c=md5ii(c,d,a,b,words[i+2],15,718787259);b=md5ii(b,c,d,a,words[i+9],21,-343485551);
-      a=safeAdd(a,aa);b=safeAdd(b,bb);c=safeAdd(c,cc);d=safeAdd(d,dd);
+    function safeAdd(x, y) { const lsw = (x & 0xFFFF) + (y & 0xFFFF); return (((x >> 16) + (y >> 16) + (lsw >> 16)) << 16) | (lsw & 0xFFFF); }
+    function bitRotateLeft(num, cnt) { return (num << cnt) | (num >>> (32 - cnt)); }
+    function md5cmn(q, a, b, x, s, t) { return safeAdd(bitRotateLeft(safeAdd(safeAdd(a, q), safeAdd(x, t)), s), b); }
+    function md5ff(a, b, c, d, x, s, t) { return md5cmn((b & c) | ((~b) & d), a, b, x, s, t); }
+    function md5gg(a, b, c, d, x, s, t) { return md5cmn((b & d) | (c & (~d)), a, b, x, s, t); }
+    function md5hh(a, b, c, d, x, s, t) { return md5cmn(b ^ c ^ d, a, b, x, s, t); }
+    function md5ii(a, b, c, d, x, s, t) { return md5cmn(c ^ (b | (~d)), a, b, x, s, t); }
+    const bytes = data instanceof Uint8Array ? data : new Uint8Array(data);
+    const len = bytes.length;
+    const words = [];
+    for (let i = 0; i < len; i += 4) { words.push((bytes[i]) | (bytes[i + 1] << 8) | (bytes[i + 2] << 16) | (bytes[i + 3] << 24)); }
+    words[len >> 2] |= (0x80) << ((len % 4) << 3);
+    words[(((len + 8) >> 6) << 4) + 14] = len * 8;
+    let a = 1732584193, b = -271733879, c = -1732584194, d = 271733878;
+    for (let i = 0; i < words.length; i += 16) {
+      const aa = a, bb = b, cc = c, dd = d;
+      a = md5ff(a, b, c, d, words[i + 0], 7, -680876936); d = md5ff(d, a, b, c, words[i + 1], 12, -389564586);
+      c = md5ff(c, d, a, b, words[i + 2], 17, 606105819); b = md5ff(b, c, d, a, words[i + 3], 22, -1044525330);
+      a = md5ff(a, b, c, d, words[i + 4], 7, -176418897); d = md5ff(d, a, b, c, words[i + 5], 12, 1200080426);
+      c = md5ff(c, d, a, b, words[i + 6], 17, -1473231341); b = md5ff(b, c, d, a, words[i + 7], 22, -45705983);
+      a = md5ff(a, b, c, d, words[i + 8], 7, 1770035416); d = md5ff(d, a, b, c, words[i + 9], 12, -1958414417);
+      c = md5ff(c, d, a, b, words[i + 10], 17, -42063); b = md5ff(b, c, d, a, words[i + 11], 22, -1990404162);
+      a = md5ff(a, b, c, d, words[i + 12], 7, 1804603682); d = md5ff(d, a, b, c, words[i + 13], 12, -40341101);
+      c = md5ff(c, d, a, b, words[i + 14], 17, -1502002290); b = md5ff(b, c, d, a, words[i + 15], 22, 1236535329);
+      a = md5gg(a, b, c, d, words[i + 1], 5, -165796510); d = md5gg(d, a, b, c, words[i + 6], 9, -1069501632);
+      c = md5gg(c, d, a, b, words[i + 11], 14, 643717713); b = md5gg(b, c, d, a, words[i + 0], 20, -373897302);
+      a = md5gg(a, b, c, d, words[i + 5], 5, -701558691); d = md5gg(d, a, b, c, words[i + 10], 9, 38016083);
+      c = md5gg(c, d, a, b, words[i + 15], 14, -660478335); b = md5gg(b, c, d, a, words[i + 4], 20, -405537848);
+      a = md5gg(a, b, c, d, words[i + 9], 5, 568446438); d = md5gg(d, a, b, c, words[i + 14], 9, -1019803690);
+      c = md5gg(c, d, a, b, words[i + 3], 14, -187363961); b = md5gg(b, c, d, a, words[i + 8], 20, 1163531501);
+      a = md5gg(a, b, c, d, words[i + 13], 5, -1444681467); d = md5gg(d, a, b, c, words[i + 2], 9, -51403784);
+      c = md5gg(c, d, a, b, words[i + 7], 14, 1735328473); b = md5gg(b, c, d, a, words[i + 12], 20, -1926607734);
+      a = md5hh(a, b, c, d, words[i + 5], 4, -378558); d = md5hh(d, a, b, c, words[i + 8], 11, -2022574463);
+      c = md5hh(c, d, a, b, words[i + 11], 16, 1839030562); b = md5hh(b, c, d, a, words[i + 14], 23, -35309556);
+      a = md5hh(a, b, c, d, words[i + 1], 4, -1530992060); d = md5hh(d, a, b, c, words[i + 4], 11, 1272893353);
+      c = md5hh(c, d, a, b, words[i + 7], 16, -155497632); b = md5hh(b, c, d, a, words[i + 10], 23, -1094730640);
+      a = md5hh(a, b, c, d, words[i + 13], 4, 681279174); d = md5hh(d, a, b, c, words[i + 0], 11, -358537222);
+      c = md5hh(c, d, a, b, words[i + 3], 16, -722521979); b = md5hh(b, c, d, a, words[i + 6], 23, 76029189);
+      a = md5hh(a, b, c, d, words[i + 9], 4, -640364487); d = md5hh(d, a, b, c, words[i + 12], 11, -421815835);
+      c = md5hh(c, d, a, b, words[i + 15], 16, 530742520); b = md5hh(b, c, d, a, words[i + 2], 23, -995338651);
+      a = md5ii(a, b, c, d, words[i + 0], 6, -198630844); d = md5ii(d, a, b, c, words[i + 7], 10, 1126891415);
+      c = md5ii(c, d, a, b, words[i + 14], 15, -1416354905); b = md5ii(b, c, d, a, words[i + 5], 21, -57434055);
+      a = md5ii(a, b, c, d, words[i + 12], 6, 1700485571); d = md5ii(d, a, b, c, words[i + 3], 10, -1894986606);
+      c = md5ii(c, d, a, b, words[i + 10], 15, -1051523); b = md5ii(b, c, d, a, words[i + 1], 21, -2054922799);
+      a = md5ii(a, b, c, d, words[i + 8], 6, 1873313359); d = md5ii(d, a, b, c, words[i + 15], 10, -30611744);
+      c = md5ii(c, d, a, b, words[i + 6], 15, -1560198380); b = md5ii(b, c, d, a, words[i + 13], 21, 1309151649);
+      a = md5ii(a, b, c, d, words[i + 4], 6, -145523070); d = md5ii(d, a, b, c, words[i + 11], 10, -1120210379);
+      c = md5ii(c, d, a, b, words[i + 2], 15, 718787259); b = md5ii(b, c, d, a, words[i + 9], 21, -343485551);
+      a = safeAdd(a, aa); b = safeAdd(b, bb); c = safeAdd(c, cc); d = safeAdd(d, dd);
     }
-    const out=new Uint8Array(16);
-    const v=[a,b,c,d];
-    for(let i=0;i<4;i++){out[i*4]=v[i]&0xFF;out[i*4+1]=(v[i]>>8)&0xFF;out[i*4+2]=(v[i]>>16)&0xFF;out[i*4+3]=(v[i]>>24)&0xFF;}
+    const out = new Uint8Array(16);
+    const v = [a, b, c, d];
+    for (let i = 0; i < 4; i++) { out[i * 4] = v[i] & 0xFF; out[i * 4 + 1] = (v[i] >> 8) & 0xFF; out[i * 4 + 2] = (v[i] >> 16) & 0xFF; out[i * 4 + 3] = (v[i] >> 24) & 0xFF; }
     return out;
   }
 
@@ -1012,8 +1012,8 @@ async function applyPDFRC4Encryption(pdfBytes, userPass, ownerPass) {
   const uVal32 = new Uint8Array(32);
   uVal32.set(uValue);
 
-  const oHex = Array.from(oValue).map(b => b.toString(16).padStart(2,'0')).join('');
-  const uHex = Array.from(uVal32).map(b => b.toString(16).padStart(2,'0')).join('');
+  const oHex = Array.from(oValue).map(b => b.toString(16).padStart(2, '0')).join('');
+  const uHex = Array.from(uVal32).map(b => b.toString(16).padStart(2, '0')).join('');
 
   // Re-save the PDF with pdf-lib (no encryption from pdf-lib) then inject /Encrypt dict
   const doc = await PDFLib.PDFDocument.load(pdfBytes, { ignoreEncryption: true });
@@ -1193,7 +1193,7 @@ async function viewerZoomOut() {
 async function safeConvertPDFToWord(file, onProgress) {
 
   if (typeof pdfjsLib === 'undefined') throw new Error('PDF.js library is not loaded.');
-  if (typeof docx    === 'undefined') throw new Error('docx.js library is not loaded.');
+  if (typeof docx === 'undefined') throw new Error('docx.js library is not loaded.');
 
   // ── Helpers ───────────────────────────────────────────────────────
   const isRTLText = (str) => {
@@ -1231,7 +1231,7 @@ async function safeConvertPDFToWord(file, onProgress) {
     const tc = await p1.getTextContent({ includeMarkedContent: false });
     const sample = tc.items.map(i => i.str).join('');
     hasRTL = /[\u0600-\u06FF\u0750-\u077F\u0590-\u05FF\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(sample);
-  } catch (_) {}
+  } catch (_) { }
 
   const docxChildren = [];
 
@@ -1266,7 +1266,7 @@ async function safeConvertPDFToWord(file, onProgress) {
         // Render at 2× scale for better OCR accuracy
         const viewport = page.getViewport({ scale: 2.0 });
         const canvas = document.createElement('canvas');
-        canvas.width  = viewport.width;
+        canvas.width = viewport.width;
         canvas.height = viewport.height;
         const ctx = canvas.getContext('2d');
         ctx.fillStyle = '#ffffff';
@@ -1298,14 +1298,14 @@ async function safeConvertPDFToWord(file, onProgress) {
 
     } finally {
       if (worker) {
-        try { await worker.terminate(); } catch (_) {}
+        try { await worker.terminate(); } catch (_) { }
       }
     }
 
-  // ══════════════════════════════════════════════════════════════════
-  //  PATH B: Direct PDF.js text extraction — for Latin / LTR PDFs
-  //  Fast and accurate for English, French, German, etc.
-  // ══════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════
+    //  PATH B: Direct PDF.js text extraction — for Latin / LTR PDFs
+    //  Fast and accurate for English, French, German, etc.
+    // ══════════════════════════════════════════════════════════════════
   } else {
     const sanitize = (s) => s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
 
@@ -1391,7 +1391,7 @@ async function safeConvertPDFToWord(file, onProgress) {
 
 
 
-window.convertPDFToWordIsolated = async function(arrayBuffer) {
+window.convertPDFToWordIsolated = async function (arrayBuffer) {
   try {
     if (typeof pdfjsLib === 'undefined') throw new Error('PDF.js library is not loaded.');
     if (typeof docx === 'undefined') throw new Error('docx.js library is not loaded.');
@@ -1407,23 +1407,24 @@ window.convertPDFToWordIsolated = async function(arrayBuffer) {
     const worker = await Tesseract.createWorker('ara+eng');
 
     for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-      if (typeof setProgress === 'function') setProgress('pdf2word', 20 + Math.floor((pageNum/numPages)*70), `Processing Page ${pageNum} of ${numPages}...`);
-      
+      if (typeof setProgress === 'function') setProgress('pdf2word', 20 + Math.floor((pageNum / numPages) * 70), `Processing Page ${pageNum} of ${numPages}...`);
+
       const page = await pdfDoc.getPage(pageNum);
-      const viewport = page.getViewport({ scale: 2.0 }); // 2x scale for high-res OCR
+      const viewport = page.getViewport({ scale: 2.0 }); // 2x scale for high-res Canvas
       const pageWidth = page.view[2];
       const pageHeight = page.view[3];
-      
-      let pageBlocks = [];
 
-      // 1. Extract Images (Preserve original image extraction logic)
+      let pageBlocks = [];
+      let imageRects = []; // Used to blind Tesseract to screenshots
+
+      // 1. Extract Images
       const opList = await page.getOperatorList();
       let ctm = [1, 0, 0, 1, 0, 0];
       const ctmStack = [];
       for (let i = 0; i < opList.fnArray.length; i++) {
         const fn = opList.fnArray[i];
         const args = opList.argsArray[i];
-        
+
         if (fn === pdfjsLib.OPS.save) {
           ctmStack.push([...ctm]);
         } else if (fn === pdfjsLib.OPS.restore) {
@@ -1441,8 +1442,12 @@ window.convertPDFToWordIsolated = async function(arrayBuffer) {
             const imgName = args[0];
             const w = Math.abs(ctm[0]);
             const h = Math.abs(ctm[3]);
+            const x = ctm[4];
             const y = ctm[5]; // bottom-up Y
             const top = pageHeight - Math.max(y, y + ctm[3]);
+            const left = x;
+
+            imageRects.push({ x: left, y: top, w: w, h: h });
 
             const imgObj = await new Promise(resolve => {
               try {
@@ -1467,135 +1472,232 @@ window.convertPDFToWordIsolated = async function(arrayBuffer) {
               const dataUrl = imgCanvas.toDataURL('image/png');
               const res = await fetch(dataUrl);
               const arrayBuf = await res.arrayBuffer();
-              
+
               pageBlocks.push({
                 type: 'image',
-                y: top,
+                y: top, // absolute Y in points for sorting
                 data: arrayBuf,
                 width: Math.round(w * 1.3333), // Convert points to docx pixels
                 height: Math.round(h * 1.3333)
               });
             }
-          } catch(err) { console.warn("Image extraction error", err); }
+          } catch (err) { console.warn("Image extraction error", err); }
         }
       }
 
-      // 2. Render Page to Canvas for OCR and Color Sampling
+      // 2. Render Page to Canvas
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       canvas.width = viewport.width;
       canvas.height = viewport.height;
-      
+
       const renderContext = { canvasContext: ctx, viewport: viewport };
       await page.render(renderContext).promise;
 
-      // 3. Perform Tesseract OCR on the Canvas
-      const imgDataUrl = canvas.toDataURL('image/png');
-      const { data: { lines } } = await worker.recognize(imgDataUrl);
+      // Color sampling helper
+      function sampleColor(px, py, pw, ph) {
+        let startX = Math.max(0, Math.floor(px));
+        let startY = Math.max(0, Math.floor(py));
+        let width = Math.max(1, Math.ceil(pw));
+        let height = Math.max(1, Math.ceil(ph));
 
-      // 4. Process OCR Text Lines, Color Sampling, and Spacing
-      let prevY = null;
+        if (startX + width > canvas.width) width = canvas.width - startX;
+        if (startY + height > canvas.height) height = canvas.height - startY;
+
+        let colorHex = '000000';
+        if (width > 0 && height > 0) {
+          let imgData = ctx.getImageData(startX, startY, width, height);
+          let pixels = imgData.data;
+          let r = 0, g = 0, b = 0, minL = 255;
+          for (let j = 0; j < pixels.length; j += 4) {
+            let pr = pixels[j], pg = pixels[j + 1], pb = pixels[j + 2];
+            let l = 0.299 * pr + 0.587 * pg + 0.114 * pb;
+            if (l < minL) {
+              minL = l;
+              r = pr; g = pg; b = pb;
+            }
+          }
+          if (minL < 240) {
+            const toHex = (c) => c.toString(16).padStart(2, '0');
+            colorHex = `${toHex(r)}${toHex(g)}${toHex(b)}`;
+          }
+        }
+        return colorHex;
+      }
+
+      // MASK IMAGES (Draw white rectangles over images to blind OCR to screenshots)
+      ctx.fillStyle = 'white';
+      for (let rect of imageRects) {
+        // rect is in PDF points, canvas is scaled by 2.0
+        // Expand mask by 8px padding to ensure total coverage
+        ctx.fillRect((rect.x * 2.0) - 4, (rect.y * 2.0) - 4, (rect.w * 2.0) + 8, (rect.h * 2.0) + 8);
+      }
+
+      // 3. Perform Tesseract OCR on the MASKED Canvas
+      const imgDataUrl = canvas.toDataURL('image/png');
+      const { data: { lines: tessLines } } = await worker.recognize(imgDataUrl);
+
+      // 4. Extract Text with PDF.js (Hybrid Approach)
+      const textContent = await page.getTextContent({ normalizeWhitespace: true });
+      const items = textContent.items;
+      let pdfLines = [];
+      let currentLine = [];
+      let currentY = null;
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (!item.str) continue;
+
+        const y = item.transform[5];
+        if (currentY === null) {
+          currentY = y;
+          currentLine.push(item);
+        } else {
+          if (Math.abs(y - currentY) <= 5) {
+            currentLine.push(item);
+            currentY = (currentY * (currentLine.length - 1) + y) / currentLine.length;
+          } else {
+            pdfLines.push(currentLine);
+            currentLine = [item];
+            currentY = y;
+          }
+        }
+      }
+      if (currentLine.length > 0) pdfLines.push(currentLine);
+
       const RTL_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
 
-      for (let line of lines) {
-        if (!line.text || !line.text.trim()) continue;
+      for (let line of pdfLines) {
+        let avgY = pageHeight - (line.reduce((sum, it) => sum + it.transform[5], 0) / line.length);
+        const textStr = line.map(i => i.str).join('');
+        if (!textStr.trim()) continue;
 
-        // Bounding boxes are in 2x scaled coordinates, convert to PDF points
-        let lineY = line.bbox.y0 / 2.0;
-        
-        let spacingBefore = 60; // Default spacing
-        if (prevY !== null) {
-          let diff = lineY - prevY;
-          if (diff > 0) spacingBefore = Math.round(diff * 20); // convert pt diff to twips
-        }
-        prevY = line.bbox.y1 / 2.0;
-
-        let isArabic = RTL_REGEX.test(line.text);
-        
-        let minX = line.bbox.x0 / 2.0;
-        let maxX = line.bbox.x1 / 2.0;
-        
-        let pIndent = {};
-        let align = docx.AlignmentType.LEFT;
-        
-        if (isArabic) {
-          let marginRight = Math.max(0, pageWidth - maxX - 72);
-          pIndent.right = Math.round(marginRight * 20);
-          align = docx.AlignmentType.RIGHT;
-        } else {
-          let marginLeft = Math.max(0, minX - 72);
-          pIndent.left = Math.round(marginLeft * 20);
-        }
+        const isArabic = RTL_REGEX.test(textStr);
+        let avgFontSize = line.reduce((sum, it) => sum + Math.abs(it.transform[0]), 0) / line.length;
 
         let textRuns = [];
-        
-        for (let word of line.words) {
-          if (!word.text || !word.text.trim()) continue;
+        let pIndent = {};
+        let align = docx.AlignmentType.LEFT;
 
-          let wBox = Math.max(1, Math.ceil(word.bbox.x1 - word.bbox.x0));
-          let hBox = Math.max(1, Math.ceil(word.bbox.y1 - word.bbox.y0));
-          let startX = Math.max(0, Math.floor(word.bbox.x0));
-          let startY = Math.max(0, Math.floor(word.bbox.y0));
-          
-          // Ensure we don't sample out of bounds
-          wBox = Math.min(wBox, canvas.width - startX);
-          hBox = Math.min(hBox, canvas.height - startY);
+        if (!isArabic) {
+          // USE PDF.JS NATIVELY FOR PERFECT LTR (PROGRAMMING CODE, ENGLISH)
+          let minX = pageWidth, maxX = 0;
+          for (let it of line) {
+            let left = it.transform[4];
+            let right = left + (it.width || 0);
+            if (left < minX) minX = left;
+            if (right > maxX) maxX = right;
+          }
+          pIndent.left = Math.round(Math.max(0, minX - 72) * 20);
 
-          let colorHex = '000000'; // Default black
-
-          if (wBox > 0 && hBox > 0) {
-            let imgData = ctx.getImageData(startX, startY, wBox, hBox);
-            let pixels = imgData.data;
-            let r = 0, g = 0, b = 0, minL = 255;
-            
-            // Find darkest pixel in bounding box to get exact font color
-            for (let j = 0; j < pixels.length; j += 4) {
-              let pr = pixels[j], pg = pixels[j+1], pb = pixels[j+2];
-              let l = 0.299*pr + 0.587*pg + 0.114*pb;
-              if (l < minL) {
-                minL = l;
-                r = pr; g = pg; b = pb;
-              }
+          for (let item of line) {
+            if (!item.str.trim()) {
+              textRuns.push(new docx.TextRun({ text: item.str, size: Math.round(avgFontSize * 2), font: "Calibri" }));
+              continue;
             }
-            
-            // If the darkest pixel is not pure white background, use it
-            if (minL < 240) {
-              const toHex = (c) => c.toString(16).padStart(2, '0');
-              colorHex = `${toHex(r)}${toHex(g)}${toHex(b)}`;
+
+            let fontSize = Math.abs(item.transform[0]) || 12;
+            let left = item.transform[4];
+            let top = pageHeight - item.transform[5] - fontSize;
+
+            // Sample color from canvas
+            let colorHex = sampleColor(left * 2.0, top * 2.0, (item.width || fontSize) * 2.0, fontSize * 2.0);
+
+            let isBold = (item.fontName || '').toLowerCase().includes('bold');
+            if (textContent.styles && textContent.styles[item.fontName]) {
+              const style = textContent.styles[item.fontName];
+              if (style.fontFamily && style.fontFamily.toLowerCase().includes('bold')) isBold = true;
+            }
+
+            textRuns.push(new docx.TextRun({
+              text: item.str,
+              size: Math.round(fontSize * 2), // Half-points
+              color: colorHex,
+              bold: isBold,
+              font: "Calibri"
+            }));
+          }
+        } else {
+          // USE TESSERACT FOR ARABIC TO BYPASS BROKEN UNICODE MAPPING
+          let closestTessLine = null;
+          let minDiff = Infinity;
+          for (let tLine of tessLines) {
+            // Tesseract bbox is at 2x scale. Convert to 1x points for comparison.
+            let tCenterY = ((tLine.bbox.y0 + tLine.bbox.y1) / 2.0) / 2.0;
+            let diff = Math.abs(tCenterY - avgY);
+            if (diff < minDiff && diff < 20) { // within 20 points vertical match
+              minDiff = diff;
+              closestTessLine = tLine;
             }
           }
 
-          let fontSizePts = (word.bbox.y1 - word.bbox.y0) / 2.0;
+          if (closestTessLine) {
+            let minX = closestTessLine.bbox.x0 / 2.0;
+            let maxX = closestTessLine.bbox.x1 / 2.0;
+            let marginRight = Math.max(0, pageWidth - maxX - 72);
+            pIndent.right = Math.round(marginRight * 20);
+            align = docx.AlignmentType.RIGHT;
 
-          textRuns.push(new docx.TextRun({
-            text: word.text + " ",
-            size: Math.round(fontSizePts * 2), // docx API expects half-points
-            color: colorHex,
-            rightToLeft: isArabic,
-            font: isArabic ? "Arial" : "Calibri"
-          }));
+            for (let word of closestTessLine.words) {
+              if (!word.text || !word.text.trim()) continue;
+
+              // Sample color using OCR bounding box
+              let colorHex = sampleColor(word.bbox.x0, word.bbox.y0, word.bbox.x1 - word.bbox.x0, word.bbox.y1 - word.bbox.y0);
+
+              textRuns.push(new docx.TextRun({
+                text: word.text + " ",
+                size: Math.round(avgFontSize * 2), // PERFECT SIZE FROM PDF.JS
+                color: colorHex,
+                rightToLeft: true, // Native BiDi
+                font: "Arial"
+              }));
+            }
+          } else {
+            // Fallback if Tesseract missed the line: use PDF.js garbage text so it's not entirely lost
+            let textStr = line.map(i => i.str).join('');
+            textRuns.push(new docx.TextRun({
+              text: textStr,
+              size: Math.round(avgFontSize * 2),
+              color: '000000',
+              rightToLeft: true,
+              font: "Arial"
+            }));
+          }
         }
 
         pageBlocks.push({
           type: 'text',
-          y: lineY,
-          paragraph: new docx.Paragraph({
-            children: textRuns,
-            bidirectional: isArabic,
-            alignment: align,
-            indent: pIndent,
-            spacing: { before: spacingBefore, after: 0 }
-          })
+          y: avgY,
+          textRuns: textRuns,
+          bidirectional: isArabic,
+          alignment: align,
+          indent: pIndent
         });
       }
 
-      // 5. Merge images and text blocks sequentially top-to-bottom
+      // 5. Merge images and text blocks by absolute Y coordinate
       pageBlocks.sort((a, b) => a.y - b.y);
 
+      let prevY = null;
       for (let block of pageBlocks) {
         if (block.type === 'text') {
-          docxChildren.push(block.paragraph);
+          let spacingBefore = 60;
+          if (prevY !== null) {
+            let diff = block.y - prevY;
+            if (diff > 0) spacingBefore = Math.round(diff * 20); // convert pt diff to twips
+          }
+          prevY = block.y;
+
+          docxChildren.push(new docx.Paragraph({
+            children: block.textRuns,
+            bidirectional: block.bidirectional,
+            alignment: block.alignment,
+            indent: block.indent,
+            spacing: { before: spacingBefore, after: 0 }
+          }));
         } else if (block.type === 'image') {
+          // Images take up space, update prevY to bottom of image in points
+          prevY = block.y + (block.height / 1.3333);
           docxChildren.push(new docx.Paragraph({
             children: [
               new docx.ImageRun({
@@ -1647,7 +1749,7 @@ async function pdfToWord() {
     const arrayBuffer = await file.arrayBuffer();
     setProgress('pdf2word', 50, 'Converting to Word format...');
     const blob = await window.convertPDFToWordIsolated(arrayBuffer);
-    
+
     const name = file.name.replace(/\.pdf$/i, '') + '.docx';
     setProgress('pdf2word', 100, 'Complete!');
     showResult('pdf2word', successResult(name, blob, formatSize(blob.size)));
@@ -1822,8 +1924,8 @@ async function wordToPDF() {
    CONTACT FORM
    ────────────────────────────────────────────────── */
 function sendContact() {
-  const name    = (document.getElementById('contact-name').value || '').trim();
-  const email   = (document.getElementById('contact-email').value || '').trim();
+  const name = (document.getElementById('contact-name').value || '').trim();
+  const email = (document.getElementById('contact-email').value || '').trim();
   const subject = (document.getElementById('contact-subject').value || '').trim();
   const message = (document.getElementById('contact-message').value || '').trim();
 
