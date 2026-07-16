@@ -1291,6 +1291,12 @@ async function safeConvertPDFToWord(file, onProgress) {
           docxChildren.push(makeParagraph(rawText, rtl, fontSizePt * 2));
         }
 
+        // If no lines were pushed for this page, add a placeholder paragraph
+        // so the page break produces a real blank page in the output DOCX.
+        if (!data.lines.some(l => l.text.replace(/\n/g, '').trim())) {
+          docxChildren.push(new docx.Paragraph({ children: [] }));
+        }
+
         if (pageNum < numPages) {
           docxChildren.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
         }
@@ -1316,8 +1322,11 @@ async function safeConvertPDFToWord(file, onProgress) {
       const textContent = await page.getTextContent({ includeMarkedContent: false });
       const items = textContent.items.filter(i => i.str && i.str.trim());
 
+      let pageHasContent = false;
       if (!items.length) {
+        // Blank page — keep an empty paragraph as placeholder to preserve page count
         docxChildren.push(new docx.Paragraph({ children: [] }));
+        pageHasContent = true;
       } else {
         // Group by Y baseline into lines
         const lineMap = new Map();
@@ -1353,6 +1362,12 @@ async function safeConvertPDFToWord(file, onProgress) {
 
           const fontSize = Math.abs(lineItems[0].transform[0]) || 12;
           docxChildren.push(makeParagraph(lineText, false, Math.round(fontSize * 2)));
+          pageHasContent = true;
+        }
+
+        // If all lines were empty after trimming, add placeholder to preserve page count
+        if (!pageHasContent) {
+          docxChildren.push(new docx.Paragraph({ children: [] }));
         }
       }
 
@@ -1495,29 +1510,29 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
           let lastX = null, lastY = null;
           for (let seg of currentPath) {
             if (seg.type === 'rect') {
-               let px0 = seg.x * ctm[0] + seg.y * ctm[2] + ctm[4];
-               let py0 = seg.x * ctm[1] + seg.y * ctm[3] + ctm[5];
-               let px1 = (seg.x + seg.w) * ctm[0] + (seg.y + seg.h) * ctm[2] + ctm[4];
-               let py1 = (seg.x + seg.w) * ctm[1] + (seg.y + seg.h) * ctm[3] + ctm[5];
-               let w = Math.max(px0, px1) - Math.min(px0, px1);
-               let h = Math.max(py0, py1) - Math.min(py0, py1);
-               
-               if (h < 5 && w > 5) { 
-                 drawnLines.push({ x0: Math.min(px0, px1), x1: Math.max(px0, px1), y: pageHeight - Math.max(py0, py1), thickness: h });
-               }
+              let px0 = seg.x * ctm[0] + seg.y * ctm[2] + ctm[4];
+              let py0 = seg.x * ctm[1] + seg.y * ctm[3] + ctm[5];
+              let px1 = (seg.x + seg.w) * ctm[0] + (seg.y + seg.h) * ctm[2] + ctm[4];
+              let py1 = (seg.x + seg.w) * ctm[1] + (seg.y + seg.h) * ctm[3] + ctm[5];
+              let w = Math.max(px0, px1) - Math.min(px0, px1);
+              let h = Math.max(py0, py1) - Math.min(py0, py1);
+
+              if (h < 5 && w > 5) {
+                drawnLines.push({ x0: Math.min(px0, px1), x1: Math.max(px0, px1), y: pageHeight - Math.max(py0, py1), thickness: h });
+              }
             } else if (seg.type === 'moveTo') {
-               lastX = seg.x; lastY = seg.y;
+              lastX = seg.x; lastY = seg.y;
             } else if (seg.type === 'lineTo') {
-               if (lastX !== null && lastY !== null) {
-                  let px0 = lastX * ctm[0] + lastY * ctm[2] + ctm[4];
-                  let py0 = lastX * ctm[1] + lastY * ctm[3] + ctm[5];
-                  let px1 = seg.x * ctm[0] + seg.y * ctm[2] + ctm[4];
-                  let py1 = seg.x * ctm[1] + seg.y * ctm[3] + ctm[5];
-                  if (Math.abs(py0 - py1) < 5 && Math.abs(px0 - px1) > 5) {
-                     drawnLines.push({ x0: Math.min(px0, px1), x1: Math.max(px0, px1), y: pageHeight - Math.max(py0, py1), thickness: 1 });
-                  }
-               }
-               lastX = seg.x; lastY = seg.y;
+              if (lastX !== null && lastY !== null) {
+                let px0 = lastX * ctm[0] + lastY * ctm[2] + ctm[4];
+                let py0 = lastX * ctm[1] + lastY * ctm[3] + ctm[5];
+                let px1 = seg.x * ctm[0] + seg.y * ctm[2] + ctm[4];
+                let py1 = seg.x * ctm[1] + seg.y * ctm[3] + ctm[5];
+                if (Math.abs(py0 - py1) < 5 && Math.abs(px0 - px1) > 5) {
+                  drawnLines.push({ x0: Math.min(px0, px1), x1: Math.max(px0, px1), y: pageHeight - Math.max(py0, py1), thickness: 1 });
+                }
+              }
+              lastX = seg.x; lastY = seg.y;
             }
           }
           currentPath = [];
@@ -1529,12 +1544,12 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
       // Bullet & Symbol mapper
       const replaceBullets = (str) => {
         return str.replace(/\uF0D8/g, '➢')
-                  .replace(/\uF0B7/g, '•')
-                  .replace(/\uF0A7/g, '■')
-                  .replace(/\uF0FC/g, '✓')
-                  .replace(/\uF0E0/g, '✉')
-                  .replace(/\uF020/g, ' ')
-                  .replace(/\u2022/g, '•');
+          .replace(/\uF0B7/g, '•')
+          .replace(/\uF0A7/g, '■')
+          .replace(/\uF0FC/g, '✓')
+          .replace(/\uF0E0/g, '✉')
+          .replace(/\uF020/g, ' ')
+          .replace(/\u2022/g, '•');
       };
 
       // 2. Render Page to Canvas
@@ -1592,12 +1607,12 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
       // 4. Extract Text with PDF.js (Hybrid Approach)
       const textContent = await page.getTextContent({ normalizeWhitespace: true });
       let items = textContent.items.filter(item => item.str);
-      
+
       // Sort items top-to-bottom, then left-to-right to fix layout order
       items.sort((a, b) => {
-         let yDiff = b.transform[5] - a.transform[5]; 
-         if (Math.abs(yDiff) > 5) return yDiff;
-         return a.transform[4] - b.transform[4];
+        let yDiff = b.transform[5] - a.transform[5];
+        if (Math.abs(yDiff) > 5) return yDiff;
+        return a.transform[4] - b.transform[4];
       });
 
       let pdfLines = [];
@@ -1656,7 +1671,7 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
               rawTexts.push(item.str);
               continue;
             }
-            
+
             let fontSize = Math.abs(item.transform[0]) || 12;
             let left = item.transform[4];
             let right = left + (item.width || 0);
@@ -1801,13 +1816,13 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
         if (startNew) {
           let pIndent = { ...block.indent };
           if (isBullet) {
-             if (block.bidirectional) {
-                pIndent.right = (pIndent.right || 0) + 360;
-                pIndent.hanging = 360;
-             } else {
-                pIndent.left = (pIndent.left || 0) + 360;
-                pIndent.hanging = 360;
-             }
+            if (block.bidirectional) {
+              pIndent.right = (pIndent.right || 0) + 360;
+              pIndent.hanging = 360;
+            } else {
+              pIndent.left = (pIndent.left || 0) + 360;
+              pIndent.hanging = 360;
+            }
           }
 
           currentParagraph = {
@@ -1826,8 +1841,8 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
           // Append line to current paragraph for natural native wrapping
           let lastRaw = currentParagraph.textRaws[currentParagraph.textRaws.length - 1] || '';
           if (!lastRaw.endsWith(' ') && !lastRaw.endsWith('-')) {
-             currentParagraph.textRuns.push(new docx.TextRun({ text: " " }));
-             currentParagraph.textRaws.push(' ');
+            currentParagraph.textRuns.push(new docx.TextRun({ text: " " }));
+            currentParagraph.textRaws.push(' ');
           }
           currentParagraph.textRuns.push(...block.textRuns);
           currentParagraph.textRaws.push(...block.textRaws);
@@ -1856,6 +1871,12 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
             spacing: { before: 240, after: 240 }
           }));
         }
+      }
+
+      // ALWAYS ensure at least one paragraph per page so page breaks land correctly
+      // and the output Word document has the same page count as the original PDF.
+      if (paragraphs.length === 0) {
+        docxChildren.push(new docx.Paragraph({ children: [] }));
       }
 
       if (pageNum < numPages) {
