@@ -1213,7 +1213,13 @@ async function safeConvertPDFToWord(file, onProgress) {
 
   const isRTLText = (text) => /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\u0590-\u05FF]/.test(text);
   const rgbToHex = (r, g, b) => ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
-  const sanitizeText = (text) => text.replace(/[\uE000-\uF8FF\u0000-\u001F\u007F-\u009F]/g, '•');
+  // Only strip actual control characters, NOT Arabic private-use or presentation forms
+  const sanitizeText = (text) => text.replace(/[\u0000-\u0008\u000B-\u000C\u000E-\u001F\u007F-\u009F]/g, '');
+  // Choose font: always use a font that supports Arabic for RTL text
+  const chooseFontForText = (fontFamily, textIsRTL) => {
+    if (textIsRTL) return 'Arial'; // Arial has excellent Arabic coverage
+    return fontFamily || 'Arial';
+  };
 
   console.log(`[safeConvertPDFToWord] Step 2: PDF loaded successfully. Total pages: ${numPages}`);
 
@@ -1313,7 +1319,7 @@ async function safeConvertPDFToWord(file, onProgress) {
                   const runProps = {
                     text: currentRunStr,
                     size: Math.round(currentRunStyle.fontSize * 2),
-                    font: currentRunStyle.fontFamily,
+                    font: chooseFontForText(currentRunStyle.fontFamily, isRTL),
                     rightToLeft: isRTL
                   };
                   if (currentRunStyle.fontWeight === 'bold' || parseInt(currentRunStyle.fontWeight) >= 600) runProps.bold = true;
@@ -1339,13 +1345,8 @@ async function safeConvertPDFToWord(file, onProgress) {
                                      currentRunStyle.fontWeight !== el.fontWeight;
 
                 let elText = el.text;
-                if (isRTLText(elText)) {
-                  elText = elText.split(/([A-Za-z0-9_\-\.\:\(\)\[\]]+)/).map(part => {
-                     if (/[A-Za-z0-9]/.test(part)) return part;
-                     return Array.from(part).reverse().join('');
-                  }).join('');
-                }
-                
+                // Do NOT reverse Arabic characters — they must stay in logical order
+                // Unicode Bidi is handled by the RTL paragraph/run flags in docx
                 elText = elText.normalize('NFKC');
 
                 if (styleChanged) {
@@ -1407,10 +1408,25 @@ async function safeConvertPDFToWord(file, onProgress) {
              if (isRTL) line.sort((a, b) => b.transform[4] - a.transform[4]);
              else line.sort((a, b) => a.transform[4] - b.transform[4]);
 
-             // Simple mapping fallback without DOM
-             const runStr = line.map(i => i.str).join(' ').normalize('NFKC');
+             // Build text preserving spaces: use hasEOL marker or gap-based spacing
+             let runStr = '';
+             for (let k = 0; k < line.length; k++) {
+               const item = line[k];
+               const itemStr = sanitizeText(item.str.normalize('NFKC'));
+               runStr += itemStr;
+               // Add a space if the item signals end-of-word or there's a gap to the next
+               if (k < line.length - 1) {
+                 const next = line[k + 1];
+                 const itemWidth = Math.abs(item.transform[0] * (item.width || 0));
+                 const gap = isRTL
+                   ? (item.transform[4] - (next.transform[4] + Math.abs(next.transform[0] * (next.width || 0))))
+                   : (next.transform[4] - (item.transform[4] + itemWidth));
+                 // hasEOL means PDF inserted a space after this item
+                 if (item.hasEOL || gap > 1) runStr += ' ';
+               }
+             }
              docxChildren.push(new docx.Paragraph({
-               children: [new docx.TextRun({ text: sanitizeText(runStr), rightToLeft: isRTL })],
+               children: [new docx.TextRun({ text: runStr, rightToLeft: isRTL, font: 'Arial' })],
                bidirectional: isRTL,
                alignment: isRTL ? docx.AlignmentType.RIGHT : docx.AlignmentType.LEFT
              }));
@@ -1435,8 +1451,20 @@ async function safeConvertPDFToWord(file, onProgress) {
     creator: 'PDF BOX',
     description: 'Converted from PDF by PDF BOX (Safe Mode)',
     title: file.name.replace(/\.pdf$/i, ''),
+    // Set default font to one with Arabic support
+    styles: {
+      default: {
+        document: {
+          run: { font: 'Arial' }
+        }
+      }
+    },
     sections: [{
-      properties: { page: { margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } },
+      properties: {
+        page: { margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } },
+        // Enable bidirectional text support at section level
+        bidi: true
+      },
       children: docxChildren.length ? docxChildren : [new docx.Paragraph({ children: [new docx.TextRun('(No text found in this PDF)')] })]
     }]
   });
