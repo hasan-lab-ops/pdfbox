@@ -1391,25 +1391,265 @@ async function safeConvertPDFToWord(file, onProgress) {
 
 
 
+window.convertPDFToWordIsolated = async function(arrayBuffer) {
+  if (typeof pdfjsLib === 'undefined') throw new Error('PDF.js library is not loaded.');
+
+  const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+  const numPages = pdfDoc.numPages;
+
+  let htmlContent = '';
+
+  for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+    const page = await pdfDoc.getPage(pageNum);
+    const textContent = await page.getTextContent({ includeMarkedContent: false });
+    const opList = await page.getOperatorList();
+    const pageWidth = page.view[2];
+    const pageHeight = page.view[3];
+    
+    htmlContent += `<div class="WordSection1" style="position: relative;">\n`;
+
+    // 1. Extract Images
+    let ctm = [1, 0, 0, 1, 0, 0];
+    const ctmStack = [];
+    for (let i = 0; i < opList.fnArray.length; i++) {
+      const fn = opList.fnArray[i];
+      const args = opList.argsArray[i];
+      
+      if (fn === pdfjsLib.OPS.save) {
+        ctmStack.push([...ctm]);
+      } else if (fn === pdfjsLib.OPS.restore) {
+        ctm = ctmStack.pop() || [1, 0, 0, 1, 0, 0];
+      } else if (fn === pdfjsLib.OPS.transform) {
+        const [a, b, c, d, e, f] = args;
+        const [a0, b0, c0, d0, e0, f0] = ctm;
+        ctm = [
+          a0 * a + c0 * b, b0 * a + d0 * b,
+          a0 * c + c0 * d, b0 * c + d0 * d,
+          a0 * e + c0 * f + e0, b0 * e + d0 * f + f0
+        ];
+      } else if (fn === pdfjsLib.OPS.paintImageXObject || fn === pdfjsLib.OPS.paintJpegXObject) {
+        try {
+          const imgName = args[0];
+          const w = ctm[0];
+          const h = ctm[3];
+          const x = ctm[4];
+          const y = ctm[5]; // PDF Y is bottom-up
+          
+          const y_max = Math.max(y, y + h);
+          const top = pageHeight - y_max;
+          const left = Math.min(x, x + w);
+
+          const imgObj = await new Promise(resolve => {
+            try {
+              const res = page.objs.get(imgName, resolve);
+              if (res && typeof res.then === 'function') res.then(resolve);
+            } catch (e) { resolve(null); }
+          });
+
+          if (imgObj) {
+            const canvas = document.createElement('canvas');
+            canvas.width = imgObj.width;
+            canvas.height = imgObj.height;
+            const ctx = canvas.getContext('2d');
+            if (imgObj.data) {
+              const imgData = new ImageData(new Uint8ClampedArray(imgObj.data), imgObj.width, imgObj.height);
+              ctx.putImageData(imgData, 0, 0);
+            } else if (imgObj.bitmap) {
+              ctx.drawImage(imgObj.bitmap, 0, 0);
+            } else {
+              ctx.drawImage(imgObj, 0, 0);
+            }
+            const base64 = canvas.toDataURL('image/png');
+            htmlContent += `<img src="${base64}" style="position:absolute; z-index:-1; left:${left}pt; top:${top}pt; width:${Math.abs(w)}pt; height:${Math.abs(h)}pt;" />\n`;
+          }
+        } catch(err) { console.warn("Image extraction error", err); }
+      }
+    }
+
+    // 2. Extract Text
+    const items = textContent.items;
+    items.forEach((item, idx) => item.originalIdx = idx);
+
+    let lines = [];
+    let currentLine = [];
+    let currentY = null;
+
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (!item.str || item.str.trim() === '') {
+        if (item.str === ' ' && currentLine.length > 0) currentLine.push(item);
+        continue;
+      }
+      
+      const y = item.transform[5];
+      const fontSize = Math.abs(item.transform[0]) || 12;
+
+      if (currentY === null) {
+        currentY = y;
+        currentLine.push(item);
+      } else {
+        if (Math.abs(y - currentY) < fontSize * 0.5) {
+          currentLine.push(item);
+          currentY = (currentY * (currentLine.length - 1) + y) / currentLine.length;
+        } else {
+          lines.push(currentLine);
+          currentLine = [item];
+          currentY = y;
+        }
+      }
+    }
+    if (currentLine.length > 0) lines.push(currentLine);
+
+    lines.sort((a, b) => b[0].transform[5] - a[0].transform[5]);
+
+    const RTL_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
+    const BULLET_REGEX = /^(\u2022|\u25B8|\u27A2|\u25AA|\u25CF|[-o\u00B7\u2013\u2014]|\d+\.|[a-zA-Z]\.)\s*/;
+
+    let inList = false;
+
+    for (let line of lines) {
+      line.sort((a, b) => a.originalIdx - b.originalIdx); // Preserve logical order
+      
+      const textStr = line.map(i => i.str).join('');
+      if (!textStr.trim()) continue;
+
+      const isRTL = RTL_REGEX.test(textStr);
+      const bulletMatch = textStr.match(BULLET_REGEX);
+      const isBullet = !!bulletMatch;
+
+      if (isBullet && !inList) {
+        htmlContent += `<ul style="margin-top:0; margin-bottom:0; list-style-position: inside;">\n`;
+        inList = true;
+      } else if (!isBullet && inList) {
+        htmlContent += `</ul>\n`;
+        inList = false;
+      }
+
+      const tag = isBullet ? 'li' : 'p';
+      const cssClass = isRTL ? 'rtl' : 'ltr';
+      
+      let pStyle = `margin:0 0 8px 0; position:relative; z-index:1;`;
+      if (isRTL) {
+        let maxX = 0;
+        for (let it of line) {
+          let rightEdge = it.transform[4] + (it.width || 0);
+          if (rightEdge > maxX) maxX = rightEdge;
+        }
+        let marginRight = Math.max(0, pageWidth - maxX - 72);
+        pStyle += ` direction:rtl; text-align:right; unicode-bidi:embed; margin-right:${marginRight}pt;`;
+      } else {
+        let minX = pageWidth;
+        for (let it of line) {
+          if (it.transform[4] < minX) minX = it.transform[4];
+        }
+        let marginLeft = Math.max(0, minX - 72);
+        pStyle += ` direction:ltr; text-align:left; margin-left:${marginLeft}pt;`;
+      }
+
+      htmlContent += `<${tag} class="${cssClass}" style="${pStyle}">`;
+
+      let charsToRemove = isBullet ? bulletMatch[0].length : 0;
+
+      for (let item of line) {
+        let str = item.str;
+        if (charsToRemove > 0) {
+          if (str.length <= charsToRemove) {
+            charsToRemove -= str.length;
+            continue;
+          } else {
+            str = str.substring(charsToRemove);
+            charsToRemove = 0;
+          }
+        }
+        
+        if (!str) continue;
+
+        let fontSize = Math.round(Math.abs(item.transform[0]) || 12);
+
+        let color = '#000000';
+        if (item.color) {
+          if (item.color.length === 3) color = `rgb(${item.color[0]},${item.color[1]},${item.color[2]})`;
+          else if (typeof item.color === 'string') color = item.color;
+        } else if (item.fillColor) {
+          color = item.fillColor;
+        }
+
+        let fontName = (item.fontName || '').toLowerCase();
+        let isBold = fontName.includes('bold');
+        let isItalic = fontName.includes('italic');
+        
+        if (textContent.styles && textContent.styles[item.fontName]) {
+            const style = textContent.styles[item.fontName];
+            if (style.fontFamily && style.fontFamily.toLowerCase().includes('bold')) isBold = true;
+        }
+
+        let spanStyle = `font-size:${fontSize}pt; color:${color};`;
+        if (isBold) spanStyle += ` font-weight:bold;`;
+        if (isItalic) spanStyle += ` font-style:italic;`;
+
+        str = str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        htmlContent += `<span style="${spanStyle}">${str}</span>`;
+      }
+      
+      htmlContent += `</${tag}>\n`;
+    }
+
+    if (inList) {
+      htmlContent += `</ul>\n`;
+      inList = false;
+    }
+
+    htmlContent += `</div><br clear="all" style="page-break-before:always" />\n`;
+  }
+
+  const officeHTML = `
+  <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+  <head>
+    <meta charset="utf-8">
+    <title>Converted Document</title>
+    <!--[if gte mso 9]>
+    <xml>
+      <w:WordDocument>
+        <w:View>Print</w:View>
+        <w:Zoom>100</w:Zoom>
+        <w:DoNotOptimizeForBrowser/>
+      </w:WordDocument>
+    </xml>
+    <![endif]-->
+    <style>
+      @page WordSection1 { size: 595.3pt 841.9pt; margin: 72.0pt 72.0pt 72.0pt 72.0pt; }
+      div.WordSection1 { page: WordSection1; }
+      body { font-family: 'Arial', 'Calibri', sans-serif; }
+      p.rtl { direction: rtl; text-align: right; unicode-bidi: embed; }
+      p.ltr { direction: ltr; text-align: left; }
+      li.rtl { direction: rtl; text-align: right; unicode-bidi: embed; }
+      li.ltr { direction: ltr; text-align: left; }
+    </style>
+  </head>
+  <body>
+    ${htmlContent}
+  </body>
+  </html>
+  `;
+
+  // Prepend BOM so Word interprets as UTF-8
+  return new Blob(['\uFEFF', officeHTML], { type: 'application/msword;charset=utf-8' });
+};
+
 async function pdfToWord() {
   const file = state.pdf2word.file;
   if (!file) { showToast('Please select a PDF file.', 'error'); return; }
 
-  if (typeof docx === 'undefined') {
-    showToast('docx.js library not loaded. Please check your internet connection.', 'error');
-    return;
-  }
-
   showResult('pdf2word', '');
-  setProgress('pdf2word', 5, 'Loading PDF…');
+  setProgress('pdf2word', 10, 'Loading PDF…');
   setButtonEnabled('btn-pdf2word', false);
 
   try {
-    const blob = await safeConvertPDFToWord(file, (progress, msg) => {
-      setProgress('pdf2word', progress, msg);
-    });
+    const arrayBuffer = await file.arrayBuffer();
+    setProgress('pdf2word', 50, 'Converting to Word format...');
+    const blob = await window.convertPDFToWordIsolated(arrayBuffer);
     
-    const name = file.name.replace(/\.pdf$/i, '') + '.docx';
+    const name = file.name.replace(/\.pdf$/i, '') + '.doc';
     setProgress('pdf2word', 100, 'Complete!');
     showResult('pdf2word', successResult(name, blob, formatSize(blob.size)));
     showToast('PDF converted to Word successfully!');
