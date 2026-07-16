@@ -1194,249 +1194,227 @@ async function viewerZoomOut() {
  * Wraps advanced textLayer rendering in try-catch and silently falls back to standard text extraction if it fails.
  */
 async function safeConvertPDFToWord(file, onProgress) {
-  console.log('[safeConvertPDFToWord] Step 1: Initializing conversion process...');
-  
-  // Dependency Check
-  if (typeof pdfjsLib === 'undefined') {
-    console.error('[safeConvertPDFToWord] ERROR: pdfjsLib is missing. Please ensure PDF.js is loaded.');
-    throw new Error('PDF.js library is not loaded. Cannot read PDF.');
-  }
-  if (typeof docx === 'undefined') {
-    console.error('[safeConvertPDFToWord] ERROR: docx.js library is missing. Please ensure docx.js is loaded.');
-    throw new Error('docx.js library is not loaded. Cannot compile Word file.');
+
+  // ── Dependency checks ──────────────────────────────────────────
+  if (typeof pdfjsLib === 'undefined') throw new Error('PDF.js library is not loaded.');
+  if (typeof docx    === 'undefined') throw new Error('docx.js library is not loaded.');
+
+  // ── Arabic Presentation Forms → Base Arabic mapping ────────────
+  // Many Arabic PDFs encode glyphs as Presentation Forms (FE70-FEFF, FB50-FDFF).
+  // NFKC handles some, but not all. This table covers what NFKC misses.
+  // We map each presentation form to its canonical base character(s).
+  function fixArabicPresentationForms(str) {
+    // Step 1: NFKC decomposes most Arabic Presentation Forms to base forms
+    str = str.normalize('NFKC');
+
+    // Step 2: Map any remaining FE70-FEFF forms to base Arabic
+    // These are isolated/initial/medial/final forms — all map to base char
+    const FE_MAP = {
+      '\uFE70':'\u064B','\uFE71':'\u0651\u064B','\uFE72':'\u064C','\uFE74':'\u064D',
+      '\uFE76':'\u064E','\uFE77':'\u0651\u064E','\uFE78':'\u064F','\uFE79':'\u0651\u064F',
+      '\uFE7A':'\u0650','\uFE7B':'\u0651\u0650','\uFE7C':'\u0651','\uFE7D':'\u0651',
+      '\uFE7E':'\u0652','\uFE7F':'\u0651\u0652',
+      '\uFE80':'\u0621','\uFE81':'\u0622','\uFE82':'\u0622','\uFE83':'\u0623',
+      '\uFE84':'\u0623','\uFE85':'\u0624','\uFE86':'\u0624','\uFE87':'\u0625',
+      '\uFE88':'\u0625','\uFE89':'\u0626','\uFE8A':'\u0626','\uFE8B':'\u0626',
+      '\uFE8C':'\u0626','\uFE8D':'\u0627','\uFE8E':'\u0627','\uFE8F':'\u0628',
+      '\uFE90':'\u0628','\uFE91':'\u0628','\uFE92':'\u0628','\uFE93':'\u0629',
+      '\uFE94':'\u0629','\uFE95':'\u062A','\uFE96':'\u062A','\uFE97':'\u062A',
+      '\uFE98':'\u062A','\uFE99':'\u062B','\uFE9A':'\u062B','\uFE9B':'\u062B',
+      '\uFE9C':'\u062B','\uFE9D':'\u062C','\uFE9E':'\u062C','\uFE9F':'\u062C',
+      '\uFEA0':'\u062C','\uFEA1':'\u062D','\uFEA2':'\u062D','\uFEA3':'\u062D',
+      '\uFEA4':'\u062D','\uFEA5':'\u062E','\uFEA6':'\u062E','\uFEA7':'\u062E',
+      '\uFEA8':'\u062E','\uFEA9':'\u062F','\uFEAA':'\u062F','\uFEAB':'\u0630',
+      '\uFEAC':'\u0630','\uFEAD':'\u0631','\uFEAE':'\u0631','\uFEAF':'\u0632',
+      '\uFEB0':'\u0632','\uFEB1':'\u0633','\uFEB2':'\u0633','\uFEB3':'\u0633',
+      '\uFEB4':'\u0633','\uFEB5':'\u0634','\uFEB6':'\u0634','\uFEB7':'\u0634',
+      '\uFEB8':'\u0634','\uFEB9':'\u0635','\uFEBA':'\u0635','\uFEBB':'\u0635',
+      '\uFEBC':'\u0635','\uFEBD':'\u0636','\uFEBE':'\u0636','\uFEBF':'\u0636',
+      '\uFEC0':'\u0636','\uFEC1':'\u0637','\uFEC2':'\u0637','\uFEC3':'\u0637',
+      '\uFEC4':'\u0637','\uFEC5':'\u0638','\uFEC6':'\u0638','\uFEC7':'\u0638',
+      '\uFEC8':'\u0638','\uFEC9':'\u0639','\uFECA':'\u0639','\uFECB':'\u0639',
+      '\uFECC':'\u0639','\uFECD':'\u063A','\uFECE':'\u063A','\uFECF':'\u063A',
+      '\uFED0':'\u063A','\uFED1':'\u0641','\uFED2':'\u0641','\uFED3':'\u0641',
+      '\uFED4':'\u0641','\uFED5':'\u0642','\uFED6':'\u0642','\uFED7':'\u0642',
+      '\uFED8':'\u0642','\uFED9':'\u0643','\uFEDA':'\u0643','\uFEDB':'\u0643',
+      '\uFEDC':'\u0643','\uFEDD':'\u0644','\uFEDE':'\u0644','\uFEDF':'\u0644',
+      '\uFEE0':'\u0644','\uFEE1':'\u0645','\uFEE2':'\u0645','\uFEE3':'\u0645',
+      '\uFEE4':'\u0645','\uFEE5':'\u0646','\uFEE6':'\u0646','\uFEE7':'\u0646',
+      '\uFEE8':'\u0646','\uFEE9':'\u0647','\uFEEA':'\u0647','\uFEEB':'\u0647',
+      '\uFEEC':'\u0647','\uFEED':'\u0648','\uFEEE':'\u0648','\uFEEF':'\u0649',
+      '\uFEF0':'\u0649','\uFEF1':'\u064A','\uFEF2':'\u064A','\uFEF3':'\u064A',
+      '\uFEF4':'\u064A','\uFEF5':'\u0644\u0622','\uFEF6':'\u0644\u0622',
+      '\uFEF7':'\u0644\u0623','\uFEF8':'\u0644\u0623','\uFEF9':'\u0644\u0625',
+      '\uFEFA':'\u0644\u0625','\uFEFB':'\u0644\u0627','\uFEFC':'\u0644\u0627',
+    };
+    return str.replace(/[\uFE70-\uFEFC]/g, ch => FE_MAP[ch] || ch);
   }
 
+  // ── Helpers ─────────────────────────────────────────────────────
+  const isRTLChar = (ch) => /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\u0590-\u05FF\uFB1D-\uFDFF\uFE70-\uFEFF]/.test(ch);
+  const isRTLText = (str) => {
+    // Count RTL vs LTR strong characters to decide direction
+    let rtl = 0, ltr = 0;
+    for (const ch of str) {
+      if (/[\u0600-\u06FF\u0750-\u077F\u0590-\u05FF]/.test(ch)) rtl++;
+      else if (/[A-Za-z]/.test(ch)) ltr++;
+    }
+    return rtl > ltr;
+  };
+  const sanitize = (str) => str.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
+
+  // ── Load PDF ────────────────────────────────────────────────────
   const bytes = await readFileBytes(file);
-  const pdfDoc = await pdfjsLib.getDocument({ data: bytes }).promise;
+  const pdfDoc = await pdfjsLib.getDocument({
+    data: bytes,
+    // Ask PDF.js to fix up glyphs to Unicode where possible
+    disableFontFace: false,
+    useSystemFonts: true,
+  }).promise;
   const numPages = pdfDoc.numPages;
   const docxChildren = [];
 
-  const isRTLText = (text) => /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\u0590-\u05FF]/.test(text);
-  const rgbToHex = (r, g, b) => ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1).toUpperCase();
-  // Only strip actual control characters, NOT Arabic private-use or presentation forms
-  const sanitizeText = (text) => text.replace(/[\u0000-\u0008\u000B-\u000C\u000E-\u001F\u007F-\u009F]/g, '');
-  // Choose font: always use a font that supports Arabic for RTL text
-  const chooseFontForText = (fontFamily, textIsRTL) => {
-    if (textIsRTL) return 'Arial'; // Arial has excellent Arabic coverage
-    return fontFamily || 'Arial';
-  };
-
-  console.log(`[safeConvertPDFToWord] Step 2: PDF loaded successfully. Total pages: ${numPages}`);
-
+  // ── Process each page ───────────────────────────────────────────
   for (let pageNum = 1; pageNum <= numPages; pageNum++) {
     onProgress(5 + Math.round(((pageNum - 1) / numPages) * 80), `Extracting page ${pageNum} of ${numPages}…`);
-    console.log(`[safeConvertPDFToWord] Step 3: Processing page ${pageNum}...`);
 
     const page = await pdfDoc.getPage(pageNum);
-    const textContent = await page.getTextContent({ includeMarkedContent: false });
-    
-    let pageParsedSuccessfully = false;
 
-    // PRIMARY ATTEMPT: Advanced DOM Rendering (Perfect Styles & Shapes)
-    try {
-      console.log(`[safeConvertPDFToWord] Page ${pageNum} - Attempting Advanced TextLayer rendering...`);
-      const viewport = page.getViewport({ scale: 1.0 });
-      const hiddenContainer = document.createElement('div');
-      hiddenContainer.style.position = 'absolute';
-      hiddenContainer.style.top = '-99999px';
-      hiddenContainer.style.left = '-99999px';
-      hiddenContainer.style.visibility = 'hidden';
-      hiddenContainer.style.width = '2000px'; 
-      document.body.appendChild(hiddenContainer);
+    // disableCombineTextItems:false = let PDF.js merge adjacent same-style chars (default)
+    // includeMarkedContent:false    = skip tag markers, get only real text items
+    const textContent = await page.getTextContent({
+      includeMarkedContent: false,
+      disableCombineTextItems: false,
+    });
 
-      try {
-        await pdfjsLib.renderTextLayer({
-          textContent: textContent,
-          container: hiddenContainer,
-          viewport: viewport,
-          textDivs: []
-        }).promise;
+    // Filter to real text items only
+    const rawItems = textContent.items.filter(item => item.str != null && item.str !== '');
 
-        const spans = Array.from(hiddenContainer.querySelectorAll('span'));
-        
-        if (spans.length === 0) {
-          console.log(`[safeConvertPDFToWord] Page ${pageNum} - Advanced render generated 0 spans.`);
-          if (textContent.items.length > 0) throw new Error('TextLayer rendered 0 spans but raw textContent items exist.');
-          docxChildren.push(new docx.Paragraph({ children: [] }));
-        } else {
-          // Extract elements safely
-          const elements = spans.map((span, index) => {
-            const style = window.getComputedStyle(span);
-            const rect = span.getBoundingClientRect();
-            const item = textContent.items[index];
-            
-            let colorHex = '000000';
-            if (item && item.color && item.color.length >= 3) {
-              let [r, g, b] = item.color;
-              if (r <= 1 && g <= 1 && b <= 1 && (r > 0 || g > 0 || b > 0 || item.color.some(c => !Number.isInteger(c)))) {
-                r = Math.round(r * 255); g = Math.round(g * 255); b = Math.round(b * 255);
-              }
-              colorHex = rgbToHex(Math.round(r), Math.round(g), Math.round(b));
-            }
-
-            let fontWeight = style.fontWeight || 'normal';
-            if (item && item.fontName && item.fontName.toLowerCase().includes('bold')) fontWeight = 'bold';
-
-            return {
-              text: sanitizeText(span.textContent || ''),
-              top: rect.top,
-              left: rect.left,
-              width: rect.width,
-              fontSize: parseFloat(style.fontSize) || 12,
-              fontFamily: (style.fontFamily || 'Arial').replace(/["']/g, '').split(',')[0].trim(),
-              fontWeight: fontWeight,
-              color: colorHex
-            };
-          }).filter(e => e.text.trim() !== '');
-
-          if (elements.length > 0) {
-            elements.sort((a, b) => a.top - b.top);
-            const lines = [];
-            let currentLine = [elements[0]];
-            let currentTop = elements[0].top;
-            const tolerance = 5;
-
-            for (let i = 1; i < elements.length; i++) {
-              const el = elements[i];
-              if (Math.abs(el.top - currentTop) <= tolerance) currentLine.push(el);
-              else { lines.push(currentLine); currentLine = [el]; currentTop = el.top; }
-            }
-            if (currentLine.length) lines.push(currentLine);
-
-            for (const line of lines) {
-              const lineStr = line.map(e => e.text).join('');
-              const isRTL = isRTLText(lineStr);
-
-              if (isRTL) line.sort((a, b) => b.left - a.left);
-              else line.sort((a, b) => a.left - b.left);
-
-              const runs = [];
-              let currentRunStr = '';
-              let currentRunStyle = null;
-
-              const finishRun = () => {
-                if (currentRunStr) {
-                  const runProps = {
-                    text: currentRunStr,
-                    size: Math.round(currentRunStyle.fontSize * 2),
-                    font: chooseFontForText(currentRunStyle.fontFamily, isRTL),
-                    rightToLeft: isRTL
-                  };
-                  if (currentRunStyle.fontWeight === 'bold' || parseInt(currentRunStyle.fontWeight) >= 600) runProps.bold = true;
-                  if (currentRunStyle.color && currentRunStyle.color !== '000000') runProps.color = currentRunStyle.color;
-                  runs.push(new docx.TextRun(runProps));
-                }
-              };
-
-              for (let i = 0; i < line.length; i++) {
-                const el = line[i];
-                let prependSpace = false;
-                
-                if (i > 0) {
-                  const prev = line[i - 1];
-                  let gap = isRTL ? (prev.left - (el.left + el.width)) : (el.left - (prev.left + prev.width));
-                  if (gap > el.fontSize * 0.25) prependSpace = true;
-                }
-
-                const styleChanged = !currentRunStyle || 
-                                     currentRunStyle.fontSize !== el.fontSize || 
-                                     currentRunStyle.color !== el.color || 
-                                     currentRunStyle.fontFamily !== el.fontFamily ||
-                                     currentRunStyle.fontWeight !== el.fontWeight;
-
-                let elText = el.text;
-                // Do NOT reverse Arabic characters — they must stay in logical order
-                // Unicode Bidi is handled by the RTL paragraph/run flags in docx
-                elText = elText.normalize('NFKC');
-
-                if (styleChanged) {
-                  finishRun();
-                  currentRunStyle = el;
-                  currentRunStr = (prependSpace ? ' ' : '') + elText;
-                } else {
-                  currentRunStr += (prependSpace ? ' ' : '') + elText;
-                }
-              }
-              finishRun();
-
-              if (runs.length > 0) {
-                docxChildren.push(new docx.Paragraph({
-                  children: runs,
-                  bidirectional: isRTL,
-                  alignment: isRTL ? docx.AlignmentType.RIGHT : docx.AlignmentType.LEFT,
-                  spacing: { after: 100 }
-                }));
-              }
-            }
-          }
-        }
-        pageParsedSuccessfully = true;
-        console.log(`[safeConvertPDFToWord] Page ${pageNum} - Advanced rendering successful.`);
-      } finally {
-        if (hiddenContainer.parentNode) hiddenContainer.parentNode.removeChild(hiddenContainer);
-      }
-    } catch (advancedError) {
-      console.error(`[safeConvertPDFToWord] ERROR on Page ${pageNum} Advanced Rendering:`, advancedError);
-      pageParsedSuccessfully = false;
+    if (rawItems.length === 0) {
+      docxChildren.push(new docx.Paragraph({ children: [] }));
+      if (pageNum < numPages) docxChildren.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
+      continue;
     }
 
-    // FALLBACK ATTEMPT: Standard Extraction Loop
-    if (!pageParsedSuccessfully) {
-      console.warn(`[safeConvertPDFToWord] Page ${pageNum} - Initiating Basic Text Extraction Fallback...`);
-      try {
-        const items = textContent.items.filter(item => item.str && item.str.trim() !== '');
-        if (items.length === 0) {
-          docxChildren.push(new docx.Paragraph({ children: [] }));
-        } else {
-          const sortedItems = [...items].sort((a, b) => b.transform[5] - a.transform[5]);
-          const lines = [];
-          let currentLine = [sortedItems[0]];
-          let currentY = sortedItems[0].transform[5];
-          const tolerance = 4;
+    // ── Group items into visual lines by Y coordinate ─────────────
+    // PDF coordinate system: Y increases upward. Items on the same line
+    // have the same transform[5] (baseline Y). Use font-size-aware tolerance.
+    const lineMap = new Map(); // key = rounded Y, value = [items]
+    for (const item of rawItems) {
+      const y = item.transform[5];
+      const fontSize = Math.abs(item.transform[0]); // scale = fontSize in PDF units
+      const tol = Math.max(2, fontSize * 0.4);
+      // Find existing line within tolerance
+      let matched = null;
+      for (const [ky] of lineMap) {
+        if (Math.abs(ky - y) <= tol) { matched = ky; break; }
+      }
+      const key = matched !== null ? matched : y;
+      if (!lineMap.has(key)) lineMap.set(key, []);
+      lineMap.get(key).push(item);
+    }
 
-          for (let i = 1; i < sortedItems.length; i++) {
-            const item = sortedItems[i];
-            if (Math.abs(item.transform[5] - currentY) <= tolerance) currentLine.push(item);
-            else { lines.push(currentLine); currentLine = [item]; currentY = item.transform[5]; }
-          }
-          if (currentLine.length) lines.push(currentLine);
+    // Sort lines top-to-bottom (PDF Y is bottom-up, so descending Y = top of page first)
+    const sortedLines = [...lineMap.entries()].sort((a, b) => b[0] - a[0]);
 
-          for (const line of lines) {
-             const lineStr = line.map(i => i.str).join('');
-             const isRTL = isRTLText(lineStr);
-             
-             if (isRTL) line.sort((a, b) => b.transform[4] - a.transform[4]);
-             else line.sort((a, b) => a.transform[4] - b.transform[4]);
+    for (const [, lineItems] of sortedLines) {
+      // ── Determine line direction ─────────────────────────────────
+      // PDF.js sets item.dir = 'rtl' | 'ltr' | 'ttb' on each item (v3+)
+      // Prefer that; fall back to Unicode analysis
+      const rtlCount = lineItems.filter(i => i.dir === 'rtl').length;
+      const ltrCount = lineItems.filter(i => i.dir === 'ltr').length;
+      let isRTL;
+      if (rtlCount > 0 || ltrCount > 0) {
+        isRTL = rtlCount >= ltrCount;
+      } else {
+        isRTL = isRTLText(lineItems.map(i => i.str).join(''));
+      }
 
-             // Build text preserving spaces: use hasEOL marker or gap-based spacing
-             let runStr = '';
-             for (let k = 0; k < line.length; k++) {
-               const item = line[k];
-               const itemStr = sanitizeText(item.str.normalize('NFKC'));
-               runStr += itemStr;
-               // Add a space if the item signals end-of-word or there's a gap to the next
-               if (k < line.length - 1) {
-                 const next = line[k + 1];
-                 const itemWidth = Math.abs(item.transform[0] * (item.width || 0));
-                 const gap = isRTL
-                   ? (item.transform[4] - (next.transform[4] + Math.abs(next.transform[0] * (next.width || 0))))
-                   : (next.transform[4] - (item.transform[4] + itemWidth));
-                 // hasEOL means PDF inserted a space after this item
-                 if (item.hasEOL || gap > 1) runStr += ' ';
-               }
-             }
-             docxChildren.push(new docx.Paragraph({
-               children: [new docx.TextRun({ text: runStr, rightToLeft: isRTL, font: 'Arial' })],
-               bidirectional: isRTL,
-               alignment: isRTL ? docx.AlignmentType.RIGHT : docx.AlignmentType.LEFT
-             }));
+      // ── Sort items within line for reading order ─────────────────
+      // RTL: rightmost first (largest X first)
+      // LTR: leftmost first (smallest X first)
+      lineItems.sort((a, b) => isRTL
+        ? b.transform[4] - a.transform[4]
+        : a.transform[4] - b.transform[4]
+      );
+
+      // ── Build the text string with correct spacing ───────────────
+      // Strategy: append each item's text, then decide whether to add a space
+      // before the next item based on:
+      //   1. item.hasEOL (PDF marked this as end of a space-separated word)
+      //   2. The gap between item's rendered end and next item's start
+      //      exceeds ~25% of the font size → word boundary → add space
+      const runs = [];
+      let runText = '';
+      let runFontSize = 12;
+      let runBold = false;
+
+      const flushRun = () => {
+        if (!runText) return;
+        runs.push(new docx.TextRun({
+          text: runText,
+          font: isRTL ? 'Arial' : 'Times New Roman',
+          size: Math.round(runFontSize * 2),  // half-points
+          bold: runBold,
+          rightToLeft: isRTL,
+        }));
+        runText = '';
+      };
+
+      for (let k = 0; k < lineItems.length; k++) {
+        const item = lineItems[k];
+
+        // ── Fix Arabic characters ──────────────────────────────────
+        let text = fixArabicPresentationForms(item.str);
+        text = sanitize(text);
+        if (!text) continue;
+
+        // Font info from transform matrix: transform[0] = scaleX ≈ fontSize
+        const fontSize = Math.abs(item.transform[0]) || 12;
+        const isBold = !!(item.fontName && /bold/i.test(item.fontName));
+
+        // Start a new run if style changes significantly
+        if (Math.abs(fontSize - runFontSize) > 1 || isBold !== runBold) {
+          flushRun();
+          runFontSize = fontSize;
+          runBold = isBold;
+        }
+
+        runText += text;
+
+        // ── Space detection ────────────────────────────────────────
+        if (k < lineItems.length - 1) {
+          const next = lineItems[k + 1];
+
+          // item's rendered width in PDF user units
+          const itemRenderedWidth = item.width || 0;
+          const nextX = next.transform[4];
+          const itemEndX = item.transform[4];
+
+          // For RTL: item is to the right, next is to the left
+          // gap = left edge of current item  minus  right edge of next item
+          // For LTR: gap = left edge of next minus  right edge of current
+          const gap = isRTL
+            ? (itemEndX - (nextX + (next.width || 0)))
+            : (nextX - (itemEndX + itemRenderedWidth));
+
+          // A gap larger than ~1/3 of the font size means a word space
+          const spaceThreshold = fontSize * 0.3;
+          if (item.hasEOL || gap > spaceThreshold) {
+            runText += ' ';
           }
         }
-        console.log(`[safeConvertPDFToWord] Page ${pageNum} - Basic Extraction Fallback successful.`);
-      } catch (fallbackError) {
-        console.error(`[safeConvertPDFToWord] CRITICAL ERROR on Page ${pageNum} Basic Extraction:`, fallbackError);
-        docxChildren.push(new docx.Paragraph({ children: [new docx.TextRun({ text: `[Error reading page ${pageNum}]`, color: 'FF0000' })] }));
       }
+      flushRun();
+
+      if (runs.length === 0) continue;
+
+      docxChildren.push(new docx.Paragraph({
+        children: runs,
+        bidirectional: isRTL,
+        alignment: isRTL ? docx.AlignmentType.RIGHT : docx.AlignmentType.LEFT,
+        spacing: { after: 120 },
+      }));
     }
 
     if (pageNum < numPages) {
@@ -1444,37 +1422,36 @@ async function safeConvertPDFToWord(file, onProgress) {
     }
   }
 
-  console.log('[safeConvertPDFToWord] Step 4: Compiling DOCX Document...');
-  onProgress(88, 'Building Word document…');
+  // ── Build DOCX document ─────────────────────────────────────────
+  onProgress(90, 'Building Word document…');
 
-  const document = new docx.Document({
+  const wordDoc = new docx.Document({
     creator: 'PDF BOX',
-    description: 'Converted from PDF by PDF BOX (Safe Mode)',
     title: file.name.replace(/\.pdf$/i, ''),
-    // Set default font to one with Arabic support
     styles: {
       default: {
         document: {
-          run: { font: 'Arial' }
+          run: { font: 'Arial', size: 24 }
         }
       }
     },
     sections: [{
       properties: {
         page: { margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } },
-        // Enable bidirectional text support at section level
-        bidi: true
+        bidi: true,   // enable document-level bidirectional support
       },
-      children: docxChildren.length ? docxChildren : [new docx.Paragraph({ children: [new docx.TextRun('(No text found in this PDF)')] })]
+      children: docxChildren.length
+        ? docxChildren
+        : [new docx.Paragraph({ children: [new docx.TextRun('(No text found in this PDF)')] })]
     }]
   });
 
-  console.log('[safeConvertPDFToWord] Step 5: Generating Blob...');
-  onProgress(95, 'Saving DOCX…');
-  const resultBlob = await docx.Packer.toBlob(document);
-  console.log('[safeConvertPDFToWord] Conversion Complete!');
-  return resultBlob;
+  onProgress(96, 'Saving DOCX…');
+  return await docx.Packer.toBlob(wordDoc);
 }
+
+
+
 
 async function pdfToWord() {
   const file = state.pdf2word.file;
