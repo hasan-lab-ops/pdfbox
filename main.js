@@ -1236,22 +1236,11 @@ async function convertPDFToWord(arrayBuffer) {
     throw new Error("PDF.js library is not loaded.");
   if (typeof docx === "undefined")
     throw new Error("docx.js library is not loaded.");
+  if (typeof Tesseract === "undefined")
+    throw new Error("Tesseract.js library is not loaded.");
 
-  const ARABIC_RE = /[\u0600-\u06FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
   const SCALE = 2.0;
-  const LINE_TOL = 4;
   const MIN_IMG_PX = 20;
-
-  const fixBullets = (s) =>
-    s
-      .replace(/\uF0D8/g, "\u27A2")
-      .replace(/\uF0B7/g, "\u2022")
-      .replace(/\uF0A7/g, "\u25A0")
-      .replace(/\uF0FC/g, "\u2713")
-      .replace(/\uF0E0/g, "\u2709")
-      .replace(/\uF020/g, " ");
-
-  const ptToHp = (pt) => Math.max(16, Math.round(Math.abs(pt)) * 2);
 
   const canvasToUint8 = (c) =>
     new Promise((res, rej) =>
@@ -1273,33 +1262,10 @@ async function convertPDFToWord(arrayBuffer) {
     a[4] * b[1] + a[5] * b[3] + b[5],
   ];
 
-  const sampleHex = (ctx, x, y, w, h) => {
-    const sx = Math.max(0, Math.min(Math.floor(x), ctx.canvas.width - 1));
-    const sy = Math.max(0, Math.min(Math.floor(y), ctx.canvas.height - 1));
-    const sw = Math.max(1, Math.min(Math.ceil(w), ctx.canvas.width - sx));
-    const sh = Math.max(1, Math.min(Math.ceil(h), ctx.canvas.height - sy));
-    const d = ctx.getImageData(sx, sy, sw, sh).data;
-    let r = 0,
-      g = 0,
-      b = 0,
-      n = 0;
-    for (let i = 0; i < d.length; i += 4) {
-      if (d[i + 3] > 50 && (d[i] < 240 || d[i + 1] < 240 || d[i + 2] < 240)) {
-        r += d[i];
-        g += d[i + 1];
-        b += d[i + 2];
-        n++;
-      }
-    }
-    if (!n) return "000000";
-    return [r, g, b]
-      .map((v) =>
-        Math.round(v / n)
-          .toString(16)
-          .padStart(2, "0"),
-      )
-      .join("");
-  };
+  if (typeof setProgress === "function")
+    setProgress("pdf2word", 5, "Initializing OCR engine...");
+
+  const worker = await Tesseract.createWorker("ara+eng");
 
   if (typeof setProgress === "function")
     setProgress("pdf2word", 10, "Loading PDF...");
@@ -1333,47 +1299,14 @@ async function convertPDFToWord(arrayBuffer) {
     canvas.width = pageW;
     canvas.height = pageH;
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, pageW, pageH);
+
     await page.render({ canvasContext: ctx, viewport }).promise;
 
     const MAX_IMG_W = Math.round(Math.min(pageW / SCALE, 468) * (96 / 72));
 
-    // 1. Y-Axis Layout Clustering
-    const textContent = await page.getTextContent({
-      normalizeWhitespace: true,
-    });
-    const lineMap = new Map();
-
-    for (const item of textContent.items) {
-      if (!item.str || !item.str.trim()) continue;
-      const rawY = item.transform[5];
-      const rawX = item.transform[4];
-      let lineKey = null;
-      for (const k of lineMap.keys()) {
-        if (Math.abs(k - rawY) <= LINE_TOL) {
-          lineKey = k;
-          break;
-        }
-      }
-      if (lineKey === null) {
-        lineKey = rawY;
-        lineMap.set(lineKey, []);
-      }
-      const cX = rawX * SCALE;
-      const cY = pageH - rawY * SCALE - item.height * SCALE;
-      const cW = (item.width || Math.abs(item.transform[0])) * SCALE;
-      const cH = (item.height || Math.abs(item.transform[3])) * SCALE;
-
-      lineMap.get(lineKey).push({
-        item,
-        x: rawX,
-        y: rawY,
-        colorHex: sampleHex(ctx, cX, cY, cW, cH),
-      });
-    }
-
-    const sortedLineKeys = Array.from(lineMap.keys()).sort((a, b) => b - a);
-
-    // 3. Robust Image Operator Extraction
     const extractedImages = [];
     try {
       const opList = await page.getOperatorList();
@@ -1480,7 +1413,14 @@ async function convertPDFToWord(arrayBuffer) {
               }
             }
             if (imgU8) {
-              extractedImages.push({ sortY: pdfY + pdfH, imgU8, dispW, dispH });
+              const cy = Math.max(0, pageH - (pdfY + pdfH) * SCALE);
+              extractedImages.push({ sortY: cy, imgU8, dispW, dispH });
+              
+              ctx.fillStyle = "#ffffff";
+              const cx = Math.max(0, pdfX * SCALE);
+              const cw = Math.max(1, dispW * SCALE);
+              const ch = Math.max(1, dispH * SCALE);
+              ctx.fillRect(cx - 4, cy - 4, cw + 8, ch + 8);
             }
           } catch (ex) {
             console.warn("[PDF2WORD] image error:", ex);
@@ -1491,16 +1431,31 @@ async function convertPDFToWord(arrayBuffer) {
       console.warn("[PDF2WORD] getOperatorList error:", opErr);
     }
 
-    const blocks = [];
-    for (const lineY of sortedLineKeys) {
-      blocks.push({ type: "text", sortY: lineY, items: lineMap.get(lineY) });
-    }
-    for (const img of extractedImages) {
-      blocks.push({ type: "image", sortY: img.sortY, img });
-    }
-    blocks.sort((a, b) => b.sortY - a.sortY);
+    const dataUrl = canvas.toDataURL("image/png");
+    const { data: { blocks: ocrBlocks } } = await worker.recognize(dataUrl);
 
-    for (const block of blocks) {
+    const layoutBlocks = [];
+    
+    if (ocrBlocks) {
+      for (const block of ocrBlocks) {
+        if (!block.paragraphs) continue;
+        for (const para of block.paragraphs) {
+          layoutBlocks.push({
+            type: "text",
+            sortY: para.bbox.y0,
+            text: para.text
+          });
+        }
+      }
+    }
+
+    for (const img of extractedImages) {
+      layoutBlocks.push({ type: "image", sortY: img.sortY, img });
+    }
+
+    layoutBlocks.sort((a, b) => a.sortY - b.sortY);
+
+    for (const block of layoutBlocks) {
       if (block.type === "image") {
         try {
           const { imgU8, dispW, dispH } = block.img;
@@ -1509,7 +1464,6 @@ async function convertPDFToWord(arrayBuffer) {
           const outH = Math.round(dispH * scl);
           allChildren.push(
             new docx.Paragraph({
-              // 4. Explicit Document Spacing
               spacing: { before: 120, after: 120, line: 360 },
               children: [
                 new docx.ImageRun({
@@ -1523,154 +1477,52 @@ async function convertPDFToWord(arrayBuffer) {
         } catch (imgErr) {
           console.warn("[PDF2WORD] ImageRun failed:", imgErr);
         }
-        continue;
-      }
-
-      // 1. Horizontal Sorting: strict left to right
-      const lineItems = block.items;
-      lineItems.sort((a, b) => a.x - b.x); // STEP 1: sort horizontally
-
-      const fullLineText = lineItems.map((li) => li.item.str).join(" ");
-      const lineIsArabic = ARABIC_RE.test(fullLineText);
-
-      // --- NEW BIDI UNSHUFFLER ---
-      const visualItems = [];
-      let lastEdge = null;
-      for (const li of lineItems) {
-        const sizePt = Math.round(
-          Math.abs(li.item.transform[3]) ||
-            Math.abs(li.item.transform[0]) ||
-            li.item.height ||
-            12
-        );
-        if (lastEdge !== null) {
-          const gapPts = li.x - lastEdge;
-          const spaceW = sizePt * 0.3;
-          if (gapPts > spaceW * 0.8) {
-            const numSpaces = Math.max(1, Math.round(gapPts / spaceW));
-            visualItems.push({
-              isSpace: true,
-              str: " ".repeat(numSpaces),
-              colorHex: li.colorHex,
-              fontFamily: "Arial",
-              sizePt: sizePt,
-              bold: false,
-              italics: false
-            });
-          }
-        }
+      } else if (block.type === "text") {
+        const textStr = block.text.trim();
+        if (!textStr) continue;
         
-        const fn = (li.item.fontName || "").toLowerCase();
-        const fontFamily = fn.includes("times")
-          ? "Times New Roman"
-          : fn.includes("courier")
-            ? "Courier New"
-            : fn.includes("calibri")
-              ? "Calibri"
-              : "Arial";
-              
-        visualItems.push({
-          isSpace: false,
-          str: fixBullets(li.item.str).trim(), // avoid extra spaces as we calc gaps
-          colorHex: li.colorHex,
-          fontFamily,
-          sizePt,
-          bold: fn.includes("bold"),
-          italics: fn.includes("italic"),
-          underline: fn.includes("underline")
-        });
-        lastEdge = li.x + (li.item.width || 0);
-      }
-
-      // Group into LTR / RTL blocks
-      let bidiBlocks = [];
-      let currentBidiBlock = [];
-      let currentType = lineIsArabic ? 'RTL' : 'LTR';
-
-      for (const v of visualItems) {
-        if (!v.str) continue;
-        const hasArabic = /[\u0600-\u06FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(v.str);
-        const hasEnglish = /[a-zA-Z]/.test(v.str);
-        
-        let type = currentType;
-        if (hasArabic) type = 'RTL';
-        else if (hasEnglish) type = 'LTR';
-        
-        if (type === currentType) {
-          currentBidiBlock.push(v);
-        } else {
-          if (currentBidiBlock.length > 0) bidiBlocks.push({ type: currentType, items: currentBidiBlock });
-          currentType = type;
-          currentBidiBlock = [v];
+        const lines = textStr.split(/?
+/);
+        for (let i = 0; i < lines.length; i++) {
+          const lineText = lines[i].trim();
+          if (!lineText) continue;
+          
+          const isArabic = /[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷽ﹰ-﻿]/.test(lineText);
+          
+          allChildren.push(
+            new docx.Paragraph({
+              bidirectional: isArabic,
+              alignment: isArabic ? docx.AlignmentType.RIGHT : docx.AlignmentType.LEFT,
+              spacing: { before: 120, after: 120, line: 360 },
+              children: [
+                new docx.TextRun({
+                  text: lineText,
+                  font: isArabic ? "Arial" : "Times New Roman",
+                  size: 24,
+                  rightToLeft: isArabic
+                })
+              ]
+            })
+          );
         }
       }
-      if (currentBidiBlock.length > 0) bidiBlocks.push({ type: currentType, items: currentBidiBlock });
-
-      if (lineIsArabic) {
-        bidiBlocks.reverse(); // Reverse block order for RTL base
-      }
-
-      let logicalItems = [];
-      for (const b of bidiBlocks) {
-        if (b.type === 'RTL') {
-          const rev = [...b.items].reverse();
-          for (const item of rev) {
-            if (!item.isSpace) {
-              item.str = item.str.split('').reverse().join('');
-            }
-          }
-          logicalItems.push(...rev);
-        } else {
-          logicalItems.push(...b.items);
-        }
-      }
-
-      const runs = [];
-      for (const item of logicalItems) {
-        if (!item.str) continue;
-        const segIsArabic = /[\u0600-\u06FF\uFB50-\uFDFF\uFE70-\uFEFF]/.test(item.str);
-        runs.push(
-          new docx.TextRun({
-            text: item.str,
-            font: item.fontFamily,
-            size: ptToHp(item.sizePt),
-            color: item.colorHex,
-            bold: item.bold,
-            italics: item.italics,
-            underline: item.underline ? {} : undefined,
-            rightToLeft: segIsArabic
-          })
-        );
-      }
-
-      if (runs.length === 0) continue;
-
-      allChildren.push(
-        new docx.Paragraph({
-          // 2. Native Arabic BiDi Tokenization (Paragraph Config)
-          bidirectional: lineIsArabic,
-          alignment: lineIsArabic
-            ? docx.AlignmentType.RIGHT
-            : docx.AlignmentType.LEFT,
-          // 4. Explicit Document Spacing
-          spacing: { before: 120, after: 120, line: 360 },
-          children: runs,
-        }),
-      );
     }
 
     if (pageNum < numPages) {
       allChildren.push(
         new docx.Paragraph({
           pageBreakBefore: true,
-          children: [new docx.TextRun("")],
-        }),
+          children: [new docx.TextRun("")]
+        })
       );
     }
   }
 
+  await worker.terminate();
+
   if (typeof setProgress === "function")
     setProgress("pdf2word", 93, "Building .docx file...");
+    
   const doc = new docx.Document({
     sections: [
       {
@@ -1679,11 +1531,11 @@ async function convertPDFToWord(arrayBuffer) {
           ? allChildren
           : [
               new docx.Paragraph({
-                children: [new docx.TextRun("(No content extracted)")],
-              }),
-            ],
-      },
-    ],
+                children: [new docx.TextRun("(No content extracted)")]
+              })
+            ]
+      }
+    ]
   });
   return docx.Packer.toBlob(doc);
 }
