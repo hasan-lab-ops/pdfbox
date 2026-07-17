@@ -1360,9 +1360,9 @@ async function pdfToWord() {
   }
 }
 /* ──────────────────────────────────────────────────   12. WORD TO PDF
-   Uses mammoth.js to extract HTML from .docx,
+   Uses docx-preview to render the Word document visually with exact layout,
    then html2canvas + pdf-lib to render to PDF.
-   Preserves text, images, tables, and formatting.
+   Preserves layout, text alignment, images, and fonts natively.
    ────────────────────────────────────────────────── */ 
 async function wordToPDF() {
   const file = state.word2pdf.file;
@@ -1370,8 +1370,8 @@ async function wordToPDF() {
     showToast("Please select a Word document.", "error");
     return;
   }
-  if (typeof mammoth === "undefined") {
-    showToast("mammoth.js library not loaded. Please check your internet connection.", "error");
+  if (typeof docxPreview === "undefined") {
+    showToast("docx-preview library not loaded. Please check your internet connection.", "error");
     return;
   }
   if (typeof html2canvas === "undefined") {
@@ -1381,19 +1381,10 @@ async function wordToPDF() {
   showResult("word2pdf", "");
   setProgress("word2pdf", 5, "Reading Word document…");
   setButtonEnabled("btn-word2pdf", false);
+  
   try {
     const arrayBuffer = await file.arrayBuffer();
-    setProgress("word2pdf", 20, "Extracting content…");
-    const result = await mammoth.convertToHtml({
-      arrayBuffer,
-      convertImage: mammoth.images.imgElement((image) => {
-        return image.read("base64").then((imageContents) => ({
-          src: `data:${image.contentType};base64,${imageContents}`,
-        }));
-      }),
-    });
-    const htmlContent = result.value;
-    setProgress("word2pdf", 40, "Rendering document…");
+    setProgress("word2pdf", 20, "Rendering document layout…");
 
     /* Create a windowing container to prevent html2canvas from crashing on large documents */
     const container = document.createElement("div");
@@ -1414,95 +1405,42 @@ async function wordToPDF() {
     innerContent.id = "w2p-render-content";
     innerContent.style.cssText = [
       "width:794px",
-      "padding:0",           // NO container padding, so images can touch edges!
       "background:#ffffff",
       "color:#1a1a1a",
-      "font-size:12pt",
-      "line-height:1.6",
-      "box-sizing:border-box",
-      "word-break:break-word",
-      "unicode-bidi:plaintext",
+      "box-sizing:border-box"
     ].join(";");
 
-    const ARABIC_REGEX = /[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷽ﹰ-﻿]/;
-
-    function applyBidiToFragment(frag) {
-      const BLOCKS = ["P", "H1", "H2", "H3", "H4", "H5", "H6", "LI", "TD", "TH", "BLOCKQUOTE", "DIV"];
-      frag.querySelectorAll(BLOCKS.join(",")).forEach((el) => {
-        const text = el.textContent || "";
-        if (ARABIC_REGEX.test(text)) {
-          el.setAttribute("dir", "rtl");
-          el.setAttribute("lang", "ar");
-          el.childNodes.forEach((node) => {
-            if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
-              const bdi = document.createElement("bdi");
-              bdi.setAttribute("dir", ARABIC_REGEX.test(node.textContent) ? "rtl" : "ltr");
-              bdi.style.fontFamily = ARABIC_REGEX.test(node.textContent)
-                ? "'Arial','Segoe UI','Tahoma',sans-serif"
-                : "'Times New Roman',Times,serif";
-              bdi.textContent = node.textContent;
-              node.replaceWith(bdi);
-            } else if (node.nodeType === Node.ELEMENT_NODE) {
-              const inner = node.textContent || "";
-              if (ARABIC_REGEX.test(inner)) {
-                node.style.fontFamily = "'Arial','Segoe UI','Tahoma',sans-serif";
-                node.setAttribute("dir", "rtl");
-              }
-            }
-          });
-        } else {
-          if (!el.getAttribute("dir")) {
-            el.setAttribute("dir", "ltr");
-          }
-        }
-      });
-    }
-
-    const templateFrag = document.createElement("template");
-    templateFrag.innerHTML = htmlContent || "<p>(Empty document)</p>";
-    applyBidiToFragment(templateFrag.content);
-
-    const rtlAwareHtml = Array.from(templateFrag.content.childNodes)
-      .map((n) => {
-        if (n.nodeType === Node.ELEMENT_NODE && n.tagName === 'P') {
-          const children = Array.from(n.childNodes).filter(c => 
-            c.nodeType === Node.ELEMENT_NODE || (c.nodeType === Node.TEXT_NODE && c.textContent.trim().length > 0)
-          );
-          if (children.length === 1 && children[0].tagName === 'IMG') {
-            n.classList.add('full-page-image-p');
-          }
-        }
-        return n.nodeType === Node.ELEMENT_NODE ? n.outerHTML : n.textContent;
-      })
-      .join("");
-
-    innerContent.innerHTML = `
-      <style>
-        #w2p-render-content { font-family: "Times New Roman", Times, serif; unicode-bidi: plaintext; }
-        #w2p-render-content h1{font-size:22pt;margin:16px 90px 8px;line-height:1.3;}
-        #w2p-render-content h2{font-size:18pt;margin:14px 90px 6px;}
-        #w2p-render-content h3{font-size:14pt;margin:12px 90px 4px;}
-        #w2p-render-content p{margin:0 90px 8px;unicode-bidi:plaintext;}
-        #w2p-render-content table{border-collapse:collapse;width:calc(100% - 180px);margin:0 90px 12px;}
-        #w2p-render-content td,#w2p-render-content th{border:1px solid #ccc;padding:6px 8px;unicode-bidi:plaintext;}
-        #w2p-render-content img{max-width:100%;height:auto;display:block;margin:0 auto;}
-        #w2p-render-content ul,#w2p-render-content ol{margin:0 90px 8px 114px;}
-        #w2p-render-content li{margin-bottom:4px;unicode-bidi:plaintext;}
-        #w2p-render-content strong{font-weight:bold;}
-        #w2p-render-content em{font-style:italic;}
-        #w2p-render-content blockquote{border-left:3px solid #ccc;margin:8px 90px;padding-left:16px;color:#555;}
-        /* Full page image wrapper (no margins). A4 height is 1123px, force height so it aligns perfectly with windowing */
-        #w2p-render-content p.full-page-image-p { margin: 0; padding: 0; height: 1123px; display: flex; align-items: flex-start; justify-content: center; overflow: hidden; }
-        #w2p-render-content p.full-page-image-p img { width: 100%; height: auto; max-height: 100%; object-fit: cover; }
-        #w2p-render-content [dir="rtl"]{ text-align:right; font-family:'Arial','Segoe UI','Tahoma',sans-serif; }
-        #w2p-render-content bdi{unicode-bidi:isolate;}
-      </style>
-      ${rtlAwareHtml}
+    // Container for docx-preview rendering
+    const docxContainer = document.createElement("div");
+    innerContent.appendChild(docxContainer);
+    
+    // We inject some custom CSS to ensure full-width images (from pdf2word) still stretch
+    const customStyle = document.createElement("style");
+    customStyle.innerHTML = `
+      #w2p-render-content .docx-wrapper { padding: 0 !important; background: transparent !important; }
+      #w2p-render-content .docx { margin: 0 !important; box-shadow: none !important; min-height: 1123px; }
     `;
+    innerContent.appendChild(customStyle);
 
     container.appendChild(innerContent);
     document.body.appendChild(container);
 
+    // Use docx-preview to render visually
+    await docxPreview.renderAsync(arrayBuffer, docxContainer, null, {
+        className: "docx", // default
+        inWrapper: true,   // wrap in a .docx-wrapper
+        ignoreWidth: false, // preserve original document width
+        ignoreHeight: false, // preserve original document height
+        ignoreFonts: false,  // preserve fonts
+        breakPages: false,   // we slice it manually to avoid complex html2canvas multi-element targeting
+        renderHeaders: true,
+        renderFooters: true,
+        renderFootnotes: true,
+        useBase64URL: true,
+        experimental: true
+    });
+
+    // Wait for all rendered images to load
     const imgs = innerContent.querySelectorAll("img");
     await Promise.all(
       Array.from(imgs).map((img) =>
