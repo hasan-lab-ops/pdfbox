@@ -1395,15 +1395,26 @@ async function wordToPDF() {
     const htmlContent = result.value;
     setProgress("word2pdf", 40, "Rendering document…");
 
-    /* Create an off-screen container styled exactly like an A4 page */
+    /* Create a windowing container to prevent html2canvas from crashing on large documents */
     const container = document.createElement("div");
-    container.id = "w2p-render-container";
+    container.id = "w2p-render-window";
     container.style.cssText = [
-      "position:fixed",
-      "left:-9999px",
+      "position:absolute",
+      "left:0",
       "top:0",
       "width:794px",         // Exact A4 width at 96dpi
-      "min-height:1123px",   // Exact A4 height at 96dpi
+      "height:1123px",       // Exact A4 height at 96dpi (1 page)
+      "overflow:hidden",     // Hide content outside the current page
+      "opacity:0.01",        // Visually hidden but fully renderable (better than off-screen for html2canvas)
+      "pointer-events:none",
+      "background:#ffffff",
+      "z-index:-9999"
+    ].join(";");
+
+    const innerContent = document.createElement("div");
+    innerContent.id = "w2p-render-content";
+    innerContent.style.cssText = [
+      "width:794px",
       "padding:0",           // NO container padding, so images can touch edges!
       "background:#ffffff",
       "color:#1a1a1a",
@@ -1411,7 +1422,6 @@ async function wordToPDF() {
       "line-height:1.6",
       "box-sizing:border-box",
       "word-break:break-word",
-      "overflow:hidden",
       "unicode-bidi:plaintext",
     ].join(";");
 
@@ -1467,75 +1477,75 @@ async function wordToPDF() {
       })
       .join("");
 
-    container.innerHTML = `
+    innerContent.innerHTML = `
       <style>
-        #w2p-render-container { font-family: "Times New Roman", Times, serif; unicode-bidi: plaintext; }
-        #w2p-render-container h1{font-size:22pt;margin:16px 90px 8px;line-height:1.3;}
-        #w2p-render-container h2{font-size:18pt;margin:14px 90px 6px;}
-        #w2p-render-container h3{font-size:14pt;margin:12px 90px 4px;}
-        #w2p-render-container p{margin:0 90px 8px;unicode-bidi:plaintext;}
-        #w2p-render-container table{border-collapse:collapse;width:calc(100% - 180px);margin:0 90px 12px;}
-        #w2p-render-container td,#w2p-render-container th{border:1px solid #ccc;padding:6px 8px;unicode-bidi:plaintext;}
-        #w2p-render-container img{max-width:100%;height:auto;display:block;margin:0 auto;}
-        #w2p-render-container ul,#w2p-render-container ol{margin:0 90px 8px 114px;}
-        #w2p-render-container li{margin-bottom:4px;unicode-bidi:plaintext;}
-        #w2p-render-container strong{font-weight:bold;}
-        #w2p-render-container em{font-style:italic;}
-        #w2p-render-container blockquote{border-left:3px solid #ccc;margin:8px 90px;padding-left:16px;color:#555;}
-        /* Full page image wrapper (no margins) */
-        #w2p-render-container p.full-page-image-p { margin: 0; padding: 0; }
-        #w2p-render-container p.full-page-image-p img { width: 100%; height: auto; }
-        #w2p-render-container [dir="rtl"]{ text-align:right; font-family:'Arial','Segoe UI','Tahoma',sans-serif; }
-        #w2p-render-container bdi{unicode-bidi:isolate;}
+        #w2p-render-content { font-family: "Times New Roman", Times, serif; unicode-bidi: plaintext; }
+        #w2p-render-content h1{font-size:22pt;margin:16px 90px 8px;line-height:1.3;}
+        #w2p-render-content h2{font-size:18pt;margin:14px 90px 6px;}
+        #w2p-render-content h3{font-size:14pt;margin:12px 90px 4px;}
+        #w2p-render-content p{margin:0 90px 8px;unicode-bidi:plaintext;}
+        #w2p-render-content table{border-collapse:collapse;width:calc(100% - 180px);margin:0 90px 12px;}
+        #w2p-render-content td,#w2p-render-content th{border:1px solid #ccc;padding:6px 8px;unicode-bidi:plaintext;}
+        #w2p-render-content img{max-width:100%;height:auto;display:block;margin:0 auto;}
+        #w2p-render-content ul,#w2p-render-content ol{margin:0 90px 8px 114px;}
+        #w2p-render-content li{margin-bottom:4px;unicode-bidi:plaintext;}
+        #w2p-render-content strong{font-weight:bold;}
+        #w2p-render-content em{font-style:italic;}
+        #w2p-render-content blockquote{border-left:3px solid #ccc;margin:8px 90px;padding-left:16px;color:#555;}
+        /* Full page image wrapper (no margins). A4 height is 1123px, force height so it aligns perfectly with windowing */
+        #w2p-render-content p.full-page-image-p { margin: 0; padding: 0; height: 1123px; display: flex; align-items: flex-start; justify-content: center; overflow: hidden; }
+        #w2p-render-content p.full-page-image-p img { width: 100%; height: auto; max-height: 100%; object-fit: cover; }
+        #w2p-render-content [dir="rtl"]{ text-align:right; font-family:'Arial','Segoe UI','Tahoma',sans-serif; }
+        #w2p-render-content bdi{unicode-bidi:isolate;}
       </style>
       ${rtlAwareHtml}
     `;
 
+    container.appendChild(innerContent);
     document.body.appendChild(container);
 
-    const imgs = container.querySelectorAll("img");
+    const imgs = innerContent.querySelectorAll("img");
     await Promise.all(
       Array.from(imgs).map((img) =>
         img.complete ? Promise.resolve() : new Promise((r) => { img.onload = r; img.onerror = r; })
       )
     );
 
-    setProgress("word2pdf", 55, "Rendering to canvas…");
-    const fullCanvas = await html2canvas(container, {
-      scale: 2,
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: "#ffffff",
-      logging: false,
-      width: 794,
-      windowWidth: 794,
-    });
-    document.body.removeChild(container);
+    setProgress("word2pdf", 55, "Measuring document length…");
+    const totalHeight = innerContent.scrollHeight;
+    const PAGE_H = 1123; // Exact A4 height in px
+    const numPdfPages = Math.max(1, Math.ceil(totalHeight / PAGE_H));
 
     const A4W = 595.28, A4H = 841.89; // Exact A4 points
-    const imgScale = A4W / (fullCanvas.width / 2);
-    const scaledHeight = (fullCanvas.height / 2) * imgScale;
-    const numPdfPages = Math.max(1, Math.ceil(scaledHeight / A4H));
 
-    setProgress("word2pdf", 72, `Building PDF (${numPdfPages} page${numPdfPages !== 1 ? "s" : ""})…`);
+    setProgress("word2pdf", 60, `Building PDF (${numPdfPages} page${numPdfPages !== 1 ? "s" : ""})…`);
     
     const pdfDoc = await PDFLib.PDFDocument.create();
     pdfDoc.setTitle(file.name.replace(/\.(docx?)$/i, ""));
     pdfDoc.setCreator("PDF BOX");
     pdfDoc.setProducer("PDF BOX — pdfbox.app");
 
+    // Process page by page to avoid huge html2canvas memory crashes
     for (let p = 0; p < numPdfPages; p++) {
-      const srcY = p * (A4H / imgScale) * 2;
-      const srcH = Math.min((A4H / imgScale) * 2, fullCanvas.height - srcY);
-      if (srcH <= 0) break;
+      setProgress("word2pdf", 60 + Math.round((p / numPdfPages) * 35), `Rendering page ${p + 1}…`);
+      
+      // Shift content up so the window shows the current page
+      innerContent.style.transform = `translateY(-${p * PAGE_H}px)`;
+      
+      // Wait a tiny bit for browser layout to settle
+      await new Promise(r => setTimeout(r, 50));
 
-      const pageCanvas = document.createElement("canvas");
-      pageCanvas.width = fullCanvas.width;
-      pageCanvas.height = Math.ceil(srcH);
-      const pCtx = pageCanvas.getContext("2d");
-      pCtx.fillStyle = "#ffffff";
-      pCtx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
-      pCtx.drawImage(fullCanvas, 0, -srcY);
+      const pageCanvas = await html2canvas(container, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: "#ffffff",
+        logging: false,
+        width: 794,
+        height: 1123,
+        windowWidth: 794,
+        windowHeight: 1123
+      });
 
       const jpegDataUrl = pageCanvas.toDataURL("image/jpeg", 0.94);
       const jpegBlob = dataURLtoBlob(jpegDataUrl);
@@ -1543,18 +1553,17 @@ async function wordToPDF() {
       const embImg = await pdfDoc.embedJpg(new Uint8Array(jpegBuf));
       
       const page = pdfDoc.addPage([A4W, A4H]);
-      const drawH = Math.min(A4H, (srcH / 2) * imgScale);
       
-      // Image renders exactly at the A4 dimensions (no padding inside PDFLib drawing layer)
+      // Image renders exactly at the A4 dimensions
       page.drawImage(embImg, {
         x: 0,
-        y: A4H - drawH,
+        y: 0,
         width: A4W,
-        height: drawH,
+        height: A4H,
       });
-
-      setProgress("word2pdf", 72 + Math.round((p / numPdfPages) * 20), `Rendering page ${p + 1}…`);
     }
+
+    document.body.removeChild(container);
 
     setProgress("word2pdf", 95, "Saving PDF…");
     const out = await pdfDoc.save();
@@ -1564,7 +1573,7 @@ async function wordToPDF() {
     showResult("word2pdf", successResult(name, blob, `${numPdfPages} page${numPdfPages !== 1 ? "s" : ""} · ${formatSize(blob.size)}`));
     showToast("Word document converted to PDF successfully!");
   } catch (err) {
-    const container2 = document.getElementById("w2p-render-container");
+    const container2 = document.getElementById("w2p-render-window");
     if (container2) container2.remove();
     setProgress("word2pdf", null);
     showResult("word2pdf", errorResult("Conversion failed: " + err.message));
