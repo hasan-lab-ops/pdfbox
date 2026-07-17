@@ -1423,567 +1423,104 @@ async function safeConvertPDFToWord(file, onProgress) {
 window.convertPDFToWordIsolated = async function (arrayBuffer) {
   try {
     if (typeof pdfjsLib === 'undefined') throw new Error('PDF.js library is not loaded.');
-    if (typeof docx === 'undefined') throw new Error('docx.js library is not loaded.');
-    if (typeof Tesseract === 'undefined') throw new Error('Tesseract.js library is not loaded.');
 
     const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     const numPages = pdfDoc.numPages;
+    const ARABIC_REGEX = /[\u0600-\u06FF]/;
 
-    let docxChildren = [];
+    const _esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    const _bullets = (s) => s
+      .replace(/\uF0D8/g, '\u27A2')
+      .replace(/\uF0B7/g, '\u2022')
+      .replace(/\uF0A7/g, '\u25A0')
+      .replace(/\uF0FC/g, '\u2713')
+      .replace(/\uF0E0/g, '\u2709')
+      .replace(/\uF020/g, ' ')
+      .replace(/\u2022/g, '\u2022');
 
-    // Initialize Tesseract worker for Arabic and English
-    if (typeof setProgress === 'function') setProgress('pdf2word', 15, 'Loading OCR Engine (this may take a moment)...');
-    const worker = await Tesseract.createWorker('ara+eng');
+    let allPagesHtml = '';
 
     for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-      if (typeof setProgress === 'function') setProgress('pdf2word', 20 + Math.floor((pageNum / numPages) * 70), `Processing Page ${pageNum} of ${numPages}...`);
+      if (typeof setProgress === 'function') {
+        setProgress('pdf2word', 20 + Math.floor((pageNum / numPages) * 70), `Processing Page ${pageNum} of ${numPages}...`);
+      }
 
       const page = await pdfDoc.getPage(pageNum);
-      const viewport = page.getViewport({ scale: 2.0 }); // 2x scale for high-res Canvas
-      const pageWidth = page.view[2];
-      const pageHeight = page.view[3];
+      const pageViewport = page.getViewport({ scale: 1.0 });
 
-      let pageBlocks = [];
-      let imageRects = []; // Used to blind Tesseract to screenshots
-      let drawnLines = []; // Used to detect vector underlines
-      let currentPath = [];
+      const textContent = await page.getTextContent({ normalizeWhitespace: false });
+      let textHtml = '';
 
-      // 1. Extract Images and Vector Lines
-      const opList = await page.getOperatorList();
-      let ctm = [1, 0, 0, 1, 0, 0];
-      const ctmStack = [];
-      for (let i = 0; i < opList.fnArray.length; i++) {
-        const fn = opList.fnArray[i];
-        const args = opList.argsArray[i];
+      for (const item of textContent.items) {
+        if (!item.str || !item.str.trim()) continue;
+        
+        const raw = _bullets(item.str);
+        
+        const x = item.transform[4];
+        const y = pageViewport.height - item.transform[5];
 
-        if (fn === pdfjsLib.OPS.save) {
-          ctmStack.push([...ctm]);
-        } else if (fn === pdfjsLib.OPS.restore) {
-          ctm = ctmStack.pop() || [1, 0, 0, 1, 0, 0];
-        } else if (fn === pdfjsLib.OPS.transform) {
-          const [a, b, c, d, e, f] = args;
-          const [a0, b0, c0, d0, e0, f0] = ctm;
-          ctm = [
-            a0 * a + c0 * b, b0 * a + d0 * b,
-            a0 * c + c0 * d, b0 * c + d0 * d,
-            a0 * e + c0 * f + e0, b0 * e + d0 * f + f0
-          ];
-        } else if (fn === pdfjsLib.OPS.paintImageXObject || fn === pdfjsLib.OPS.paintJpegXObject) {
-          try {
-            const imgName = args[0];
-            const w = Math.abs(ctm[0]);
-            const h = Math.abs(ctm[3]);
-            const x = ctm[4];
-            const y = ctm[5]; // bottom-up Y
-            const top = pageHeight - Math.max(y, y + ctm[3]);
-            const left = x;
-
-            imageRects.push({ x: left, y: top, w: w, h: h });
-
-            const imgObj = await new Promise(resolve => {
-              try {
-                const res = page.objs.get(imgName, resolve);
-                if (res && typeof res.then === 'function') res.then(resolve);
-              } catch (e) { resolve(null); }
-            });
-
-            if (imgObj) {
-              const imgCanvas = document.createElement('canvas');
-              imgCanvas.width = imgObj.width;
-              imgCanvas.height = imgObj.height;
-              const imgCtx = imgCanvas.getContext('2d');
-              if (imgObj.data) {
-                const imgData = new ImageData(new Uint8ClampedArray(imgObj.data), imgObj.width, imgObj.height);
-                imgCtx.putImageData(imgData, 0, 0);
-              } else if (imgObj.bitmap) {
-                imgCtx.drawImage(imgObj.bitmap, 0, 0);
-              } else {
-                imgCtx.drawImage(imgObj, 0, 0);
-              }
-              const dataUrl = imgCanvas.toDataURL('image/png');
-              const res = await fetch(dataUrl);
-              const arrayBuf = await res.arrayBuffer();
-
-              pageBlocks.push({
-                type: 'image',
-                yTop: top,
-                yBottom: top + h,
-                data: arrayBuf,
-                width: Math.round(w * 1.3333), // Convert points to docx pixels
-                height: Math.round(h * 1.3333)
-              });
-            }
-          } catch (err) { console.warn("Image extraction error", err); }
-        } else if (fn === pdfjsLib.OPS.rectangle) {
-          currentPath.push({ type: 'rect', x: args[0], y: args[1], w: args[2], h: args[3] });
-        } else if (fn === pdfjsLib.OPS.moveTo) {
-          currentPath.push({ type: 'moveTo', x: args[0], y: args[1] });
-        } else if (fn === pdfjsLib.OPS.lineTo) {
-          currentPath.push({ type: 'lineTo', x: args[0], y: args[1] });
-        } else if (fn === pdfjsLib.OPS.fill || fn === pdfjsLib.OPS.stroke || fn === pdfjsLib.OPS.eoFill) {
-          let lastX = null, lastY = null;
-          for (let seg of currentPath) {
-            if (seg.type === 'rect') {
-              let px0 = seg.x * ctm[0] + seg.y * ctm[2] + ctm[4];
-              let py0 = seg.x * ctm[1] + seg.y * ctm[3] + ctm[5];
-              let px1 = (seg.x + seg.w) * ctm[0] + (seg.y + seg.h) * ctm[2] + ctm[4];
-              let py1 = (seg.x + seg.w) * ctm[1] + (seg.y + seg.h) * ctm[3] + ctm[5];
-              let w = Math.max(px0, px1) - Math.min(px0, px1);
-              let h = Math.max(py0, py1) - Math.min(py0, py1);
-
-              if (h < 5 && w > 5) {
-                drawnLines.push({ x0: Math.min(px0, px1), x1: Math.max(px0, px1), y: pageHeight - Math.max(py0, py1), thickness: h });
-              }
-            } else if (seg.type === 'moveTo') {
-              lastX = seg.x; lastY = seg.y;
-            } else if (seg.type === 'lineTo') {
-              if (lastX !== null && lastY !== null) {
-                let px0 = lastX * ctm[0] + lastY * ctm[2] + ctm[4];
-                let py0 = lastX * ctm[1] + lastY * ctm[3] + ctm[5];
-                let px1 = seg.x * ctm[0] + seg.y * ctm[2] + ctm[4];
-                let py1 = seg.x * ctm[1] + seg.y * ctm[3] + ctm[5];
-                if (Math.abs(py0 - py1) < 5 && Math.abs(px0 - px1) > 5) {
-                  drawnLines.push({ x0: Math.min(px0, px1), x1: Math.max(px0, px1), y: pageHeight - Math.max(py0, py1), thickness: 1 });
-                }
-              }
-              lastX = seg.x; lastY = seg.y;
-            }
+        let extractedColor = '#000000';
+        if (item.color) {
+          if (Array.isArray(item.color) || item.color instanceof Uint8Array || item.color instanceof Uint8ClampedArray) {
+            extractedColor = `rgb(${item.color[0]},${item.color[1]},${item.color[2]})`;
+          } else if (typeof item.color === 'string') {
+            extractedColor = item.color.startsWith('#') || item.color.startsWith('rgb') ? item.color : `#${item.color}`;
           }
-          currentPath = [];
-        } else if (fn === pdfjsLib.OPS.beginPath || fn === pdfjsLib.OPS.closePath || fn === pdfjsLib.OPS.endPath) {
-          if (fn === pdfjsLib.OPS.beginPath) currentPath = [];
-        }
-      }
-
-      // Bullet & Symbol mapper
-      const replaceBullets = (str) => {
-        return str.replace(/\uF0D8/g, '➢')
-          .replace(/\uF0B7/g, '•')
-          .replace(/\uF0A7/g, '■')
-          .replace(/\uF0FC/g, '✓')
-          .replace(/\uF0E0/g, '✉')
-          .replace(/\uF020/g, ' ')
-          .replace(/\u2022/g, '•');
-      };
-
-      // 2. Render Page to Canvas
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      canvas.width = viewport.width;
-      canvas.height = viewport.height;
-
-      const renderContext = { canvasContext: ctx, viewport: viewport };
-      await page.render(renderContext).promise;
-
-      // Color sampling helper
-      function sampleColor(px, py, pw, ph) {
-        let startX = Math.max(0, Math.floor(px));
-        let startY = Math.max(0, Math.floor(py));
-        let width = Math.max(1, Math.ceil(pw));
-        let height = Math.max(1, Math.ceil(ph));
-
-        if (startX + width > canvas.width) width = canvas.width - startX;
-        if (startY + height > canvas.height) height = canvas.height - startY;
-
-        let colorHex = '000000';
-        if (width > 0 && height > 0) {
-          let imgData = ctx.getImageData(startX, startY, width, height);
-          let pixels = imgData.data;
-          let r = 0, g = 0, b = 0, minL = 255;
-          for (let j = 0; j < pixels.length; j += 4) {
-            let pr = pixels[j], pg = pixels[j + 1], pb = pixels[j + 2];
-            let l = 0.299 * pr + 0.587 * pg + 0.114 * pb;
-            if (l < minL) {
-              minL = l;
-              r = pr; g = pg; b = pb;
-            }
-          }
-          if (minL < 240) {
-            const toHex = (c) => c.toString(16).padStart(2, '0');
-            colorHex = `${toHex(r)}${toHex(g)}${toHex(b)}`;
-          }
-        }
-        return colorHex;
-      }
-
-      // MASK IMAGES (Draw white rectangles over images to blind OCR to screenshots)
-      ctx.fillStyle = 'white';
-      for (let rect of imageRects) {
-        // rect is in PDF points, canvas is scaled by 2.0
-        // Expand mask by 8px padding to ensure total coverage
-        ctx.fillRect((rect.x * 2.0) - 4, (rect.y * 2.0) - 4, (rect.w * 2.0) + 8, (rect.h * 2.0) + 8);
-      }
-
-      // 3. Perform Tesseract OCR on the MASKED Canvas
-      const imgDataUrl = canvas.toDataURL('image/png');
-      const { data: { lines: tessLines } } = await worker.recognize(imgDataUrl);
-
-      // 4. Extract Text with PDF.js (Hybrid Approach)
-      const textContent = await page.getTextContent({ normalizeWhitespace: true });
-      let items = textContent.items.filter(item => item.str);
-
-      // Sort items top-to-bottom, then left-to-right to fix layout order
-      items.sort((a, b) => {
-        let yDiff = b.transform[5] - a.transform[5];
-        if (Math.abs(yDiff) > 5) return yDiff;
-        return a.transform[4] - b.transform[4];
-      });
-
-      let pdfLines = [];
-      let currentLine = [];
-      let currentY = null;
-
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-
-        const y = item.transform[5];
-        if (currentY === null) {
-          currentY = y;
-          currentLine.push(item);
-        } else {
-          if (Math.abs(y - currentY) <= 5) {
-            currentLine.push(item);
-            currentY = (currentY * (currentLine.length - 1) + y) / currentLine.length;
-          } else {
-            pdfLines.push(currentLine);
-            currentLine = [item];
-            currentY = y;
-          }
-        }
-      }
-      if (currentLine.length > 0) pdfLines.push(currentLine);
-
-      const RTL_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
-
-      for (let line of pdfLines) {
-        let avgY = pageHeight - (line.reduce((sum, it) => sum + it.transform[5], 0) / line.length);
-        const textStr = line.map(i => i.str).join('');
-        if ((avgY > pageHeight - 120 || avgY < 120) && /^\s*(?:-?\s*\d+\s*-?|Page\s*\d+)\s*$/i.test(textStr.trim())) continue;
-        if (!textStr.trim()) continue;
-
-        let avgFontSize = line.reduce((sum, it) => sum + Math.abs(it.transform[0]), 0) / line.length;
-
-        // ── SCRIPT-RUN SEGMENTATION ───────────────────────────────────────
-        // Split the PDF.js items for this line into contiguous runs of the
-        // same script (Arabic vs LTR). Each run is processed independently so
-        // we never blindly concatenate cross-script tokens.
-        //
-        // Example line items: [ "يكتب", "Assembly", "compiler", "يستخدم" ]
-        // Produces runs:      [ {ar: ["يكتب"]}, {ltr: ["Assembly","compiler"]}, {ar: ["يستخدم"]} ]
-        // ─────────────────────────────────────────────────────────────────
-        const runs = [];
-        let currentRun = null;
-        for (let item of line) {
-          const isItemArabic = RTL_REGEX.test(item.str);
-          if (!currentRun || currentRun.isArabic !== isItemArabic) {
-            currentRun = { isArabic: isItemArabic, items: [] };
-            runs.push(currentRun);
-          }
-          currentRun.items.push(item);
+        } else if (item.fillColor) {
+           if (Array.isArray(item.fillColor) || item.fillColor instanceof Uint8Array || item.fillColor instanceof Uint8ClampedArray) {
+             extractedColor = `rgb(${item.fillColor[0]},${item.fillColor[1]},${item.fillColor[2]})`;
+           } else if (typeof item.fillColor === 'string') {
+             extractedColor = item.fillColor.startsWith('#') || item.fillColor.startsWith('rgb') ? item.fillColor : `#${item.fillColor}`;
+           }
         }
 
-        // Determine overall line direction (majority wins)
-        const arabicItemCount = line.filter(it => RTL_REGEX.test(it.str)).length;
-        const lineIsArabic = arabicItemCount > line.length / 2;
+        const isArabic = ARABIC_REGEX.test(raw);
+        const direction = isArabic ? 'rtl' : 'ltr';
+        const textAlign = isArabic ? 'right' : 'left';
 
-        let allTextRuns = [];
-        let allRawTexts = [];
-        let pIndent = {};
-        let align = lineIsArabic ? docx.AlignmentType.RIGHT : docx.AlignmentType.LEFT;
+        // Ensure font-size fallback since item.height may be 0 sometimes
+        const fontSize = item.height || Math.abs(item.transform[3]) || Math.abs(item.transform[0]) || 12;
 
-        for (let runIdx = 0; runIdx < runs.length; runIdx++) {
-          const run = runs[runIdx];
-
-          // Insert an isolation space between adjacent script runs to guarantee
-          // a physical word-boundary gap and prevent token collision in Word.
-          if (runIdx > 0 && allTextRuns.length > 0) {
-            allTextRuns.push(new docx.TextRun({
-              text: '\u00A0', // Non-breaking space — Word renders it as a guaranteed gap
-              size: Math.round(avgFontSize * 2),
-              font: 'Arial'
-            }));
-            allRawTexts.push('\u00A0');
-          }
-
-          if (run.isArabic) {
-            // ── ARABIC RUN: use Tesseract OCR ──────────────────────────────
-            // Find the Y-bbox midpoint of this run's items to locate the
-            // matching Tesseract line on the OCR image.
-            let runAvgY = run.items.reduce((s, it) => s + (pageHeight - it.transform[5]), 0) / run.items.length;
-
-            let closestTessLine = null;
-            let minDiff = Infinity;
-            for (let tLine of tessLines) {
-              let tCenterY = ((tLine.bbox.y0 + tLine.bbox.y1) / 2.0) / 2.0;
-              let diff = Math.abs(tCenterY - runAvgY);
-              if (diff < minDiff && diff < 20) {
-                minDiff = diff;
-                closestTessLine = tLine;
-              }
-            }
-
-            // Build X-bounds of this run's items in PDF-point space so we can
-            // compute the indent and sample color for this specific run only.
-            let runMinX = Infinity, runMaxX = -Infinity;
-            for (let it of run.items) {
-              let l = it.transform[4];
-              let r = l + (it.width || avgFontSize);
-              if (l < runMinX) runMinX = l;
-              if (r > runMaxX) runMaxX = r;
-            }
-
-            if (runIdx === 0 && lineIsArabic) {
-              let marginRight = Math.max(0, pageWidth - runMaxX - 72);
-              pIndent.right = Math.round(marginRight * 20);
-            }
-
-            if (closestTessLine) {
-              let baselineY = closestTessLine.bbox.y1 / 2.0;
-              let colorHex = sampleColor(
-                closestTessLine.bbox.x0, closestTessLine.bbox.y0,
-                closestTessLine.bbox.x1 - closestTessLine.bbox.x0,
-                closestTessLine.bbox.y1 - closestTessLine.bbox.y0
-              );
-
-              let isUnderlined = false;
-              for (let dl of drawnLines) {
-                if (dl.y >= baselineY - 8 && dl.y <= baselineY + 8) {
-                  let overlap = Math.min(runMaxX, dl.x1) - Math.max(runMinX, dl.x0);
-                  if (overlap > (runMaxX - runMinX) * 0.4) { isUnderlined = true; break; }
-                }
-              }
-
-              // Trim the OCR text but preserve a trailing non-breaking space
-              // so that the next LTR run (if any) doesn't merge visually.
-              let cleanLine = replaceBullets(closestTessLine.text.replace(/\n/g, ' ')).trim();
-              if (runs.length > 1) cleanLine += '\u00A0'; // isolating gap
-              allRawTexts.push(cleanLine);
-              allTextRuns.push(new docx.TextRun({
-                text: cleanLine,
-                size: Math.round(avgFontSize * 2),
-                color: colorHex,
-                underline: isUnderlined ? { type: 'single', color: colorHex } : undefined,
-                rightToLeft: true,
-                font: 'Arial'
-              }));
-            } else {
-              // Tesseract missed this run — fall back to PDF.js glyphs
-              // but still wrap in rightToLeft so Word's BiDi engine can
-              // at least sequence them correctly.
-              let fbText = run.items.map(i => i.str).join('\u00A0'); // \u00A0 between glyphs as separator
-              allRawTexts.push(fbText);
-              allTextRuns.push(new docx.TextRun({
-                text: fbText,
-                size: Math.round(avgFontSize * 2),
-                color: '000000',
-                rightToLeft: true,
-                font: 'Arial'
-              }));
-            }
-
-          } else {
-            // ── LTR RUN: use PDF.js directly (perfect for code/English) ────
-            // Calculate the X-extent of this run so we can detect and enforce
-            // spacing gaps where items overlap or touch.
-            let prevRight = -Infinity;
-
-            for (let item of run.items) {
-              const fontSize = Math.abs(item.transform[0]) || 12;
-              const left = item.transform[4];
-              const right = left + (item.width || fontSize);
-              const baselineY = pageHeight - item.transform[5];
-              const top = baselineY - fontSize;
-
-              // ── HORIZONTAL COLLISION GUARD ──────────────────────────────
-              // If this token's left edge overlaps or is less than 1pt away
-              // from the previous token's right edge, we force an explicit
-              // space run before it. This is the core fix for "compilerdl"
-              // style merges where two PDF.js items share x-space.
-              if (prevRight > -Infinity && left < prevRight + 1 && item.str.trim()) {
-                allTextRuns.push(new docx.TextRun({
-                  text: ' ',
-                  size: Math.round(fontSize * 2),
-                  font: 'Calibri'
-                }));
-                allRawTexts.push(' ');
-              }
-              prevRight = right;
-
-              if (!item.str.trim()) {
-                // Preserve whitespace tokens as-is
-                allTextRuns.push(new docx.TextRun({ text: item.str, size: Math.round(avgFontSize * 2), font: 'Calibri' }));
-                allRawTexts.push(item.str);
-                continue;
-              }
-
-              const colorHex = sampleColor(left * 2.0, top * 2.0, (item.width || fontSize) * 2.0, fontSize * 2.0);
-
-              let isBold = (item.fontName || '').toLowerCase().includes('bold');
-              if (textContent.styles && textContent.styles[item.fontName]) {
-                const style = textContent.styles[item.fontName];
-                if (style.fontFamily && style.fontFamily.toLowerCase().includes('bold')) isBold = true;
-              }
-
-              let isUnderlined = false;
-              for (let dl of drawnLines) {
-                if (dl.y >= baselineY - 5 && dl.y <= baselineY + 8) {
-                  let overlap = Math.min(right, dl.x1) - Math.max(left, dl.x0);
-                  if (overlap > (right - left) * 0.4) { isUnderlined = true; break; }
-                }
-              }
-
-              if (runIdx === 0 && !lineIsArabic) {
-                // Set left indent from the first LTR run item only
-                let runMinX = run.items[0].transform[4];
-                pIndent.left = Math.round(Math.max(0, runMinX - 72) * 20);
-              }
-
-              const cleanText = replaceBullets(item.str);
-              allRawTexts.push(cleanText);
-              allTextRuns.push(new docx.TextRun({
-                text: cleanText,
-                size: Math.round(fontSize * 2),
-                color: colorHex,
-                bold: isBold,
-                underline: isUnderlined ? { type: 'single', color: colorHex } : undefined,
-                font: 'Calibri'
-              }));
-            }
-          }
-        }
-
-        if (allTextRuns.length === 0) continue;
-
-        pageBlocks.push({
-          type: 'text',
-          yTop: avgY - avgFontSize,
-          yBottom: avgY,
-          textRuns: allTextRuns,
-          textRaws: allRawTexts,
-          bidirectional: lineIsArabic,
-          alignment: align,
-          indent: pIndent
-        });
+        textHtml += `<span style="position: absolute; left: ${x}px; top: ${y}px; font-size:${fontSize}px; color: ${extractedColor}; white-space: nowrap; direction:${direction}; text-align: ${textAlign};">` + _esc(raw) + `</span>\n`;
       }
 
-      // 5. Group blocks into native Paragraphs for professional line wrapping
-      pageBlocks.sort((a, b) => a.yTop - b.yTop);
-
-      let paragraphs = [];
-      let currentParagraph = null;
-
-      for (let block of pageBlocks) {
-        if (block.type === 'image') {
-          paragraphs.push({ type: 'image', block: block });
-          currentParagraph = null;
-          continue;
-        }
-
-        let textStr = block.textRaws ? block.textRaws.join('').trim() : '';
-        let isBullet = /^[➢•■✓✉\-\u2022]/.test(textStr) || textStr.match(/^\d+[\)\.]/);
-
-        let startNew = false;
-        let spacingBefore = 0;
-
-        if (!currentParagraph) {
-          startNew = true;
-        } else {
-          let diff = block.yTop - currentParagraph.yBottom;
-          // Group lines into paragraphs if gap is small and properties match
-          if (diff > 8 || isBullet || block.alignment !== currentParagraph.alignment || block.bidirectional !== currentParagraph.bidirectional) {
-            startNew = true;
-            if (diff > 0) spacingBefore = Math.min(Math.round(diff * 20), 240);
-          }
-        }
-
-        if (startNew) {
-          let pIndent = { ...block.indent };
-          if (isBullet) {
-            if (block.bidirectional) {
-              pIndent.right = (pIndent.right || 0) + 360;
-              pIndent.hanging = 360;
-            } else {
-              pIndent.left = (pIndent.left || 0) + 360;
-              pIndent.hanging = 360;
-            }
-          }
-
-          currentParagraph = {
-            type: 'text',
-            yTop: block.yTop,
-            yBottom: block.yBottom,
-            textRuns: [...block.textRuns],
-            textRaws: [...(block.textRaws || [])],
-            alignment: block.alignment,
-            bidirectional: block.bidirectional,
-            indent: pIndent,
-            spacingBefore: spacingBefore
-          };
-          paragraphs.push(currentParagraph);
-        } else {
-          // Append line to current paragraph for natural native wrapping
-          let lastRaw = currentParagraph.textRaws[currentParagraph.textRaws.length - 1] || '';
-          if (!lastRaw.endsWith(' ') && !lastRaw.endsWith('-')) {
-            currentParagraph.textRuns.push(new docx.TextRun({ text: " " }));
-            currentParagraph.textRaws.push(' ');
-          }
-          currentParagraph.textRuns.push(...block.textRuns);
-          currentParagraph.textRaws.push(...block.textRaws);
-          currentParagraph.yBottom = block.yBottom;
-        }
-      }
-
-      for (let p of paragraphs) {
-        if (p.type === 'text') {
-          docxChildren.push(new docx.Paragraph({
-            children: p.textRuns,
-            bidirectional: p.bidirectional,
-            alignment: p.alignment,
-            indent: p.indent,
-            spacing: { before: p.spacingBefore, after: 0, line: 360 }, pageBreakBefore: (pageNum > 1 && p === paragraphs[0]) // Professional 1.5 line spacing
-          }));
-        } else if (p.type === 'image') {
-          docxChildren.push(new docx.Paragraph({
-            children: [
-              new docx.ImageRun({
-                data: p.block.data,
-                transformation: { width: p.block.width, height: p.block.height }
-              })
-            ],
-            alignment: docx.AlignmentType.CENTER,
-            spacing: { before: 240, after: 240 }, pageBreakBefore: (pageNum > 1 && p === paragraphs[0])
-          }));
-        }
-      }
-
-      // ALWAYS ensure at least one paragraph per page so page breaks land correctly
-      // and the output Word document has the same page count as the original PDF.
-      if (paragraphs.length === 0) {
-        docxChildren.push(new docx.Paragraph({ children: [], pageBreakBefore: pageNum > 1 }));
-      }
-
-      if (pageNum < numPages) {
-        /* PageBreak removed to prevent extra empty pages */
-      }
+      const pageBreak = pageNum < numPages ? 'page-break-after: always;' : '';
+      allPagesHtml += `<div style="position: relative; width: 800px; height: 1100px; background: #ffffff; ${pageBreak}">\n`
+        + textHtml
+        + `</div>\n`;
     }
 
-    await worker.terminate();
+    const wordHtml = `<!DOCTYPE html>
+<html xmlns:o="urn:schemas-microsoft-com:office:office"
+      xmlns:w="urn:schemas-microsoft-com:office:word"
+      xmlns="http://www.w3.org/TR/REC-html40">
+<head>
+  <meta charset="UTF-8">
+  <meta name="ProgId" content="Word.Document">
+  <meta name="Generator" content="PDF BOX">
+  <style>
+    @page WordSection1 {
+      size: auto;
+      margin: 0pt;
+      mso-header-margin: 0pt;
+      mso-footer-margin: 0pt;
+    }
+    body { margin: 0; padding: 0; background: #ffffff; }
+    div.WordSection1 { page: WordSection1; }
+  </style>
+</head>
+<body>
+<div class="WordSection1">
+${allPagesHtml}</div>
+</body>
+</html>`;
 
-    const wordDoc = new docx.Document({
-      creator: 'PDF BOX',
-      sections: [{
-        properties: {
-          page: { margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } },
-        },
-        children: docxChildren.length ? docxChildren : [new docx.Paragraph({ children: [new docx.TextRun('(No text or images found)')] })]
-      }]
-    });
+    if (typeof setProgress === 'function') setProgress('pdf2word', 95, 'Building document...');
+    return new Blob([wordHtml], { type: 'application/msword' });
 
-    if (typeof setProgress === 'function') setProgress('pdf2word', 95, 'Saving DOCX format...');
-    return await docx.Packer.toBlob(wordDoc);
   } catch (error) {
-    console.error("PDF to Word Conversion Error:", error);
-    alert("An error occurred during conversion: " + error.message);
+    console.error('[PDF BOX] PDF\u2192Word (Absolute Layout) Error:', error);
+    alert('An error occurred during conversion: ' + error.message);
     throw error;
   }
 };
@@ -2001,7 +1538,7 @@ async function pdfToWord() {
     setProgress('pdf2word', 50, 'Converting to Word format...');
     const blob = await window.convertPDFToWordIsolated(arrayBuffer);
 
-    const name = file.name.replace(/\.pdf$/i, '') + '.docx';
+    const name = file.name.replace(/\.pdf$/i, '') + '.doc'; // Word HTML format
     setProgress('pdf2word', 100, 'Complete!');
     showResult('pdf2word', successResult(name, blob, formatSize(blob.size)));
     showToast('PDF converted to Word successfully!');
