@@ -1393,6 +1393,20 @@ async function safeConvertPDFToWord(file, onProgress) {
         page: { margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } },
         bidi: true,
       },
+      footers: {
+        default: new docx.Footer({
+          children: [
+            new docx.Paragraph({
+              alignment: docx.AlignmentType.CENTER,
+              children: [
+                new docx.TextRun({
+                  children: [docx.PageNumber.CURRENT],
+                }),
+              ],
+            }),
+          ],
+        }),
+      },
       children: docxChildren.length
         ? docxChildren
         : [new docx.Paragraph({ children: [new docx.TextRun('(No extractable text found in this PDF)')] })]
@@ -1644,6 +1658,7 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
       for (let line of pdfLines) {
         let avgY = pageHeight - (line.reduce((sum, it) => sum + it.transform[5], 0) / line.length);
         const textStr = line.map(i => i.str).join('');
+          if ((avgY > pageHeight - 120 || avgY < 120) && /^\s*(?:-?\s*\d+\s*-?|Page\s*\d+)\s*$/i.test(textStr.trim())) continue;
         if (!textStr.trim()) continue;
 
         const isArabic = RTL_REGEX.test(textStr);
