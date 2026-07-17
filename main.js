@@ -1294,11 +1294,11 @@ async function safeConvertPDFToWord(file, onProgress) {
         // If no lines were pushed for this page, add a placeholder paragraph
         // so the page break produces a real blank page in the output DOCX.
         if (!data.lines.some(l => l.text.replace(/\n/g, '').trim())) {
-          docxChildren.push(new docx.Paragraph({ children: [] }));
+          docxChildren.push(new docx.Paragraph({ children: [], pageBreakBefore: pageNum > 1 }));
         }
 
         if (pageNum < numPages) {
-          docxChildren.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
+          /* PageBreak removed to prevent extra empty pages */
         }
       }
 
@@ -1325,7 +1325,7 @@ async function safeConvertPDFToWord(file, onProgress) {
       let pageHasContent = false;
       if (!items.length) {
         // Blank page — keep an empty paragraph as placeholder to preserve page count
-        docxChildren.push(new docx.Paragraph({ children: [] }));
+        docxChildren.push(new docx.Paragraph({ children: [], pageBreakBefore: pageNum > 1 }));
         pageHasContent = true;
       } else {
         // Group by Y baseline into lines
@@ -1367,12 +1367,12 @@ async function safeConvertPDFToWord(file, onProgress) {
 
         // If all lines were empty after trimming, add placeholder to preserve page count
         if (!pageHasContent) {
-          docxChildren.push(new docx.Paragraph({ children: [] }));
+          docxChildren.push(new docx.Paragraph({ children: [], pageBreakBefore: pageNum > 1 }));
         }
       }
 
       if (pageNum < numPages) {
-        docxChildren.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
+        /* PageBreak removed to prevent extra empty pages */
       }
     }
   }
@@ -1809,7 +1809,7 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
           // Group lines into paragraphs if gap is small and properties match
           if (diff > 8 || isBullet || block.alignment !== currentParagraph.alignment || block.bidirectional !== currentParagraph.bidirectional) {
             startNew = true;
-            if (diff > 0) spacingBefore = Math.round(diff * 20);
+            if (diff > 0) spacingBefore = Math.min(Math.round(diff * 20), 240);
           }
         }
 
@@ -1857,7 +1857,7 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
             bidirectional: p.bidirectional,
             alignment: p.alignment,
             indent: p.indent,
-            spacing: { before: p.spacingBefore, after: 0, line: 360 } // Professional 1.5 line spacing
+            spacing: { before: p.spacingBefore, after: 0, line: 360 }, pageBreakBefore: (pageNum > 1 && p === paragraphs[0]) // Professional 1.5 line spacing
           }));
         } else if (p.type === 'image') {
           docxChildren.push(new docx.Paragraph({
@@ -1868,7 +1868,7 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
               })
             ],
             alignment: docx.AlignmentType.CENTER,
-            spacing: { before: 240, after: 240 }
+            spacing: { before: 240, after: 240 }, pageBreakBefore: (pageNum > 1 && p === paragraphs[0])
           }));
         }
       }
@@ -1876,11 +1876,11 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
       // ALWAYS ensure at least one paragraph per page so page breaks land correctly
       // and the output Word document has the same page count as the original PDF.
       if (paragraphs.length === 0) {
-        docxChildren.push(new docx.Paragraph({ children: [] }));
+        docxChildren.push(new docx.Paragraph({ children: [], pageBreakBefore: pageNum > 1 }));
       }
 
       if (pageNum < numPages) {
-        docxChildren.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
+        /* PageBreak removed to prevent extra empty pages */
       }
     }
 
