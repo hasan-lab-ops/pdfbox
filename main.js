@@ -1658,141 +1658,209 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
       for (let line of pdfLines) {
         let avgY = pageHeight - (line.reduce((sum, it) => sum + it.transform[5], 0) / line.length);
         const textStr = line.map(i => i.str).join('');
-          if ((avgY > pageHeight - 120 || avgY < 120) && /^\s*(?:-?\s*\d+\s*-?|Page\s*\d+)\s*$/i.test(textStr.trim())) continue;
+        if ((avgY > pageHeight - 120 || avgY < 120) && /^\s*(?:-?\s*\d+\s*-?|Page\s*\d+)\s*$/i.test(textStr.trim())) continue;
         if (!textStr.trim()) continue;
 
-        const isArabic = RTL_REGEX.test(textStr);
         let avgFontSize = line.reduce((sum, it) => sum + Math.abs(it.transform[0]), 0) / line.length;
 
-        let textRuns = [];
-        let rawTexts = []; // parallel plain-string list, avoids accessing .text on docx instances
+        // ── SCRIPT-RUN SEGMENTATION ───────────────────────────────────────
+        // Split the PDF.js items for this line into contiguous runs of the
+        // same script (Arabic vs LTR). Each run is processed independently so
+        // we never blindly concatenate cross-script tokens.
+        //
+        // Example line items: [ "يكتب", "Assembly", "compiler", "يستخدم" ]
+        // Produces runs:      [ {ar: ["يكتب"]}, {ltr: ["Assembly","compiler"]}, {ar: ["يستخدم"]} ]
+        // ─────────────────────────────────────────────────────────────────
+        const runs = [];
+        let currentRun = null;
+        for (let item of line) {
+          const isItemArabic = RTL_REGEX.test(item.str);
+          if (!currentRun || currentRun.isArabic !== isItemArabic) {
+            currentRun = { isArabic: isItemArabic, items: [] };
+            runs.push(currentRun);
+          }
+          currentRun.items.push(item);
+        }
+
+        // Determine overall line direction (majority wins)
+        const arabicItemCount = line.filter(it => RTL_REGEX.test(it.str)).length;
+        const lineIsArabic = arabicItemCount > line.length / 2;
+
+        let allTextRuns = [];
+        let allRawTexts = [];
         let pIndent = {};
-        let align = docx.AlignmentType.LEFT;
+        let align = lineIsArabic ? docx.AlignmentType.RIGHT : docx.AlignmentType.LEFT;
 
-        if (!isArabic) {
-          // USE PDF.JS NATIVELY FOR PERFECT LTR (PROGRAMMING CODE, ENGLISH)
-          let minX = pageWidth, maxX = 0;
-          for (let it of line) {
-            let left = it.transform[4];
-            let right = left + (it.width || 0);
-            if (left < minX) minX = left;
-            if (right > maxX) maxX = right;
-          }
-          pIndent.left = Math.round(Math.max(0, minX - 72) * 20);
+        for (let runIdx = 0; runIdx < runs.length; runIdx++) {
+          const run = runs[runIdx];
 
-          for (let item of line) {
-            if (!item.str.trim()) {
-              textRuns.push(new docx.TextRun({ text: item.str, size: Math.round(avgFontSize * 2), font: "Calibri" }));
-              rawTexts.push(item.str);
-              continue;
-            }
-
-            let fontSize = Math.abs(item.transform[0]) || 12;
-            let left = item.transform[4];
-            let right = left + (item.width || 0);
-            let baselineY = pageHeight - item.transform[5];
-            let top = baselineY - fontSize;
-
-            // Sample color from canvas
-            let colorHex = sampleColor(left * 2.0, top * 2.0, (item.width || fontSize) * 2.0, fontSize * 2.0);
-
-            let isBold = (item.fontName || '').toLowerCase().includes('bold');
-            if (textContent.styles && textContent.styles[item.fontName]) {
-              const style = textContent.styles[item.fontName];
-              if (style.fontFamily && style.fontFamily.toLowerCase().includes('bold')) isBold = true;
-            }
-
-            // Check for underlines
-            let isUnderlined = false;
-            for (let dl of drawnLines) {
-              if (dl.y >= baselineY - 5 && dl.y <= baselineY + 8) {
-                let overlap = Math.min(right, dl.x1) - Math.max(left, dl.x0);
-                if (overlap > (right - left) * 0.4) {
-                  isUnderlined = true; break;
-                }
-              }
-            }
-
-            const cleanText = replaceBullets(item.str);
-            rawTexts.push(cleanText);
-            textRuns.push(new docx.TextRun({
-              text: cleanText,
-              size: Math.round(fontSize * 2), // Half-points
-              color: colorHex,
-              bold: isBold,
-              underline: isUnderlined ? { type: "single", color: colorHex } : undefined,
-              font: "Calibri"
-            }));
-          }
-        } else {
-          // USE TESSERACT FOR ARABIC TO BYPASS BROKEN UNICODE MAPPING
-          let closestTessLine = null;
-          let minDiff = Infinity;
-          for (let tLine of tessLines) {
-            // Tesseract bbox is at 2x scale. Convert to 1x points for comparison.
-            let tCenterY = ((tLine.bbox.y0 + tLine.bbox.y1) / 2.0) / 2.0;
-            let diff = Math.abs(tCenterY - avgY);
-            if (diff < minDiff && diff < 20) { // within 20 points vertical match
-              minDiff = diff;
-              closestTessLine = tLine;
-            }
-          }
-
-          if (closestTessLine) {
-            let minX = closestTessLine.bbox.x0 / 2.0;
-            let maxX = closestTessLine.bbox.x1 / 2.0;
-            let marginRight = Math.max(0, pageWidth - maxX - 72);
-            pIndent.right = Math.round(marginRight * 20);
-            align = docx.AlignmentType.RIGHT;
-
-            let baselineY = closestTessLine.bbox.y1 / 2.0;
-            let left = minX;
-            let right = maxX;
-
-            // Sample color of the entire Arabic line
-            let colorHex = sampleColor(closestTessLine.bbox.x0, closestTessLine.bbox.y0, closestTessLine.bbox.x1 - closestTessLine.bbox.x0, closestTessLine.bbox.y1 - closestTessLine.bbox.y0);
-
-            let isUnderlined = false;
-            for (let dl of drawnLines) {
-              if (dl.y >= baselineY - 8 && dl.y <= baselineY + 8) {
-                let overlap = Math.min(right, dl.x1) - Math.max(left, dl.x0);
-                if (overlap > (right - left) * 0.4) {
-                  isUnderlined = true; break;
-                }
-              }
-            }
-
-            const cleanLine = replaceBullets(closestTessLine.text.replace(/\n/g, ' ')).trim() + " ";
-            rawTexts.push(cleanLine);
-            textRuns.push(new docx.TextRun({
-              text: cleanLine,
-              size: Math.round(avgFontSize * 2), // PERFECT SIZE FROM PDF.JS
-              color: colorHex,
-              underline: isUnderlined ? { type: "single", color: colorHex } : undefined,
-              rightToLeft: true, // Native BiDi
-              font: "Arial"
-            }));
-          } else {
-            // Fallback if Tesseract missed the line: use PDF.js garbage text so it's not entirely lost
-            let fbText = line.map(i => i.str).join('');
-            rawTexts.push(fbText);
-            textRuns.push(new docx.TextRun({
-              text: fbText,
+          // Insert an isolation space between adjacent script runs to guarantee
+          // a physical word-boundary gap and prevent token collision in Word.
+          if (runIdx > 0 && allTextRuns.length > 0) {
+            allTextRuns.push(new docx.TextRun({
+              text: '\u00A0', // Non-breaking space — Word renders it as a guaranteed gap
               size: Math.round(avgFontSize * 2),
-              color: '000000',
-              rightToLeft: true,
-              font: "Arial"
+              font: 'Arial'
             }));
+            allRawTexts.push('\u00A0');
+          }
+
+          if (run.isArabic) {
+            // ── ARABIC RUN: use Tesseract OCR ──────────────────────────────
+            // Find the Y-bbox midpoint of this run's items to locate the
+            // matching Tesseract line on the OCR image.
+            let runAvgY = run.items.reduce((s, it) => s + (pageHeight - it.transform[5]), 0) / run.items.length;
+
+            let closestTessLine = null;
+            let minDiff = Infinity;
+            for (let tLine of tessLines) {
+              let tCenterY = ((tLine.bbox.y0 + tLine.bbox.y1) / 2.0) / 2.0;
+              let diff = Math.abs(tCenterY - runAvgY);
+              if (diff < minDiff && diff < 20) {
+                minDiff = diff;
+                closestTessLine = tLine;
+              }
+            }
+
+            // Build X-bounds of this run's items in PDF-point space so we can
+            // compute the indent and sample color for this specific run only.
+            let runMinX = Infinity, runMaxX = -Infinity;
+            for (let it of run.items) {
+              let l = it.transform[4];
+              let r = l + (it.width || avgFontSize);
+              if (l < runMinX) runMinX = l;
+              if (r > runMaxX) runMaxX = r;
+            }
+
+            if (runIdx === 0 && lineIsArabic) {
+              let marginRight = Math.max(0, pageWidth - runMaxX - 72);
+              pIndent.right = Math.round(marginRight * 20);
+            }
+
+            if (closestTessLine) {
+              let baselineY = closestTessLine.bbox.y1 / 2.0;
+              let colorHex = sampleColor(
+                closestTessLine.bbox.x0, closestTessLine.bbox.y0,
+                closestTessLine.bbox.x1 - closestTessLine.bbox.x0,
+                closestTessLine.bbox.y1 - closestTessLine.bbox.y0
+              );
+
+              let isUnderlined = false;
+              for (let dl of drawnLines) {
+                if (dl.y >= baselineY - 8 && dl.y <= baselineY + 8) {
+                  let overlap = Math.min(runMaxX, dl.x1) - Math.max(runMinX, dl.x0);
+                  if (overlap > (runMaxX - runMinX) * 0.4) { isUnderlined = true; break; }
+                }
+              }
+
+              // Trim the OCR text but preserve a trailing non-breaking space
+              // so that the next LTR run (if any) doesn't merge visually.
+              let cleanLine = replaceBullets(closestTessLine.text.replace(/\n/g, ' ')).trim();
+              if (runs.length > 1) cleanLine += '\u00A0'; // isolating gap
+              allRawTexts.push(cleanLine);
+              allTextRuns.push(new docx.TextRun({
+                text: cleanLine,
+                size: Math.round(avgFontSize * 2),
+                color: colorHex,
+                underline: isUnderlined ? { type: 'single', color: colorHex } : undefined,
+                rightToLeft: true,
+                font: 'Arial'
+              }));
+            } else {
+              // Tesseract missed this run — fall back to PDF.js glyphs
+              // but still wrap in rightToLeft so Word's BiDi engine can
+              // at least sequence them correctly.
+              let fbText = run.items.map(i => i.str).join('\u00A0'); // \u00A0 between glyphs as separator
+              allRawTexts.push(fbText);
+              allTextRuns.push(new docx.TextRun({
+                text: fbText,
+                size: Math.round(avgFontSize * 2),
+                color: '000000',
+                rightToLeft: true,
+                font: 'Arial'
+              }));
+            }
+
+          } else {
+            // ── LTR RUN: use PDF.js directly (perfect for code/English) ────
+            // Calculate the X-extent of this run so we can detect and enforce
+            // spacing gaps where items overlap or touch.
+            let prevRight = -Infinity;
+
+            for (let item of run.items) {
+              const fontSize = Math.abs(item.transform[0]) || 12;
+              const left = item.transform[4];
+              const right = left + (item.width || fontSize);
+              const baselineY = pageHeight - item.transform[5];
+              const top = baselineY - fontSize;
+
+              // ── HORIZONTAL COLLISION GUARD ──────────────────────────────
+              // If this token's left edge overlaps or is less than 1pt away
+              // from the previous token's right edge, we force an explicit
+              // space run before it. This is the core fix for "compilerdl"
+              // style merges where two PDF.js items share x-space.
+              if (prevRight > -Infinity && left < prevRight + 1 && item.str.trim()) {
+                allTextRuns.push(new docx.TextRun({
+                  text: ' ',
+                  size: Math.round(fontSize * 2),
+                  font: 'Calibri'
+                }));
+                allRawTexts.push(' ');
+              }
+              prevRight = right;
+
+              if (!item.str.trim()) {
+                // Preserve whitespace tokens as-is
+                allTextRuns.push(new docx.TextRun({ text: item.str, size: Math.round(avgFontSize * 2), font: 'Calibri' }));
+                allRawTexts.push(item.str);
+                continue;
+              }
+
+              const colorHex = sampleColor(left * 2.0, top * 2.0, (item.width || fontSize) * 2.0, fontSize * 2.0);
+
+              let isBold = (item.fontName || '').toLowerCase().includes('bold');
+              if (textContent.styles && textContent.styles[item.fontName]) {
+                const style = textContent.styles[item.fontName];
+                if (style.fontFamily && style.fontFamily.toLowerCase().includes('bold')) isBold = true;
+              }
+
+              let isUnderlined = false;
+              for (let dl of drawnLines) {
+                if (dl.y >= baselineY - 5 && dl.y <= baselineY + 8) {
+                  let overlap = Math.min(right, dl.x1) - Math.max(left, dl.x0);
+                  if (overlap > (right - left) * 0.4) { isUnderlined = true; break; }
+                }
+              }
+
+              if (runIdx === 0 && !lineIsArabic) {
+                // Set left indent from the first LTR run item only
+                let runMinX = run.items[0].transform[4];
+                pIndent.left = Math.round(Math.max(0, runMinX - 72) * 20);
+              }
+
+              const cleanText = replaceBullets(item.str);
+              allRawTexts.push(cleanText);
+              allTextRuns.push(new docx.TextRun({
+                text: cleanText,
+                size: Math.round(fontSize * 2),
+                color: colorHex,
+                bold: isBold,
+                underline: isUnderlined ? { type: 'single', color: colorHex } : undefined,
+                font: 'Calibri'
+              }));
+            }
           }
         }
 
+        if (allTextRuns.length === 0) continue;
+
         pageBlocks.push({
           type: 'text',
-          yTop: avgY - avgFontSize, // Top of the text
-          yBottom: avgY, // Baseline
-          textRuns: textRuns,
-          textRaws: rawTexts, // plain strings for safe inspection
-          bidirectional: isArabic,
+          yTop: avgY - avgFontSize,
+          yBottom: avgY,
+          textRuns: allTextRuns,
+          textRaws: allRawTexts,
+          bidirectional: lineIsArabic,
           alignment: align,
           indent: pIndent
         });
