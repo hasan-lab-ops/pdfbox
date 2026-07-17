@@ -1360,9 +1360,9 @@ async function pdfToWord() {
   }
 }
 /* ──────────────────────────────────────────────────   12. WORD TO PDF
-   Uses docx-preview to render the Word document visually with exact layout,
-   then html2canvas + pdf-lib to render to PDF.
-   Preserves layout, text alignment, images, and fonts natively.
+   Uses docx-preview to render the Word document visually with exact layout.
+   Includes a custom JSZip fallback to manually extract page borders and 
+   missing floating images (like header logos) that docx-preview drops.
    ────────────────────────────────────────────────── */ 
 async function wordToPDF() {
   const file = state.word2pdf.file;
@@ -1378,12 +1378,69 @@ async function wordToPDF() {
     showToast("html2canvas library not loaded. Please check your internet connection.", "error");
     return;
   }
+  if (typeof JSZip === "undefined") {
+    showToast("JSZip library not loaded. Please check your internet connection.", "error");
+    return;
+  }
+  
   showResult("word2pdf", "");
   setProgress("word2pdf", 5, "Reading Word document…");
   setButtonEnabled("btn-word2pdf", false);
   
   try {
     const arrayBuffer = await file.arrayBuffer();
+    
+    // --- SMART FALLBACK: MANUALLY PARSE DOCX FOR BORDERS AND MISSING IMAGES ---
+    setProgress("word2pdf", 10, "Analyzing document structure…");
+    const zip = await JSZip.loadAsync(arrayBuffer);
+    
+    let borderCss = "";
+    let extractedImages = [];
+    
+    // 1. Extract Page Borders
+    try {
+      const docXmlFile = zip.file("word/document.xml");
+      if (docXmlFile) {
+        const docXml = await docXmlFile.async("string");
+        // Look for page borders: <w:pgBorders> ... </w:pgBorders>
+        if (docXml.includes("w:pgBorders")) {
+          // Check border style (default to solid, but check for double)
+          let borderStyle = "solid";
+          if (docXml.includes('w:val="double"')) borderStyle = "double";
+          else if (docXml.includes('w:val="dashed"')) borderStyle = "dashed";
+          
+          // Apply a nice 3px border to the docx pages
+          borderCss = `
+            #w2p-render-content .docx { 
+              border: 3px ${borderStyle} #000 !important; 
+              padding: 40px !important; 
+              box-sizing: border-box;
+            }
+          `;
+        }
+      }
+    } catch (e) {
+      console.warn("Could not parse borders", e);
+    }
+
+    // 2. Extract All Images from word/media/
+    try {
+      const mediaFiles = Object.keys(zip.files).filter(k => k.startsWith("word/media/") && !zip.files[k].dir);
+      for (const mediaPath of mediaFiles) {
+        const ext = mediaPath.split('.').pop().toLowerCase();
+        let mime = "image/png";
+        if (ext === "jpg" || ext === "jpeg") mime = "image/jpeg";
+        else if (ext === "gif") mime = "image/gif";
+        else if (ext === "svg") mime = "image/svg+xml";
+        
+        const base64 = await zip.file(mediaPath).async("base64");
+        extractedImages.push(`data:${mime};base64,${base64}`);
+      }
+    } catch (e) {
+      console.warn("Could not extract media", e);
+    }
+    // --------------------------------------------------------------------------
+
     setProgress("word2pdf", 20, "Rendering document layout…");
 
     /* Create a windowing container to prevent html2canvas from crashing on large documents */
@@ -1414,11 +1471,12 @@ async function wordToPDF() {
     const docxContainer = document.createElement("div");
     innerContent.appendChild(docxContainer);
     
-    // We inject some custom CSS to ensure full-width images (from pdf2word) still stretch
+    // We inject custom CSS for full-width images and the extracted border
     const customStyle = document.createElement("style");
     customStyle.innerHTML = `
       #w2p-render-content .docx-wrapper { padding: 0 !important; background: transparent !important; }
       #w2p-render-content .docx { margin: 0 !important; box-shadow: none !important; min-height: 1123px; }
+      ${borderCss}
     `;
     innerContent.appendChild(customStyle);
 
@@ -1440,10 +1498,34 @@ async function wordToPDF() {
         experimental: true
     });
 
+    // --- SMART FALLBACK: INJECT MISSING IMAGES ---
+    // If the document actually has images, but docx-preview failed to render them (e.g. VML or complex anchoring)
+    const renderedImgs = docxContainer.querySelectorAll("img");
+    if (extractedImages.length > 0 && renderedImgs.length === 0) {
+      // docx-preview completely failed to render the images (likely the floating logos).
+      // We will manually inject them into the top of the first page!
+      const firstPage = docxContainer.querySelector(".docx");
+      if (firstPage) {
+        const imageHeader = document.createElement("div");
+        imageHeader.style.cssText = "display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; width: 100%;";
+        
+        extractedImages.forEach(src => {
+          const img = document.createElement("img");
+          img.src = src;
+          // Constrain logos so they don't blow up the page
+          img.style.cssText = "max-width: 150px; max-height: 150px; object-fit: contain;";
+          imageHeader.appendChild(img);
+        });
+        
+        firstPage.insertBefore(imageHeader, firstPage.firstChild);
+      }
+    }
+    // ------------------------------------------------
+
     // Wait for all rendered images to load
-    const imgs = innerContent.querySelectorAll("img");
+    const allImgs = innerContent.querySelectorAll("img");
     await Promise.all(
-      Array.from(imgs).map((img) =>
+      Array.from(allImgs).map((img) =>
         img.complete ? Promise.resolve() : new Promise((r) => { img.onload = r; img.onerror = r; })
       )
     );
@@ -1467,7 +1549,6 @@ async function wordToPDF() {
       setProgress("word2pdf", 60 + Math.round((p / numPdfPages) * 35), `Rendering page ${p + 1}…`);
       
       // Shift content up so the window shows the current page
-      // We use marginTop instead of transform for safer html2canvas rendering
       innerContent.style.marginTop = `-${p * PAGE_H}px`;
       
       // Wait a tiny bit for browser layout to settle
@@ -1492,7 +1573,6 @@ async function wordToPDF() {
       
       const page = pdfDoc.addPage([A4W, A4H]);
       
-      // Image renders exactly at the A4 dimensions
       page.drawImage(embImg, {
         x: 0,
         y: 0,
