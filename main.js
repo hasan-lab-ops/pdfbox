@@ -1518,48 +1518,47 @@ async function convertPDFToWord(arrayBuffer) {
         continue;
       }
 
-      const lineItems = block.items;
-      lineItems.sort((a, b) => a.x - b.x); // STEP 1: sort horizontally
-
       const ARABIC_RE =
         /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/;
-      const fullLineText = lineItems.map((li) => li.item.str).join(" ");
+      const fullLineText = block.items.map((li) => li.item.str).join(" ");
       const lineIsArabic = ARABIC_RE.test(fullLineText);
 
-      function reverseArabicSafe(str) {
-        // Keeps Arabic combining marks (Tashkeel) with their base letters when reversing
-        const charWithMarks =
-          /[\s\S][\u0610-\u061A\u064B-\u065F\u0670\u08D4-\u08E1\u08D3-\u08FF]*/g;
-        const match = str.match(charWithMarks);
-        return match ? match.reverse().join("") : str;
-      }
+      // STEP 1: Layout Sorting (Y-Axis Clustering & X-Axis Sequence)
+      // Ensure the insertion order into the paragraph matches the reading sequence of the line's primary language.
+      const lineItems = block.items;
+      lineItems.sort((a, b) => (lineIsArabic ? b.x - a.x : a.x - b.x));
 
-      // --- STEP 2: BIDI UNSHUFFLER ---
-      const visualItems = [];
+      const runs = [];
       let lastEdge = null;
+
       for (const li of lineItems) {
+        let raw = fixBullets(li.item.str);
+        if (!raw.trim()) continue;
+
+        // 1. Robust BiDi Normalization: map Presentation Forms to standard logical Arabic characters
+        if (ARABIC_RE.test(raw)) {
+          raw = raw.normalize("NFKD");
+        }
+
         const sizePt = Math.round(
           Math.abs(li.item.transform[3]) ||
             Math.abs(li.item.transform[0]) ||
             li.item.height ||
             12,
         );
+
+        let gap = "";
         if (lastEdge !== null) {
-          const gapPts = li.x - lastEdge;
+          const gapPts = lineIsArabic
+            ? lastEdge - (li.x + (li.item.width || 0))
+            : li.x - lastEdge;
+
           const spaceW = sizePt * 0.3;
           if (gapPts > spaceW * 0.8) {
-            const numSpaces = Math.max(1, Math.round(gapPts / spaceW));
-            visualItems.push({
-              isSpace: true,
-              str: " ".repeat(numSpaces),
-              colorHex: li.colorHex,
-              fontFamily: "Arial",
-              sizePt: sizePt,
-              bold: false,
-              italics: false,
-            });
+            gap = " ".repeat(Math.max(1, Math.round(gapPts / spaceW)));
           }
         }
+        lastEdge = lineIsArabic ? li.x : li.x + (li.item.width || 0);
 
         const fn = (li.item.fontName || "").toLowerCase();
         const fontFamily = fn.includes("times")
@@ -1570,85 +1569,34 @@ async function convertPDFToWord(arrayBuffer) {
               ? "Calibri"
               : "Arial";
 
-        visualItems.push({
-          isSpace: false,
-          str: fixBullets(li.item.str).trim(), // Trim to avoid double spacing with explicit gaps
-          colorHex: li.colorHex,
-          fontFamily,
-          sizePt,
-          bold: fn.includes("bold"),
-          italics: fn.includes("italic"),
-        });
-        lastEdge = li.x + (li.item.width || 0);
-      }
+        // 2. Strict Bidirectional (BiDi) Segmentation
+        const fullText = gap + raw;
+        const tokenRegex =
+          /([\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]+)|([^\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]+)/g;
+        let match;
 
-      // Group into LTR / RTL blocks based on Arabic characters
-      let bidiBlocks = [];
-      let currentBidiBlock = [];
-      let currentType = lineIsArabic ? "RTL" : "LTR";
+        while ((match = tokenRegex.exec(fullText)) !== null) {
+          const tokenText = match[0];
+          const isArabicToken = ARABIC_RE.test(tokenText);
 
-      for (const v of visualItems) {
-        if (!v.str) continue;
-        const hasArabic = ARABIC_RE.test(v.str);
-        const hasEnglish = /[a-zA-Z]/.test(v.str);
-
-        let type = currentType;
-        if (hasArabic) type = "RTL";
-        else if (hasEnglish) type = "LTR";
-
-        if (type === currentType) {
-          currentBidiBlock.push(v);
-        } else {
-          if (currentBidiBlock.length > 0)
-            bidiBlocks.push({ type: currentType, items: currentBidiBlock });
-          currentType = type;
-          currentBidiBlock = [v];
+          runs.push(
+            new docx.TextRun({
+              text: tokenText,
+              font: isArabicToken ? "Arial" : fontFamily,
+              size: ptToHp(sizePt),
+              color: li.colorHex,
+              bold: fn.includes("bold"),
+              italics: fn.includes("italic"),
+              underline: fn.includes("underline") ? {} : undefined,
+              rightToLeft: isArabicToken,
+            }),
+          );
         }
-      }
-      if (currentBidiBlock.length > 0)
-        bidiBlocks.push({ type: currentType, items: currentBidiBlock });
-
-      // Visual block layout to logical layout
-      if (lineIsArabic) {
-        bidiBlocks.reverse(); // If base is RTL, blocks were placed right-to-left visually
-      }
-
-      let logicalItems = [];
-      for (const b of bidiBlocks) {
-        if (b.type === "RTL") {
-          // Inside an RTL block, the items are visually left-to-right (which means logical end to logical start)
-          const rev = [...b.items].reverse();
-          for (const item of rev) {
-            // PDF.js often extracts Arabic characters in visual (left-to-right) order inside strings too
-            if (!item.isSpace && ARABIC_RE.test(item.str)) {
-              item.str = reverseArabicSafe(item.str);
-            }
-          }
-          logicalItems.push(...rev);
-        } else {
-          logicalItems.push(...b.items);
-        }
-      }
-
-      const runs = [];
-      for (const item of logicalItems) {
-        if (!item.str) continue;
-        const segIsArabic = ARABIC_RE.test(item.str);
-        runs.push(
-          new docx.TextRun({
-            text: item.str,
-            font: segIsArabic ? "Arial" : item.fontFamily,
-            size: ptToHp(item.sizePt),
-            color: item.colorHex,
-            bold: item.bold,
-            italics: item.italics,
-            rightToLeft: segIsArabic,
-          }),
-        );
       }
 
       if (runs.length === 0) continue;
 
+      // 3. Paragraph Level Configuration
       allChildren.push(
         new docx.Paragraph({
           bidirectional: lineIsArabic,
