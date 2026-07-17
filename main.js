@@ -1434,7 +1434,10 @@ async function wordToPDF() {
         else if (ext === "svg") mime = "image/svg+xml";
         
         const base64 = await zip.file(mediaPath).async("base64");
-        extractedImages.push(`data:${mime};base64,${base64}`);
+        // Only consider images larger than 3KB to ignore invisible spacer GIFs
+        if (base64.length > 3000) {
+          extractedImages.push(`data:${mime};base64,${base64}`);
+        }
       }
     } catch (e) {
       console.warn("Could not extract media", e);
@@ -1499,25 +1502,28 @@ async function wordToPDF() {
     });
 
     // --- SMART FALLBACK: INJECT MISSING IMAGES ---
-    // If the document actually has images, but docx-preview failed to render them (e.g. VML or complex anchoring)
-    const renderedImgs = docxContainer.querySelectorAll("img");
-    if (extractedImages.length > 0 && renderedImgs.length === 0) {
-      // docx-preview completely failed to render the images (likely the floating logos).
-      // We will manually inject them into the top of the first page!
+    // Count valid rendered images (ignore tiny ones)
+    const renderedImgs = Array.from(docxContainer.querySelectorAll("img")).filter(img => img.width > 20 || img.height > 20);
+    
+    // If docx-preview missed ANY images that we extracted from the ZIP, inject them manually!
+    if (extractedImages.length > renderedImgs.length) {
       const firstPage = docxContainer.querySelector(".docx");
       if (firstPage) {
+        // Create a header container for the missing logos
         const imageHeader = document.createElement("div");
-        imageHeader.style.cssText = "display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; width: 100%;";
+        imageHeader.style.cssText = "display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; width: 100%; padding: 0 40px; box-sizing: border-box;";
         
         extractedImages.forEach(src => {
           const img = document.createElement("img");
           img.src = src;
-          // Constrain logos so they don't blow up the page
-          img.style.cssText = "max-width: 150px; max-height: 150px; object-fit: contain;";
+          img.style.cssText = "max-width: 120px; max-height: 120px; object-fit: contain;";
           imageHeader.appendChild(img);
         });
         
         firstPage.insertBefore(imageHeader, firstPage.firstChild);
+        // Force a border just in case the detection failed but the user requested it
+        firstPage.style.border = "3px double #000";
+        firstPage.style.padding = "40px";
       }
     }
     // ------------------------------------------------
