@@ -1428,6 +1428,7 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
     const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     const numPages = pdfDoc.numPages;
     const ARABIC_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
+    const SCALE = 2.0; // render scale
 
     const _esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     const _bullets = (s) => s
@@ -1440,7 +1441,7 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
       .replace(/\u2022/g, '\u2022');
 
     if (typeof setProgress === 'function') setProgress('pdf2word', 15, 'Initializing OCR Engine...');
-    
+
     const worker = await Tesseract.createWorker(['ara', 'eng'], 1, {
       workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js',
       corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core-simd-lstm.wasm.js',
@@ -1453,21 +1454,84 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
       const sy = Math.max(0, Math.min(Math.floor(y), ctx.canvas.height - 1));
       const sw = Math.max(1, Math.min(Math.ceil(w), ctx.canvas.width - sx));
       const sh = Math.max(1, Math.min(Math.ceil(h), ctx.canvas.height - sy));
-      
       const imgData = ctx.getImageData(sx, sy, sw, sh).data;
       let r = 0, g = 0, b = 0, count = 0;
-      
       for (let i = 0; i < imgData.length; i += 4) {
         const a = imgData[i + 3];
         if (a > 50) {
           const pr = imgData[i], pg = imgData[i + 1], pb = imgData[i + 2];
-          if (pr < 240 || pg < 240 || pb < 240) {
-            r += pr; g += pg; b += pb; count++;
-          }
+          if (pr < 240 || pg < 240 || pb < 240) { r += pr; g += pg; b += pb; count++; }
         }
       }
       if (count === 0) return '#000000';
       return `rgb(${Math.round(r / count)},${Math.round(g / count)},${Math.round(b / count)})`;
+    };
+
+    // Extracts images from a rendered page canvas using the operator list
+    const extractPageImages = async (page, canvas, viewport) => {
+      const images = [];
+      try {
+        const opList = await page.getOperatorList();
+        const OPS = pdfjsLib.OPS;
+        // Walk operator list looking for paintImageXObject / paintInlineImageXObject
+        const imageOps = new Set([
+          OPS.paintImageXObject,
+          OPS.paintImageXObjectRepeat,
+          OPS.paintInlineImageXObject,
+        ]);
+
+        let currentTransform = [1, 0, 0, 1, 0, 0]; // identity CTM
+
+        for (let i = 0; i < opList.fnArray.length; i++) {
+          const fn = opList.fnArray[i];
+          const args = opList.argsArray[i];
+
+          // Track CTM changes so we know where images are placed
+          if (fn === OPS.transform) {
+            currentTransform = args; // [a,b,c,d,e,f]
+          } else if (fn === OPS.save) {
+            // We don't need full stack tracking for image bounds; use currentTransform as-is
+          } else if (imageOps.has(fn)) {
+            // args[0] is the image name / key
+            // currentTransform = [a,b,c,d,e,f] => the image is painted into a unit square
+            // mapped by this CTM in PDF user space
+            // PDF y-axis is flipped; e = x offset, f = y offset, a = width, d = height
+            const [a, b, c, d, e, f] = currentTransform;
+            const pdfX = e;
+            const pdfY = f;
+            const pdfW = Math.abs(a);
+            const pdfH = Math.abs(d);
+
+            // Convert to canvas pixel coords (scale 2x, y flipped)
+            const cx = pdfX * SCALE;
+            const cy = canvas.height - (pdfY * SCALE) - (pdfH * SCALE);
+            const cw = pdfW * SCALE;
+            const ch = pdfH * SCALE;
+
+            // Only extract reasonably sized images (skip tiny icons < 20px)
+            if (cw > 20 && ch > 20) {
+              const cropCanvas = document.createElement('canvas');
+              cropCanvas.width = Math.ceil(cw);
+              cropCanvas.height = Math.ceil(ch);
+              const cropCtx = cropCanvas.getContext('2d');
+              cropCtx.drawImage(
+                canvas,
+                Math.max(0, Math.floor(cx)), Math.max(0, Math.floor(cy)),
+                Math.ceil(cw), Math.ceil(ch),
+                0, 0,
+                Math.ceil(cw), Math.ceil(ch)
+              );
+              const dataUrl = cropCanvas.toDataURL('image/png');
+              // pdfY is the bottom-left corner in PDF space; use it as sort key (high y = near top)
+              images.push({ dataUrl, pdfY, pdfX, pdfW, pdfH });
+            }
+          }
+        }
+      } catch (e) {
+        // Image extraction is best-effort; don't fail the whole conversion
+        console.warn('[PDF2WORD] Image extraction error:', e);
+      }
+      return images;
     };
 
     for (let pageNum = 1; pageNum <= numPages; pageNum++) {
@@ -1476,88 +1540,82 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
       }
 
       const page = await pdfDoc.getPage(pageNum);
-      
-      const viewport = page.getViewport({ scale: 2.0 });
+      const viewport = page.getViewport({ scale: SCALE });
       const canvas = document.createElement('canvas');
       canvas.width = viewport.width;
       canvas.height = viewport.height;
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
-      
       await page.render({ canvasContext: ctx, viewport }).promise;
 
+      // --- EXTRACT IMAGES ---
+      const pageImages = await extractPageImages(page, canvas, viewport);
+      // Sort images top-to-bottom by their PDF Y position (descending pdfY = near top)
+      pageImages.sort((a, b) => b.pdfY - a.pdfY);
+
+      // --- EXTRACT TEXT ---
       const textContent = await page.getTextContent({ normalizeWhitespace: true });
       const lineMap = new Map();
-      
+
       for (const item of textContent.items) {
         if (!item.str || !item.str.trim()) continue;
         const y = item.transform[5];
         let matchedY = null;
         for (const keyY of lineMap.keys()) {
-          if (Math.abs(keyY - y) <= 5) {
-            matchedY = keyY; break;
-          }
+          if (Math.abs(keyY - y) <= 5) { matchedY = keyY; break; }
         }
-        if (matchedY === null) {
-          matchedY = y; lineMap.set(matchedY, []);
-        }
-        
-        const canvasX = item.transform[4] * 2.0;
-        const canvasY = canvas.height - (y * 2.0) - (item.height * 2.0);
-        const canvasW = (item.width || item.transform[0]) * 2.0;
-        const canvasH = (item.height || item.transform[3]) * 2.0;
+        if (matchedY === null) { matchedY = y; lineMap.set(matchedY, []); }
 
+        const canvasX = item.transform[4] * SCALE;
+        const canvasY = canvas.height - (y * SCALE) - (item.height * SCALE);
+        const canvasW = (item.width || item.transform[0]) * SCALE;
+        const canvasH = (item.height || Math.abs(item.transform[3])) * SCALE;
         const color = getDominantColor(ctx, canvasX, canvasY, canvasW, canvasH);
-        
-        lineMap.get(matchedY).push({ item, x: item.transform[4], canvasY, canvasH, color });
+
+        lineMap.get(matchedY).push({ item, x: item.transform[4], y, canvasY, canvasH, color });
       }
 
       const sortedY = Array.from(lineMap.keys()).sort((a, b) => b - a);
       let pageHtml = '';
 
+      // We interleave images and text lines by their Y positions
+      // Build a flat list of content blocks: { type: 'text'|'image', y, html }
+      const contentBlocks = [];
+
+      // Add text lines
       for (const y of sortedY) {
         const lineItems = lineMap.get(y);
         const fullLineText = lineItems.map(i => i.item.str).join(' ');
         const isArabicLine = ARABIC_REGEX.test(fullLineText);
-        
         let lineHtml = '';
 
         if (isArabicLine) {
           let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
           for (const li of lineItems) {
-            const canvasX = li.item.transform[4] * 2.0;
-            const canvasW = (li.item.width || li.item.transform[0] || 10) * 2.0;
+            const canvasX = li.item.transform[4] * SCALE;
+            const canvasW = (li.item.width || Math.abs(li.item.transform[0]) || 10) * SCALE;
             if (canvasX < minX) minX = canvasX;
             if (canvasX + canvasW > maxX) maxX = canvasX + canvasW;
             if (li.canvasY < minY) minY = li.canvasY;
             if (li.canvasY + li.canvasH > maxY) maxY = li.canvasY + li.canvasH;
           }
-
           const pad = 10;
-          minX = Math.max(0, minX - pad);
-          minY = Math.max(0, minY - pad);
-          maxX = Math.min(canvas.width, maxX + pad);
-          maxY = Math.min(canvas.height, maxY + pad);
-          
-          const cropW = maxX - minX;
-          const cropH = maxY - minY;
+          minX = Math.max(0, minX - pad); minY = Math.max(0, minY - pad);
+          maxX = Math.min(canvas.width, maxX + pad); maxY = Math.min(canvas.height, maxY + pad);
+          const cropW = maxX - minX, cropH = maxY - minY;
 
           if (cropW > 0 && cropH > 0) {
             const cropCanvas = document.createElement('canvas');
-            cropCanvas.width = cropW;
-            cropCanvas.height = cropH;
+            cropCanvas.width = cropW; cropCanvas.height = cropH;
             const cropCtx = cropCanvas.getContext('2d');
             cropCtx.drawImage(canvas, minX, minY, cropW, cropH, 0, 0, cropW, cropH);
-
             const { data: { text } } = await worker.recognize(cropCanvas);
-            
             const dominantItemColor = lineItems.length > 0 ? lineItems[Math.floor(lineItems.length / 2)].color : '#000000';
-            const fontSize = Math.abs(lineItems[0].item.transform[3]) || 12;
-            
-            lineHtml = `<p class="arabic-line"><span style="font-family: Arial, sans-serif; color: ${dominantItemColor}; font-size: ${fontSize}px;">${_esc(text.trim())}</span></p>\n`;
+            // Use the raw PDF font size (in pt) — this matches original document sizing
+            const fontSizePt = Math.round(Math.abs(lineItems[0].item.transform[3])) || 12;
+            lineHtml = `<p class="arabic-line"><span style="font-family: Arial, sans-serif; color: ${dominantItemColor}; font-size: ${fontSizePt}pt;">${_esc(text.trim())}</span></p>\n`;
           }
         } else {
           lineItems.sort((a, b) => a.x - b.x);
-          lineHtml = `<p class="english-line">`;
           let lastEdge = null;
           let segmentsHtml = [];
 
@@ -1566,14 +1624,15 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
             const rawText = _bullets(item.str);
             const textHtml = _esc(rawText);
 
-            const fontSize = Math.abs(item.transform[3]) || Math.abs(item.transform[0]) || item.height || 12;
+            // PDF transform[3] gives the font size in PDF points — use pt directly for Word
+            const fontSizePt = Math.round(Math.abs(item.transform[3]) || Math.abs(item.transform[0]) || item.height || 12);
             const fontNameRaw = item.fontName || '';
             const fontNameLower = fontNameRaw.toLowerCase();
             const isBold = fontNameLower.includes('bold');
             const isItalic = fontNameLower.includes('italic');
             const fontWeight = isBold ? 'bold' : 'normal';
             const fontStyle = isItalic ? 'italic' : 'normal';
-            
+
             let fontFamily = 'Arial, sans-serif';
             if (fontNameLower.includes('times')) fontFamily = '"Times New Roman", serif';
             else if (fontNameLower.includes('courier')) fontFamily = '"Courier New", monospace';
@@ -1586,24 +1645,43 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
             let spacesHtml = '';
             if (lastEdge !== null) {
               const gap = x - lastEdge;
-              const spaceWidth = fontSize * 0.3;
-              if (gap > spaceWidth * 0.8) {
-                const spaceCount = Math.max(1, Math.round(gap / spaceWidth));
+              const spaceWidthPt = fontSizePt * 0.3;
+              if (gap > spaceWidthPt * 0.8) {
+                const spaceCount = Math.max(1, Math.round(gap / spaceWidthPt));
                 spacesHtml = '&nbsp;'.repeat(spaceCount);
               }
             }
             lastEdge = x + (item.width || 0);
 
-            const spanStyle = `font-family: ${fontFamily}; color: ${color}; font-size: ${fontSize}px; font-weight: ${fontWeight}; font-style: ${fontStyle}; text-decoration: ${textDecoration};`;
+            const spanStyle = `font-family: ${fontFamily}; color: ${color}; font-size: ${fontSizePt}pt; font-weight: ${fontWeight}; font-style: ${fontStyle}; text-decoration: ${textDecoration};`;
             segmentsHtml.push(`${spacesHtml}<span style="${spanStyle}">${textHtml}</span>`);
           }
-          lineHtml += segmentsHtml.join('') + `</p>\n`;
+          lineHtml = `<p class="english-line">${segmentsHtml.join('')}</p>\n`;
         }
-        pageHtml += lineHtml;
+
+        if (lineHtml) {
+          contentBlocks.push({ type: 'text', y, html: lineHtml });
+        }
       }
-      
+
+      // Add image blocks — map their pdfY to match with text ordering
+      for (const img of pageImages) {
+        // Calculate display dimensions in pt (Word pt = PDF pt)
+        const imgWPt = Math.round(img.pdfW);
+        const imgHPt = Math.round(img.pdfH);
+        const imgHtml = `<p class="english-line"><img src="${img.dataUrl}" width="${imgWPt}" height="${imgHPt}" style="display:block; max-width:100%; margin: 4px 0;" /></p>\n`;
+        contentBlocks.push({ type: 'image', y: img.pdfY, html: imgHtml });
+      }
+
+      // Sort all blocks top-to-bottom (descending y = top of page first)
+      contentBlocks.sort((a, b) => b.y - a.y);
+
+      for (const block of contentBlocks) {
+        pageHtml += block.html;
+      }
+
       if (pageNum < numPages) {
-         pageHtml += '<br clear="all" style="page-break-before:always" />\n';
+        pageHtml += '<br clear="all" style="page-break-before:always" />\n';
       }
       allPagesHtml += pageHtml;
     }
@@ -1627,6 +1705,7 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
     p { margin: 6px 0; line-height: 1.3; }
     .arabic-line { direction: rtl; text-align: right; unicode-bidi: embed; }
     .english-line { direction: ltr; text-align: left; }
+    img { border: none; }
   </style>
 </head>
 <body bgcolor="#ffffff">
@@ -1644,6 +1723,7 @@ ${allPagesHtml}  </div>
     throw error;
   }
 };
+
 
 async function pdfToWord() {
   const file = state.pdf2word.file;
