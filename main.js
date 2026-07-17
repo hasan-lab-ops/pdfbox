@@ -1522,11 +1522,29 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
               try {
                 // Fetch the image from page objs
                 let imgObj;
-                try {
-                  imgObj = await new Promise((resolve) => {
-                    page.objs.get(imgName, resolve);
-                  });
-                } catch (err) { }
+                if (typeof imgName === 'object') {
+                  imgObj = imgName; // Inline image object
+                } else {
+                  try {
+                    imgObj = await new Promise((resolve) => {
+                      const timer = setTimeout(() => resolve(null), 500);
+                      const cb = (res) => { clearTimeout(timer); resolve(res); };
+                      try {
+                        if (page.objs.has(imgName)) {
+                          const res = page.objs.get(imgName, cb);
+                          if (res !== undefined) cb(res); // Handle synchronous return
+                        } else if (page.commonObjs && page.commonObjs.has(imgName)) {
+                          const res = page.commonObjs.get(imgName, cb);
+                          if (res !== undefined) cb(res);
+                        } else {
+                          cb(null);
+                        }
+                      } catch (e) {
+                        cb(null);
+                      }
+                    });
+                  } catch (err) { }
+                }
 
                 if (imgObj) {
                   let dispW = Math.round(Math.abs(pdfW));
@@ -1726,20 +1744,34 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
             // English / mixed line — sort L→R and build runs
             lineItems.sort((a, b) => a.x - b.x);
             const runs = [];
+            let lastEdge = null;
             for (const li of lineItems) {
               const raw = _bullets(li.item.str);
               if (!raw.trim()) continue;
-              const fnRaw = li.item.fontName || '';
-              const fnLower = fnRaw.toLowerCase();
+
               const sizePt = Math.round(Math.abs(li.item.transform[3]) ||
                 Math.abs(li.item.transform[0]) || li.item.height || 12);
+
+              let spaceStr = '';
+              if (lastEdge !== null) {
+                const gap = li.x - lastEdge;
+                const spaceWidthPt = sizePt * 0.3;
+                if (gap > spaceWidthPt * 0.8) {
+                  const spaceCount = Math.max(1, Math.round(gap / spaceWidthPt));
+                  spaceStr = ' '.repeat(spaceCount);
+                }
+              }
+              lastEdge = li.x + (li.item.width || 0);
+
+              const fnRaw = li.item.fontName || '';
+              const fnLower = fnRaw.toLowerCase();
               let fontFamily = 'Arial';
               if (fnLower.includes('times')) fontFamily = 'Times New Roman';
               else if (fnLower.includes('courier')) fontFamily = 'Courier New';
               else if (fnLower.includes('calibri')) fontFamily = 'Calibri';
               runs.push(
                 new docx.TextRun({
-                  text: raw,
+                  text: spaceStr + raw,
                   font: fontFamily,
                   size: ptToHalfPt(sizePt),
                   color: li.colorHex,
