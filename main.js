@@ -1998,31 +1998,107 @@ async function wordToPDF() {
       'padding:72px 90px',
       'background:#ffffff',
       'color:#1a1a1a',
-      'font-family:"Times New Roman",Times,serif',
+      // Don't hardcode a single font — let CSS handle per-script font selection
       'font-size:12pt',
       'line-height:1.6',
       'box-sizing:border-box',
       'word-break:break-word',
       'overflow:hidden',
+      // CRITICAL: let browser BiDi engine handle directional layout
+      'unicode-bidi:plaintext',
     ].join(';');
 
+    // ── Post-process mammoth HTML for proper Arabic/RTL rendering ──────────
+    // mammoth.js strips dir= and lang= from the .docx content. We must restore
+    // them so the browser's Unicode Bidirectional Algorithm can shape Arabic
+    // glyphs correctly *before* html2canvas photographs the DOM.
+    const ARABIC_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFD\uFE70-\uFEFF]/;
+
+    /**
+     * Walk every block-level element in a DocumentFragment.
+     * If its text content contains Arabic characters, mark it RTL so the
+     * browser's built-in BiDi engine handles shaping and justification.
+     */
+    function applyBidiToFragment(frag) {
+      // Block elements that carry a reading direction in Word
+      const BLOCKS = ['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
+                      'LI', 'TD', 'TH', 'BLOCKQUOTE', 'DIV'];
+
+      frag.querySelectorAll(BLOCKS.join(',')).forEach(el => {
+        const text = el.textContent || '';
+        if (ARABIC_REGEX.test(text)) {
+          // Use bdi on inline runs; set dir on block so the browser BiDi
+          // algorithm can order runs correctly within the paragraph.
+          el.setAttribute('dir', 'rtl');
+          el.setAttribute('lang', 'ar');
+          // Wrap inline text nodes in <bdi dir="rtl"> so mixed LTR/RTL lines
+          // (e.g. Arabic paragraph with embedded English code) render cleanly.
+          el.childNodes.forEach(node => {
+            if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
+              const bdi = document.createElement('bdi');
+              bdi.setAttribute('dir', ARABIC_REGEX.test(node.textContent) ? 'rtl' : 'ltr');
+              bdi.style.fontFamily = ARABIC_REGEX.test(node.textContent)
+                ? "'Arial','Segoe UI','Tahoma',sans-serif"
+                : "'Times New Roman',Times,serif";
+              bdi.textContent = node.textContent;
+              node.replaceWith(bdi);
+            } else if (node.nodeType === Node.ELEMENT_NODE) {
+              const inner = node.textContent || '';
+              if (ARABIC_REGEX.test(inner)) {
+                node.style.fontFamily = "'Arial','Segoe UI','Tahoma',sans-serif";
+                node.setAttribute('dir', 'rtl');
+              }
+            }
+          });
+        } else {
+          // Purely LTR block — be explicit so adjacent RTL blocks don't bleed
+          if (!el.getAttribute('dir')) {
+            el.setAttribute('dir', 'ltr');
+          }
+        }
+      });
+    }
+
+    // Parse mammoth HTML into a live fragment so we can walk the DOM
+    const templateFrag = document.createElement('template');
+    templateFrag.innerHTML = htmlContent || '<p>(Empty document)</p>';
+    applyBidiToFragment(templateFrag.content);
+
+    // Serialize fragment back to HTML string for injection
+    const rtlAwareHtml = Array.from(templateFrag.content.childNodes)
+      .map(n => (n.nodeType === Node.ELEMENT_NODE ? n.outerHTML : n.textContent))
+      .join('');
+
     // Add inline styles for common HTML elements
+    // Note: Arabic text gets Arial/Segoe UI via per-element injection above.
+    // LTR text keeps Times New Roman. This mirrors Microsoft Word defaults.
     container.innerHTML = `
       <style>
+        #w2p-render-container {
+          font-family: "Times New Roman", Times, serif;
+          unicode-bidi: plaintext;
+        }
         #w2p-render-container h1{font-size:22pt;margin:16px 0 8px;line-height:1.3;}
         #w2p-render-container h2{font-size:18pt;margin:14px 0 6px;}
         #w2p-render-container h3{font-size:14pt;margin:12px 0 4px;}
-        #w2p-render-container p{margin:0 0 8px;}
+        #w2p-render-container p{margin:0 0 8px;unicode-bidi:plaintext;}
         #w2p-render-container table{border-collapse:collapse;width:100%;margin-bottom:12px;}
-        #w2p-render-container td,#w2p-render-container th{border:1px solid #ccc;padding:6px 8px;}
+        #w2p-render-container td,#w2p-render-container th{border:1px solid #ccc;padding:6px 8px;unicode-bidi:plaintext;}
         #w2p-render-container img{max-width:100%;height:auto;display:block;margin:8px auto;}
         #w2p-render-container ul,#w2p-render-container ol{margin:0 0 8px 24px;}
-        #w2p-render-container li{margin-bottom:4px;}
+        #w2p-render-container li{margin-bottom:4px;unicode-bidi:plaintext;}
         #w2p-render-container strong{font-weight:bold;}
         #w2p-render-container em{font-style:italic;}
         #w2p-render-container blockquote{border-left:3px solid #ccc;margin:8px 0;padding-left:16px;color:#555;}
+        /* Arabic blocks — right-aligned, correct font */
+        #w2p-render-container [dir="rtl"]{
+          text-align:right;
+          font-family:'Arial','Segoe UI','Tahoma',sans-serif;
+        }
+        /* Mixed paragraph: isolate each run's direction */
+        #w2p-render-container bdi{unicode-bidi:isolate;}
       </style>
-      ${htmlContent || '<p>(Empty document)</p>'}
+      ${rtlAwareHtml}
     `;
     document.body.appendChild(container);
 
