@@ -1289,165 +1289,21 @@ async function safeConvertPDFToWord(file, onProgress) {
           const lineHeightPx = (line.bbox.y1 - line.bbox.y0);
           // OCR is at 2× scale, convert to points (72pt/inch, 96dpi screen)
           const fontSizePt = Math.max(8, Math.round((lineHeightPx / 2) * 0.75));
-
-          docxChildren.push(makeParagraph(rawText, rtl, fontSizePt * 2, pageNum > 1 && isFirstOnPage1)); isFirstOnPage1 = false;
-        }
-
-        // If no lines were pushed for this page, add a placeholder paragraph
-        // so the page break produces a real blank page in the output DOCX.
-        if (!data.lines.some(l => l.text.replace(/\n/g, '').trim())) {
-          docxChildren.push(new docx.Paragraph({ children: [], pageBreakBefore: pageNum > 1 }));
-        }
-
-        if (pageNum < numPages) {
-          /* PageBreak removed to prevent extra empty pages */
-        }
-      }
-
-    } finally {
-      if (worker) {
-        try { await worker.terminate(); } catch (_) { }
-      }
-    }
-
-    // ══════════════════════════════════════════════════════════════════
-    //  PATH B: Direct PDF.js text extraction — for Latin / LTR PDFs
-    //  Fast and accurate for English, French, German, etc.
-    // ══════════════════════════════════════════════════════════════════
-  } else {
-    const sanitize = (s) => s.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, '');
-
-    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-      onProgress(5 + Math.round(((pageNum - 1) / numPages) * 83), `Extracting page ${pageNum} of ${numPages}…`);
-
-      const page = await pdfDoc.getPage(pageNum);
-      const textContent = await page.getTextContent({ includeMarkedContent: false });
-      const items = textContent.items.filter(i => i.str && i.str.trim());
-
-      let pageHasContent = false;
-      if (!items.length) {
-        // Blank page — keep an empty paragraph as placeholder to preserve page count
-        docxChildren.push(new docx.Paragraph({ children: [], pageBreakBefore: pageNum > 1 }));
-        pageHasContent = true;
-      } else {
-        // Group by Y baseline into lines
-        const lineMap = new Map();
-        for (const item of items) {
-          const y = item.transform[5];
-          const tol = Math.max(3, Math.abs(item.transform[0]) * 0.45);
-          let found = null;
-          for (const [ky] of lineMap) {
-            if (Math.abs(ky - y) <= tol) { found = ky; break; }
-          }
-          const key = found !== null ? found : y;
-          if (!lineMap.has(key)) lineMap.set(key, []);
-          lineMap.get(key).push(item);
-        }
-
-        const sortedLines = [...lineMap.entries()].sort((a, b) => b[0] - a[0]);
-        for (const [, lineItems] of sortedLines) {
-          lineItems.sort((a, b) => a.transform[4] - b.transform[4]);
-
-          let lineText = '';
-          for (let k = 0; k < lineItems.length; k++) {
-            const item = lineItems[k];
-            lineText += sanitize(item.str.normalize('NFKC'));
-            if (k < lineItems.length - 1) {
-              const next = lineItems[k + 1];
-              const gap = next.transform[4] - (item.transform[4] + (item.width || 0));
-              if (item.hasEOL || gap > Math.abs(item.transform[0]) * 0.3) lineText += ' ';
-            }
-          }
-
-          lineText = lineText.trim();
-          if (!lineText) continue;
-
-          const fontSize = Math.abs(lineItems[0].transform[0]) || 12;
-          docxChildren.push(makeParagraph(lineText, false, Math.round(fontSize * 2), pageNum > 1 && isFirstOnPage2)); isFirstOnPage2 = false;
-          pageHasContent = true;
-        }
-
-        // If all lines were empty after trimming, add placeholder to preserve page count
-        if (!pageHasContent) {
-          docxChildren.push(new docx.Paragraph({ children: [], pageBreakBefore: pageNum > 1 }));
-        }
-      }
-
-      if (pageNum < numPages) {
-        /* PageBreak removed to prevent extra empty pages */
-      }
-    }
-  }
-
-  // ── Build DOCX ────────────────────────────────────────────────────
-  onProgress(92, 'Building Word document…');
-
-  const wordDoc = new docx.Document({
-    creator: 'PDF BOX',
-    title: file.name.replace(/\.pdf$/i, ''),
-    styles: {
-      default: {
-        document: { run: { font: 'Arial', size: 24 } }
-      }
-    },
-    sections: [{
-      properties: {
-        page: { margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } },
-        bidi: true,
-      },
-      footers: {
-        default: new docx.Footer({
-          children: [
-            new docx.Paragraph({
-              alignment: docx.AlignmentType.CENTER,
-              children: [
-                new docx.TextRun({
-                  children: [docx.PageNumber.CURRENT],
-                }),
-              ],
-            }),
-          ],
-        }),
-      },
-      children: docxChildren.length
-        ? docxChildren
-        : [new docx.Paragraph({ children: [new docx.TextRun('(No extractable text found in this PDF)')] })]
-    }]
-  });
-
-  onProgress(97, 'Saving DOCX…');
-  return await docx.Packer.toBlob(wordDoc);
-}
-
-
-
-
 window.convertPDFToWordIsolated = async function (arrayBuffer) {
   try {
     if (typeof pdfjsLib === 'undefined') throw new Error('PDF.js library is not loaded.');
     if (typeof docx === 'undefined') throw new Error('docx.js library is not loaded.');
-    if (typeof Tesseract === 'undefined') throw new Error('Tesseract.js library is not loaded.');
 
     const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     const numPages = pdfDoc.numPages;
     const ARABIC_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
-    const SCALE = 2.0; // high-res canvas scale for color sampling
+    const SCALE = 2.0;
 
     const _bullets = (s) => s
       .replace(/\uF0D8/g, '\u27A2').replace(/\uF0B7/g, '\u2022')
       .replace(/\uF0A7/g, '\u25A0').replace(/\uF0FC/g, '\u2713')
       .replace(/\uF0E0/g, '\u2709').replace(/\uF020/g, ' ');
 
-    if (typeof setProgress === 'function') setProgress('pdf2word', 10, 'Initializing OCR Engine...');
-
-    const worker = await Tesseract.createWorker(['ara', 'eng'], 1, {
-      workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js',
-      corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core-simd-lstm.wasm.js',
-    });
-
-    // ── Helpers ──────────────────────────────────────────────────────────────
-
-    // Sample dominant non-white RGB from a canvas region; returns 6-char hex string
     const getDominantHex = (ctx, x, y, w, h) => {
       const sx = Math.max(0, Math.min(Math.floor(x), ctx.canvas.width - 1));
       const sy = Math.max(0, Math.min(Math.floor(y), ctx.canvas.height - 1));
@@ -1465,130 +1321,6 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
         .map(v => v.toString(16).padStart(2, '0')).join('');
     };
 
-    // Extract images using operator list and page.objs
-    const extractImagesViaOperators = async (page, scale) => {
-      const images = [];
-      try {
-        const opList = await page.getOperatorList();
-        const OPS = pdfjsLib.OPS;
-        const imageOps = new Set([
-          OPS.paintImageXObject,
-          OPS.paintImageXObjectRepeat,
-          OPS.paintInlineImageXObject,
-          OPS.paintImageMaskXObject,
-        ]);
-
-        const multiplyMatrix = (m1, m2) => [
-          m1[0] * m2[0] + m1[1] * m2[2],
-          m1[0] * m2[1] + m1[1] * m2[3],
-          m1[2] * m2[0] + m1[3] * m2[2],
-          m1[2] * m2[1] + m1[3] * m2[3],
-          m1[4] * m2[0] + m1[5] * m2[2] + m2[4],
-          m1[4] * m2[1] + m1[5] * m2[3] + m2[5],
-        ];
-
-        const ctmStack = [];
-        let currentCTM = [1, 0, 0, 1, 0, 0];
-
-        for (let i = 0; i < opList.fnArray.length; i++) {
-          const fn = opList.fnArray[i];
-          const args = opList.argsArray[i];
-
-          if (fn === OPS.save) {
-            ctmStack.push([...currentCTM]);
-          } else if (fn === OPS.restore) {
-            if (ctmStack.length > 0) currentCTM = ctmStack.pop();
-          } else if (fn === OPS.transform) {
-            currentCTM = multiplyMatrix(currentCTM, args);
-          } else if (imageOps.has(fn)) {
-            const imgName = args[0];
-            if (!imgName) continue;
-
-            const [a, b, c, d, e, f] = currentCTM;
-            const corners = [
-              [e, f],  // (0,0)
-              [a + e, b + f],  // (1,0)
-              [c + e, d + f],  // (0,1)
-              [a + c + e, b + d + f],  // (1,1)
-            ];
-            const ys = corners.map(p => p[1]);
-            const pdfY = Math.min(...ys);
-            const pdfH = Math.max(...ys) - pdfY;
-            const pdfX = Math.min(...corners.map(p => p[0]));
-            const pdfW = Math.max(...corners.map(p => p[0])) - pdfX;
-
-            // Only extract reasonably sized images (skip tiny icons)
-            if (Math.abs(pdfW) > 20 && Math.abs(pdfH) > 20) {
-              try {
-                // Fetch the image from page objs
-                let imgObj;
-                if (typeof imgName === 'object') {
-                  imgObj = imgName; // Inline image object
-                } else {
-                  try {
-                    imgObj = await new Promise((resolve) => {
-                      const timer = setTimeout(() => resolve(null), 500);
-                      const cb = (res) => { clearTimeout(timer); resolve(res); };
-                      try {
-                        if (page.objs.has(imgName)) {
-                          const res = page.objs.get(imgName, cb);
-                          if (res !== undefined) cb(res); // Handle synchronous return
-                        } else if (page.commonObjs && page.commonObjs.has(imgName)) {
-                          const res = page.commonObjs.get(imgName, cb);
-                          if (res !== undefined) cb(res);
-                        } else {
-                          cb(null);
-                        }
-                      } catch (e) {
-                        cb(null);
-                      }
-                    });
-                  } catch (err) { }
-                }
-
-                if (imgObj) {
-                  let dispW = Math.round(Math.abs(pdfW));
-                  let dispH = Math.round(Math.abs(pdfH));
-
-                  const canvas = document.createElement('canvas');
-                  canvas.width = imgObj.width || dispW * scale;
-                  canvas.height = imgObj.height || dispH * scale;
-                  const ctx = canvas.getContext('2d');
-
-                  if (imgObj instanceof ImageBitmap || imgObj instanceof HTMLImageElement || imgObj instanceof HTMLCanvasElement) {
-                    ctx.drawImage(imgObj, 0, 0, canvas.width, canvas.height);
-                  } else if (imgObj.data && imgObj.width && imgObj.height) {
-                    const imgDataObj = new ImageData(
-                      new Uint8ClampedArray(imgObj.data),
-                      imgObj.width,
-                      imgObj.height
-                    );
-                    ctx.putImageData(imgDataObj, 0, 0);
-                  }
-
-                  const imgU8 = await canvasToUint8(canvas);
-
-                  // For sort ordering, use the top Y coordinate in PDF space: pdfY + pdfH
-                  images.push({
-                    pdfY: pdfY + pdfH,
-                    imgU8,
-                    dispW,
-                    dispH
-                  });
-                }
-              } catch (ex) {
-                console.warn('[PDF2WORD] Image fetch error for', imgName, ex);
-              }
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('[PDF2WORD] Operator list extraction error:', e);
-      }
-      return images;
-    };
-
-    // Canvas → PNG Uint8Array (needed by docx.ImageRun)
     const canvasToUint8 = (canvas) => new Promise((resolve, reject) => {
       canvas.toBlob(async (blob) => {
         if (!blob) return reject(new Error('Canvas.toBlob failed'));
@@ -1596,10 +1328,8 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
       }, 'image/png');
     });
 
-    // Map a font-size in PDF points to docx half-points (docx size unit)
     const ptToHalfPt = (pt) => Math.max(16, Math.round(pt) * 2);
 
-    // ── Per-page processing ──────────────────────────────────────────────────
     const allDocChildren = [];
 
     for (let pageNum = 1; pageNum <= numPages; pageNum++) {
@@ -1614,68 +1344,192 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       await page.render({ canvasContext: ctx, viewport }).promise;
 
-      const pageHeightPt = viewport.height / SCALE;
       const pageWidthPt = viewport.width / SCALE;
-      // Max display width inside Word (approx. A4 with margins, in screen-pixels at 96 DPI)
       const MAX_IMG_W_PX = Math.round(Math.min(pageWidthPt, 468) * (96 / 72));
 
-      // ── TEXT extraction ──
+      // STEP 3: Image Extraction via Operator List
+      const extractImagesViaOperators = async () => {
+        const images = [];
+        try {
+          const opList = await page.getOperatorList();
+          const OPS = pdfjsLib.OPS;
+          const imageOps = new Set([
+            OPS.paintImageXObject,
+            OPS.paintImageXObjectRepeat,
+            OPS.paintInlineImageXObject,
+            OPS.paintImageMaskXObject,
+          ]);
+
+          const multiplyMatrix = (m1, m2) => [
+            m1[0] * m2[0] + m1[1] * m2[2],
+            m1[0] * m2[1] + m1[1] * m2[3],
+            m1[2] * m2[0] + m1[3] * m2[2],
+            m1[2] * m2[1] + m1[3] * m2[3],
+            m1[4] * m2[0] + m1[5] * m2[2] + m2[4],
+            m1[4] * m2[1] + m1[5] * m2[3] + m2[5],
+          ];
+
+          const ctmStack = [];
+          let currentCTM = [1, 0, 0, 1, 0, 0];
+
+          for (let i = 0; i < opList.fnArray.length; i++) {
+            const fn = opList.fnArray[i];
+            const args = opList.argsArray[i];
+
+            if (fn === OPS.save) {
+              ctmStack.push([...currentCTM]);
+            } else if (fn === OPS.restore) {
+              if (ctmStack.length > 0) currentCTM = ctmStack.pop();
+            } else if (fn === OPS.transform) {
+              currentCTM = multiplyMatrix(currentCTM, args);
+            } else if (imageOps.has(fn)) {
+              const imgName = args[0];
+              if (!imgName) continue;
+
+              const [a, b, c, d, e, f] = currentCTM;
+              const corners = [
+                [e, f],
+                [a + e, b + f],
+                [c + e, d + f],
+                [a + c + e, b + d + f],
+              ];
+              const ys = corners.map(p => p[1]);
+              const pdfY = Math.min(...ys);
+              const pdfH = Math.max(...ys) - pdfY;
+              const pdfX = Math.min(...corners.map(p => p[0]));
+              const pdfW = Math.max(...corners.map(p => p[0])) - pdfX;
+
+              if (Math.abs(pdfW) > 20 && Math.abs(pdfH) > 20) {
+                try {
+                  let imgObj;
+                  if (typeof imgName === 'object') {
+                    imgObj = imgName;
+                  } else {
+                    try {
+                      imgObj = await new Promise((resolve) => {
+                        const timer = setTimeout(() => resolve(null), 500);
+                        const cb = (res) => { clearTimeout(timer); resolve(res); };
+                        try {
+                          if (page.objs.has(imgName)) {
+                            const res = page.objs.get(imgName, cb);
+                            if (res !== undefined) cb(res);
+                          } else if (page.commonObjs && page.commonObjs.has(imgName)) {
+                            const res = page.commonObjs.get(imgName, cb);
+                            if (res !== undefined) cb(res);
+                          } else {
+                            cb(null);
+                          }
+                        } catch (e) {
+                          cb(null);
+                        }
+                      });
+                    } catch (err) { }
+                  }
+
+                  let imgU8;
+                  let dispW = Math.round(Math.abs(pdfW));
+                  let dispH = Math.round(Math.abs(pdfH));
+
+                  if (imgObj) {
+                    const tCanvas = document.createElement('canvas');
+                    tCanvas.width = imgObj.width || dispW * SCALE;
+                    tCanvas.height = imgObj.height || dispH * SCALE;
+                    const tCtx = tCanvas.getContext('2d');
+
+                    if (imgObj instanceof ImageBitmap || imgObj instanceof HTMLImageElement || imgObj instanceof HTMLCanvasElement) {
+                      tCtx.drawImage(imgObj, 0, 0, tCanvas.width, tCanvas.height);
+                    } else if (imgObj.data && imgObj.width && imgObj.height) {
+                      const imgDataObj = new ImageData(new Uint8ClampedArray(imgObj.data), imgObj.width, imgObj.height);
+                      tCtx.putImageData(imgDataObj, 0, 0);
+                    }
+                    imgU8 = await canvasToUint8(tCanvas);
+                  } else {
+                    // Fallback: Crop from rendered canvas
+                    const cTop = Math.max(0, canvas.height - (pdfY + pdfH) * SCALE);
+                    const cLeft = Math.max(0, pdfX * SCALE);
+                    const cw = dispW * SCALE;
+                    const ch = dispH * SCALE;
+                    if (cw > 0 && ch > 0) {
+                      const cropC = document.createElement('canvas');
+                      cropC.width = cw; cropC.height = ch;
+                      const cCtx = cropC.getContext('2d');
+                      cCtx.fillStyle = '#ffffff';
+                      cCtx.fillRect(0, 0, cw, ch);
+                      cCtx.drawImage(canvas, cLeft, cTop, cw, ch, 0, 0, cw, ch);
+                      imgU8 = await canvasToUint8(cropC);
+                    }
+                  }
+
+                  if (imgU8) {
+                    images.push({
+                      pdfY: pdfY + pdfH, // top-left Y coordinate in PDF space for sorting
+                      imgU8,
+                      dispW,
+                      dispH
+                    });
+                  }
+                } catch (ex) {
+                  console.warn('[PDF2WORD] Image fetch error', ex);
+                }
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[PDF2WORD] Operator list extraction error:', e);
+        }
+        return images;
+      };
+
+      // STEP 1: Advanced Layout & Line Grouping
       const textContent = await page.getTextContent({ normalizeWhitespace: true });
       const lineMap = new Map();
       for (const item of textContent.items) {
         if (!item.str || !item.str.trim()) continue;
         const y = item.transform[5];
         let mY = null;
-        for (const kY of lineMap.keys()) if (Math.abs(kY - y) <= 5) { mY = kY; break; }
+        for (const kY of lineMap.keys()) {
+          // 4-pixel tolerance threshold for line clustering
+          if (Math.abs(kY - y) <= 4) { mY = kY; break; }
+        }
         if (mY === null) { mY = y; lineMap.set(mY, []); }
+        
         const cX = item.transform[4] * SCALE;
         const cY = canvas.height - (y * SCALE) - (item.height * SCALE);
         const cW = (item.width || item.transform[0]) * SCALE;
         const cH = (item.height || Math.abs(item.transform[3])) * SCALE;
+        
         lineMap.get(mY).push({
           item,
           x: item.transform[4],
           y,
-          cX, cY, cW, cH,
           colorHex: getDominantHex(ctx, cX, cY, cW, cH),
         });
       }
+
       const sortedY = Array.from(lineMap.keys()).sort((a, b) => b - a);
+      const pageImages = await extractImagesViaOperators();
 
-      // ── IMAGE extraction (operator list) ──
-      const pageImages = await extractImagesViaOperators(page, SCALE);
-
-      // ── Page-number filter: lone digit(s) in bottom 10% ──
-      const isPageNum = (y, items) => {
-        if (y > pageHeightPt * 0.1) return false;
-        return /^\d{1,4}$/.test(items.map(i => i.item.str).join('').trim());
-      };
-
-      // ── Combine and sort content blocks ──
       const blocks = [];
       for (const y of sortedY) {
-        const items = lineMap.get(y);
-        if (isPageNum(y, items)) continue;
-        blocks.push({ type: 'text', y, items });
+        blocks.push({ type: 'text', y, items: lineMap.get(y) });
       }
       for (const img of pageImages) {
         blocks.push({ type: 'image', y: img.pdfY, img });
       }
+      // Sort unified array descending by Y-axis
       blocks.sort((a, b) => b.y - a.y);
 
-      // ── Build docx elements ──
+      // STEP 2 & 4: Robust BiDi Handling & Proper Document Building
       for (const block of blocks) {
-
         if (block.type === 'image') {
           try {
             const { imgU8, dispW: srcW, dispH: srcH } = block.img;
-            // Scale down to fit within Word content area
             const scale = Math.min(1, MAX_IMG_W_PX / srcW);
             const dispW = Math.round(srcW * scale);
             const dispH = Math.round(srcH * scale);
             allDocChildren.push(
               new docx.Paragraph({
-                spacing: { before: 80, after: 80 },
+                spacing: { before: 120, after: 120, line: 360 },
                 children: [
                   new docx.ImageRun({
                     data: imgU8,
@@ -1688,10 +1542,11 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
           } catch (e) {
             console.warn('[PDF2WORD] ImageRun failed:', e);
           }
-
         } else {
           // TEXT block
           const lineItems = block.items;
+          lineItems.sort((a, b) => a.x - b.x); // Sort horizontally by X-axis
+          
           const fullText = lineItems.map(i => i.item.str).join(' ');
           const isArabic = ARABIC_REGEX.test(fullText);
 
