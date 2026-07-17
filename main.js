@@ -1467,90 +1467,54 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
       return `rgb(${Math.round(r / count)},${Math.round(g / count)},${Math.round(b / count)})`;
     };
 
-    // Extracts images from a rendered page canvas using the operator list
-    const extractPageImages = async (page, canvas, viewport) => {
+    // Gap-based image extraction: find large vertical gaps between text lines,
+    // crop those regions from the rendered canvas, and verify they contain real content.
+    const extractGapImages = (ctx, canvas, sortedY, pageHeightPt) => {
       const images = [];
-      try {
-        const opList = await page.getOperatorList();
-        const OPS = pdfjsLib.OPS;
+      const MIN_GAP_PT = 38; // minimum gap height in PDF points to suspect an image
 
-        const imageOps = new Set([
-          OPS.paintImageXObject,
-          OPS.paintImageXObjectRepeat,
-          OPS.paintInlineImageXObject,
-          OPS.paintImageMaskXObject,
-        ]);
+      // Sentinels: top and bottom of page
+      const ys = [pageHeightPt, ...sortedY, 0];
 
-        // Multiply two PDF matrices [a,b,c,d,e,f]
-        const multiplyMatrix = (m1, m2) => [
-          m1[0]*m2[0] + m1[1]*m2[2],
-          m1[0]*m2[1] + m1[1]*m2[3],
-          m1[2]*m2[0] + m1[3]*m2[2],
-          m1[2]*m2[1] + m1[3]*m2[3],
-          m1[4]*m2[0] + m1[5]*m2[2] + m2[4],
-          m1[4]*m2[1] + m1[5]*m2[3] + m2[5],
-        ];
+      for (let i = 0; i < ys.length - 1; i++) {
+        const topPt  = ys[i];
+        const botPt  = ys[i + 1];
+        const gapPt  = topPt - botPt;
+        if (gapPt < MIN_GAP_PT) continue;
 
-        // Proper CTM stack - identity matrix to start
-        const ctmStack = [];
-        let currentCTM = [1, 0, 0, 1, 0, 0];
+        // Convert gap to canvas pixels (y-axis is flipped)
+        const canvasTop = Math.max(0, Math.floor(canvas.height - topPt * SCALE));
+        const canvasBot = Math.min(canvas.height, Math.ceil(canvas.height - botPt * SCALE));
+        const ch = canvasBot - canvasTop;
+        if (ch <= 0) continue;
 
-        for (let i = 0; i < opList.fnArray.length; i++) {
-          const fn = opList.fnArray[i];
-          const args = opList.argsArray[i];
-
-          if (fn === OPS.save) {
-            ctmStack.push([...currentCTM]);
-          } else if (fn === OPS.restore) {
-            if (ctmStack.length > 0) currentCTM = ctmStack.pop();
-          } else if (fn === OPS.transform) {
-            // Concatenate the new transform onto the current CTM
-            currentCTM = multiplyMatrix(currentCTM, args);
-          } else if (imageOps.has(fn)) {
-            // The image unit square [0,1]x[0,1] is mapped by currentCTM.
-            // Transform all 4 corners through the CTM to find the true bounding box.
-            // PDF transform: x' = a*x + c*y + e,  y' = b*x + d*y + f
-            const [a, b, c, d, e, f] = currentCTM;
-            const corners = [
-              [e,       f      ],  // (0,0)
-              [a+e,     b+f    ],  // (1,0)
-              [c+e,     d+f    ],  // (0,1)
-              [a+c+e,   b+d+f  ],  // (1,1)
-            ];
-            const xs = corners.map(p => p[0]);
-            const ys = corners.map(p => p[1]);
-            const pdfX = Math.min(...xs);
-            const pdfY = Math.min(...ys);
-            const pdfW = Math.max(...xs) - pdfX;
-            const pdfH = Math.max(...ys) - pdfY;
-
-            // Convert to canvas pixel coords (SCALE factor, y-axis flipped)
-            const cx = pdfX * SCALE;
-            const cy = canvas.height - (pdfY * SCALE) - (pdfH * SCALE);
-            const cw = Math.abs(pdfW * SCALE);
-            const ch = Math.abs(pdfH * SCALE);
-
-            // Only extract reasonably sized images (skip tiny decorative icons < 20px)
-            if (cw > 20 && ch > 20) {
-              const cropCanvas = document.createElement('canvas');
-              cropCanvas.width  = Math.ceil(cw);
-              cropCanvas.height = Math.ceil(ch);
-              const cropCtx = cropCanvas.getContext('2d');
-              cropCtx.drawImage(
-                canvas,
-                Math.max(0, Math.floor(cx)), Math.max(0, Math.floor(cy)),
-                Math.ceil(cw), Math.ceil(ch),
-                0, 0,
-                Math.ceil(cw), Math.ceil(ch)
-              );
-              const dataUrl = cropCanvas.toDataURL('image/png');
-              // Use pdfY + pdfH (the top edge in PDF space) for sort ordering
-              images.push({ dataUrl, pdfY: pdfY + pdfH, pdfX, pdfW, pdfH });
-            }
+        // Sample pixels to confirm real content exists (not just whitespace)
+        const imgData = ctx.getImageData(0, canvasTop, canvas.width, ch).data;
+        let darkPixels = 0;
+        const totalPixels = canvas.width * ch;
+        for (let p = 0; p < imgData.length; p += 4) {
+          const a = imgData[p + 3];
+          if (a > 50 && (imgData[p] < 220 || imgData[p+1] < 220 || imgData[p+2] < 220)) {
+            darkPixels++;
           }
         }
-      } catch (e) {
-        console.warn('[PDF2WORD] Image extraction error:', e);
+        // Need at least 0.5% non-white pixels to treat as an image
+        if (darkPixels / totalPixels < 0.005) continue;
+
+        const cropCanvas = document.createElement('canvas');
+        cropCanvas.width  = canvas.width;
+        cropCanvas.height = ch;
+        const cropCtx = cropCanvas.getContext('2d');
+        cropCtx.fillStyle = '#ffffff';
+        cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
+        cropCtx.drawImage(canvas, 0, canvasTop, canvas.width, ch, 0, 0, canvas.width, ch);
+
+        const dataUrl = cropCanvas.toDataURL('image/png');
+        // Store in PDF-point dimensions for Word embedding
+        const imgWPt = Math.round(canvas.width / SCALE);
+        const imgHPt = Math.round(gapPt);
+        // pdfY = topPt (for sort ordering: higher = closer to top of page)
+        images.push({ dataUrl, pdfY: topPt, imgWPt, imgHPt });
       }
       return images;
     };
@@ -1569,10 +1533,8 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
       const ctx = canvas.getContext('2d', { willReadFrequently: true });
       await page.render({ canvasContext: ctx, viewport }).promise;
 
-      // --- EXTRACT IMAGES ---
-      const pageImages = await extractPageImages(page, canvas, viewport);
-      // Sort images top-to-bottom by their PDF Y position (descending pdfY = near top)
-      pageImages.sort((a, b) => b.pdfY - a.pdfY);
+      const pageHeightPt = viewport.height / SCALE;
+      const pageWidthPt  = viewport.width  / SCALE;
 
       // --- EXTRACT TEXT ---
       const textContent = await page.getTextContent({ normalizeWhitespace: true });
@@ -1597,15 +1559,26 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
       }
 
       const sortedY = Array.from(lineMap.keys()).sort((a, b) => b - a);
+
+      // --- EXTRACT IMAGES from canvas gaps (after text lines are known) ---
+      const pageImages = extractGapImages(ctx, canvas, sortedY, pageHeightPt);
       let pageHtml = '';
 
       // We interleave images and text lines by their Y positions
       // Build a flat list of content blocks: { type: 'text'|'image', y, html }
       const contentBlocks = [];
 
+      // Page number detection: lone digit(s) centered in bottom 10% of page → skip as inline content
+      const isPageNumberLine = (y, lineItems) => {
+        if (y > pageHeightPt * 0.1) return false; // not in bottom 10%
+        const txt = lineItems.map(i => i.item.str).join('').trim();
+        return /^\d{1,4}$/.test(txt); // just a number
+      };
+
       // Add text lines
       for (const y of sortedY) {
         const lineItems = lineMap.get(y);
+        if (isPageNumberLine(y, lineItems)) continue; // skip page numbers
         const fullLineText = lineItems.map(i => i.item.str).join(' ');
         const isArabicLine = ARABIC_REGEX.test(fullLineText);
         let lineHtml = '';
@@ -1686,12 +1659,9 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
         }
       }
 
-      // Add image blocks — map their pdfY to match with text ordering
+      // Add image blocks (gap-detected)
       for (const img of pageImages) {
-        // Calculate display dimensions in pt (Word pt = PDF pt)
-        const imgWPt = Math.round(img.pdfW);
-        const imgHPt = Math.round(img.pdfH);
-        const imgHtml = `<p class="english-line"><img src="${img.dataUrl}" width="${imgWPt}" height="${imgHPt}" style="display:block; max-width:100%; margin: 4px 0;" /></p>\n`;
+        const imgHtml = `<p class="english-line"><img src="${img.dataUrl}" width="${img.imgWPt}" height="${img.imgHPt}" style="display:block; max-width:100%; margin: 4px 0;" /></p>\n`;
         contentBlocks.push({ type: 'image', y: img.pdfY, html: imgHtml });
       }
 
