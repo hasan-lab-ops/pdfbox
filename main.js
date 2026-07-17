@@ -1399,13 +1399,12 @@ async function wordToPDF() {
     const container = document.createElement("div");
     container.id = "w2p-render-window";
     container.style.cssText = [
-      "position:absolute",
-      "left:0",
+      "position:fixed",
+      "left:-9999px",
       "top:0",
       "width:794px",         // Exact A4 width at 96dpi
       "height:1123px",       // Exact A4 height at 96dpi (1 page)
       "overflow:hidden",     // Hide content outside the current page
-      "opacity:0.01",        // Visually hidden but fully renderable (better than off-screen for html2canvas)
       "pointer-events:none",
       "background:#ffffff",
       "z-index:-9999"
@@ -1530,7 +1529,8 @@ async function wordToPDF() {
       setProgress("word2pdf", 60 + Math.round((p / numPdfPages) * 35), `Rendering page ${p + 1}…`);
       
       // Shift content up so the window shows the current page
-      innerContent.style.transform = `translateY(-${p * PAGE_H}px)`;
+      // We use marginTop instead of transform for safer html2canvas rendering
+      innerContent.style.marginTop = `-${p * PAGE_H}px`;
       
       // Wait a tiny bit for browser layout to settle
       await new Promise(r => setTimeout(r, 50));
