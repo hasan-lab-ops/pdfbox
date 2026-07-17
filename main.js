@@ -1280,22 +1280,38 @@ async function convertPDFToWord(arrayBuffer) {
     // Convert the full page screenshot to a PNG ArrayBuffer
     const imgU8 = await canvasToUint8(canvas);
 
-    // Calculate dimensions for the Word Document
-    // Max width of ~600 corresponds nicely to a standard A4 page width with normal margins.
-    const MAX_IMG_W = 600;
-    const docScale = Math.min(1, MAX_IMG_W / (pageW / (SCALE / 1.5))); // Adjust scaling for Word
-    const outW = Math.round((pageW / (SCALE / 1.5)) * docScale);
-    const outH = Math.round((pageH / (SCALE / 1.5)) * docScale);
+    // A4 dimensions in docx units:
+    //   twips (for page size & margins): 1 inch = 1440 twips
+    //   A4 = 210mm × 297mm = 8.268" × 11.693"
+    //   width  = 8.268 * 1440 = 11906 twips
+    //   height = 11.693 * 1440 = 16838 twips
+    //
+    // docx ImageRun transformation uses pixels at 96 DPI:
+    //   A4 body (0 margins) = 595.28pt wide
+    //   595.28pt * (96/72) = 793.7 ≈ 794px wide
+    //   841.89pt * (96/72) = 1122.5 ≈ 1123px tall
+    const A4_W_TWIPS = 11906;
+    const A4_H_TWIPS = 16838;
+    const A4_W_PX    = 794;   // A4 width in pixels at 96dpi (no margins)
+    const A4_H_PX    = 1123;  // A4 height in pixels at 96dpi (no margins)
+
+    // Scale image to fill A4 exactly (stretch to fit)
+    // The PDF page is already rendered at high DPI; we just declare the output size.
+    const outW = A4_W_PX;
+    const outH = A4_H_PX;
 
     sections.push({
       properties: {
         page: {
-          margin: { top: 720, right: 720, bottom: 720, left: 720 } // 0.5 inch margins (1440 twips = 1 inch)
+          size: { width: A4_W_TWIPS, height: A4_H_TWIPS },
+          // Zero margins so the image fills the entire A4 page
+          margin: { top: 0, right: 0, bottom: 0, left: 0 }
         }
       },
       children: [
         new docx.Paragraph({
           alignment: docx.AlignmentType.CENTER,
+          spacing: { before: 0, after: 0 },
           children: [
             new docx.ImageRun({
               data: imgU8,
