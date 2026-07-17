@@ -1,1080 +1,275 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PDF BOX — Free Online PDF Tools</title>
-  <meta name="description" content="PDF BOX — Free, fast, and secure online PDF tools. Merge, split, compress, rotate, convert PDFs, and more. No upload required — works entirely in your browser." />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="./style.css" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fathom — PDF tools for the deep end of the semester</title>
+<meta name="description" content="Eleven free PDF and Word tools that run entirely in your browser — merge, split, compress, organize, watermark, and convert PDFs. No uploads, no signups.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23081824'/%3E%3Cpath d='M6 18c2-4 5-4 7 0s5 4 7 0s5-4 7 0' fill='none' stroke='%232DE0C9' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-  <!-- ===== NAVBAR ===== -->
-  <nav class="navbar" id="navbar">
-    <div class="nav-container">
-      <a href="#" class="nav-logo">
-        <div class="logo-icon">
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-            <rect x="3" y="2" width="16" height="20" rx="2" fill="url(#logoGrad)" />
-            <rect x="9" y="6" width="14" height="20" rx="2" fill="url(#logoGrad2)" opacity="0.8"/>
-            <path d="M7 9h8M7 12h8M7 15h5" stroke="#0A0F2E" stroke-width="1.5" stroke-linecap="round"/>
-            <defs>
-              <linearGradient id="logoGrad" x1="3" y1="2" x2="19" y2="22" gradientUnits="userSpaceOnUse">
-                <stop stop-color="#00E5FF"/><stop offset="1" stop-color="#00BCD4"/>
-              </linearGradient>
-              <linearGradient id="logoGrad2" x1="9" y1="6" x2="23" y2="26" gradientUnits="userSpaceOnUse">
-                <stop stop-color="#00BCD4"/><stop offset="1" stop-color="#0288D1"/>
-              </linearGradient>
-            </defs>
-          </svg>
-        </div>
-        <span class="logo-text">PDF <span class="logo-accent">BOX</span></span>
-      </a>
-      <div class="nav-links">
-        <a href="#tools" class="nav-link">Tools</a>
-        <a href="#features" class="nav-link">Features</a>
-        <a href="#faq" class="nav-link">FAQ</a>
-        <a href="#" class="nav-link" onclick="openModal('aboutUs');return false;">About</a>
-        <a href="#" class="nav-link" onclick="openModal('contactPage');return false;">Contact</a>
-      </div>
-      <div class="nav-cta">
-        <a href="#tools" class="btn btn-outline-sm">Get Started</a>
-      </div>
-      <button class="hamburger" id="hamburger" aria-label="Menu">
-        <span></span><span></span><span></span>
-      </button>
-    </div>
-  </nav>
+<!-- ============ SVG ICON SPRITE ============ -->
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" style="display:none" aria-hidden="true">
+  <symbol id="icon-logo" viewBox="0 0 32 32"><circle cx="16" cy="16" r="12.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M6 18c2-4 5-4 7 0s5 4 7 0s5-4 7 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="icon-upload" viewBox="0 0 24 24"><path d="M12 16V4M12 4l-4 4M12 4l4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="icon-doc" viewBox="0 0 24 24"><path d="M6 2h8l4 4v16H6z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M14 2v4h4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M8.5 12h7M8.5 15.5h7M8.5 8.5h3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="icon-merge" viewBox="0 0 24 24"><rect x="3" y="4" width="10" height="13" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="11" y="7" width="10" height="13" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+  <symbol id="icon-organize" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="3" width="7" height="9" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="3" y="14" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="14" y="14" width="7" height="7" rx="1" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+  <symbol id="icon-split" viewBox="0 0 24 24"><rect x="3" y="3" width="8" height="18" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.6"/><rect x="13" y="3" width="8" height="18" rx="1.2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 3v18" stroke="currentColor" stroke-width="1.4" stroke-dasharray="2 2"/></symbol>
+  <symbol id="icon-compress" viewBox="0 0 24 24"><path d="M9 4v4a1 1 0 0 1-1 1H4M15 4v4a1 1 0 0 0 1 1h4M9 20v-4a1 1 0 0 0-1-1H4M15 20v-4a1 1 0 0 1 1-1h4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="icon-img2pdf" viewBox="0 0 24 24"><rect x="2" y="3" width="10" height="10" rx="1.3" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="5.3" cy="6.3" r="1" fill="currentColor"/><path d="M3 11l2.5-2.5L8 11l3-4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 8h7M18 5l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><rect x="13" y="13" width="9" height="8" rx="1.3" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+  <symbol id="icon-pdf2img" viewBox="0 0 24 24"><rect x="2" y="3" width="9" height="8" rx="1.3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3 9l1.8-1.8L7 9.2l2-2.7" stroke="currentColor" stroke-width="1.2" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path d="M14 8h7M18 5l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><rect x="13" y="13" width="9" height="8" rx="1.3" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="16.3" cy="16.3" r="1" fill="currentColor"/></symbol>
+  <symbol id="icon-pdf2text" viewBox="0 0 24 24"><rect x="3" y="3" width="14" height="18" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M6.5 8h7M6.5 11.5h7M6.5 15h4.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></symbol>
+  <symbol id="icon-pdf2word" viewBox="0 0 24 24"><rect x="2" y="3" width="9" height="11" rx="1.3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M4.5 7h4M4.5 9.5h4M4.5 12h2.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/><path d="M14 8h7M18 5l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><rect x="13" y="13" width="9" height="8" rx="1.3" fill="none" stroke="currentColor" stroke-width="1.6"/><text x="17.5" y="19.2" font-size="6.2" text-anchor="middle" fill="currentColor" font-family="sans-serif" font-weight="bold">W</text></symbol>
+  <symbol id="icon-word2pdf" viewBox="0 0 24 24"><rect x="2" y="3" width="9" height="8" rx="1.3" fill="none" stroke="currentColor" stroke-width="1.6"/><text x="6.5" y="9.3" font-size="6.2" text-anchor="middle" fill="currentColor" font-family="sans-serif" font-weight="bold">W</text><path d="M14 8h7M18 5l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><rect x="13" y="13" width="9" height="8" rx="1.3" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M15.5 21v-4a1 1 0 0 1 1-1h3a1 1 0 0 1 1 1v4" stroke="currentColor" stroke-width="1.3" fill="none"/></symbol>
+  <symbol id="icon-watermark" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M12 7c2 2.4 3 4 3 5.4a3 3 0 1 1-6 0C9 11 10 9.4 12 7Z" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></symbol>
+  <symbol id="icon-pagenum" viewBox="0 0 24 24"><rect x="4" y="2" width="14" height="18" rx="1.4" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M8 7h6M8 10.5h6M8 14h3.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/><circle cx="18" cy="19" r="4.4" fill="#081420" stroke="currentColor" stroke-width="1.4"/><text x="18" y="21.2" font-size="6.2" text-anchor="middle" fill="currentColor" font-family="sans-serif">2</text></symbol>
+  <symbol id="icon-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-9 0 1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="icon-rotate" viewBox="0 0 24 24"><path d="M4 12a8 8 0 1 1 2.6 5.9" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><path d="M4 18v-5h5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="icon-drag" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1.4" fill="currentColor"/><circle cx="15" cy="6" r="1.4" fill="currentColor"/><circle cx="9" cy="12" r="1.4" fill="currentColor"/><circle cx="15" cy="12" r="1.4" fill="currentColor"/><circle cx="9" cy="18" r="1.4" fill="currentColor"/><circle cx="15" cy="18" r="1.4" fill="currentColor"/></symbol>
+  <symbol id="icon-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0-4-4m4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 17v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="icon-close" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6 6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></symbol>
+  <symbol id="icon-check" viewBox="0 0 24 24"><path d="M5 13l4.5 4.5L19 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="icon-arrow-left" viewBox="0 0 24 24"><path d="M19 12H5m0 0 6-6m-6 6 6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="icon-chevron" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="icon-privacy" viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 5-3.5 8-7 9-3.5-1-7-4-7-9V6l7-3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="icon-bolt" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+  <symbol id="icon-cursor" viewBox="0 0 24 24"><path d="M5 3l14 6-6 2-2 6-6-14Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></symbol>
+</svg>
 
-  <!-- Mobile Menu -->
-  <div class="mobile-menu" id="mobileMenu">
-    <a href="#tools" class="mobile-link" onclick="closeMobileMenu()">Tools</a>
-    <a href="#features" class="mobile-link" onclick="closeMobileMenu()">Features</a>
-    <a href="#faq" class="mobile-link" onclick="closeMobileMenu()">FAQ</a>
-    <a href="#" class="mobile-link" onclick="openModal('aboutUs');closeMobileMenu();return false;">About</a>
-    <a href="#" class="mobile-link" onclick="openModal('contactPage');closeMobileMenu();return false;">Contact</a>
-    <a href="#" class="mobile-link" onclick="openModal('privacyPolicy');closeMobileMenu();return false;">Privacy</a>
-    <a href="#tools" class="btn btn-primary mobile-cta" onclick="closeMobileMenu()">Get Started</a>
+<div class="grain" aria-hidden="true"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <button class="logo" data-nav="home" aria-label="Fathom home">
+      <svg class="logo-mark" width="30" height="30"><use href="#icon-logo"></use></svg>
+      <span>Fathom</span>
+    </button>
+    <nav class="main-nav" aria-label="Primary">
+      <button class="nav-link" data-nav="tools">Tools</button>
+      <button class="nav-link" data-nav="how">How it works</button>
+    </nav>
+    <div class="header-badge">
+      <svg width="14" height="14"><use href="#icon-privacy"></use></svg>
+      Runs in your browser
+    </div>
   </div>
+</header>
 
-  <!-- ===== HERO ===== -->
-  <section class="hero" id="home">
-    <div class="hero-bg">
-      <div class="hero-orb orb-1"></div>
-      <div class="hero-orb orb-2"></div>
-      <div class="hero-orb orb-3"></div>
-      <div class="grid-overlay"></div>
-    </div>
-    <div class="hero-container">
-      <div class="hero-badge">
-        <span class="badge-dot"></span>
-        <span>100% Free — No Sign-up Required</span>
-      </div>
-      <h1 class="hero-title">
-        Your All-in-One<br />
-        <span class="gradient-text">PDF Toolbox</span>
-      </h1>
-      <p class="hero-subtitle">
-        Merge, split, compress, rotate, convert &amp; more. Everything runs <strong>right in your browser</strong> — your files never leave your device.
-      </p>
-      <div class="hero-actions">
-        <a href="#tools" class="btn btn-primary btn-lg">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2"/><polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="2"/></svg>
-          Explore Tools
-        </a>
-        <div class="hero-stats">
-          <div class="stat"><span class="stat-num">12+</span><span class="stat-label">Tools</span></div>
-          <div class="stat-divider"></div>
-          <div class="stat"><span class="stat-num">0</span><span class="stat-label">Uploads</span></div>
-          <div class="stat-divider"></div>
-          <div class="stat"><span class="stat-num">100%</span><span class="stat-label">Private</span></div>
-        </div>
-      </div>
-    </div>
-    <div class="hero-scroll">
-      <div class="scroll-indicator"><div class="scroll-dot"></div></div>
-    </div>
-  </section>
+<main id="app">
 
-  <!-- ===== TOOLS GRID ===== -->
-  <section class="tools-section" id="tools">
-    <div class="container">
-      <div class="section-header">
-        <div class="section-badge">PDF Tools</div>
-        <h2 class="section-title">Everything You Need</h2>
-        <p class="section-subtitle">Powerful PDF tools built for students, professionals, and everyone in between.</p>
-      </div>
-      <div class="tools-grid">
+  <!-- ============ HOME VIEW ============ -->
+  <section id="view-home" class="view">
 
-        <!-- 1. Merge PDF -->
-        <div class="tool-card" id="card-merge" onclick="openModal('mergePDF')">
-          <div class="tool-card-glow"></div>
-          <div class="tool-icon-wrap" style="--icon-color:#00E5FF;">
-            <svg class="tool-icon" viewBox="0 0 24 24" fill="none"><path d="M4 6h6v12H4zM14 6h6v12h-6z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M10 12h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <section class="hero">
+      <div class="hero-inner">
+        <div class="hero-copy">
+          <p class="eyebrow">Free · Private · Eleven tools</p>
+          <h1 class="hero-title">PDF tools for the<br>deep end of the semester.</h1>
+          <p class="hero-sub">Merge lecture notes, shrink a file for submission, pull three slides out of a deck. Everything runs right here on your device — nothing is ever uploaded anywhere.</p>
+          <div class="hero-actions">
+            <button class="btn btn-primary" data-nav="tools">
+              Browse tools
+              <svg width="16" height="16"><use href="#icon-chevron"></use></svg>
+            </button>
+            <button class="btn btn-ghost" data-nav="how">See how it works</button>
           </div>
-          <h3 class="tool-name">Merge PDF</h3>
-          <p class="tool-desc">Combine multiple PDF files into a single document instantly.</p>
-          <div class="tool-arrow"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
         </div>
-
-        <!-- 2. Split PDF -->
-        <div class="tool-card" id="card-split" onclick="openModal('splitPDF')">
-          <div class="tool-card-glow"></div>
-          <div class="tool-icon-wrap" style="--icon-color:#00BCD4;">
-            <svg class="tool-icon" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/><line x1="12" y1="3" x2="12" y2="21" stroke="currentColor" stroke-width="2" stroke-dasharray="3 2"/></svg>
-          </div>
-          <h3 class="tool-name">Split PDF</h3>
-          <p class="tool-desc">Extract a range of pages from any PDF into a new file.</p>
-          <div class="tool-arrow"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-        </div>
-
-        <!-- 3. Compress PDF -->
-        <div class="tool-card" id="card-compress" onclick="openModal('compressPDF')">
-          <div class="tool-card-glow"></div>
-          <div class="tool-icon-wrap" style="--icon-color:#26C6DA;">
-            <svg class="tool-icon" viewBox="0 0 24 24" fill="none"><path d="M12 3v14M12 3l-4 4M12 3l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 17v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          </div>
-          <h3 class="tool-name">Compress PDF</h3>
-          <p class="tool-desc">Reduce PDF file size while maintaining quality for easy sharing.</p>
-          <div class="tool-arrow"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-        </div>
-
-        <!-- 4. Rotate PDF -->
-        <div class="tool-card" id="card-rotate" onclick="openModal('rotatePDF')">
-          <div class="tool-card-glow"></div>
-          <div class="tool-icon-wrap" style="--icon-color:#00E5FF;">
-            <svg class="tool-icon" viewBox="0 0 24 24" fill="none"><path d="M1 4v6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.51 15a9 9 0 1 0 .49-5.05" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-          </div>
-          <h3 class="tool-name">Rotate PDF</h3>
-          <p class="tool-desc">Rotate all pages or specific pages 90°, 180°, or 270°.</p>
-          <div class="tool-arrow"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-        </div>
-
-        <!-- 5. PDF to Images -->
-        <div class="tool-card" id="card-pdf2img" onclick="openModal('pdf2img')">
-          <div class="tool-card-glow"></div>
-          <div class="tool-icon-wrap" style="--icon-color:#00BCD4;">
-            <svg class="tool-icon" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="14" height="18" rx="2" stroke="currentColor" stroke-width="2"/><circle cx="7" cy="9" r="2" stroke="currentColor" stroke-width="1.5"/><path d="M3 18l4-4 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </div>
-          <h3 class="tool-name">PDF to Images</h3>
-          <p class="tool-desc">Convert each PDF page into high-quality PNG images.</p>
-          <div class="tool-arrow"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-        </div>
-
-        <!-- 6. Images to PDF -->
-        <div class="tool-card" id="card-img2pdf" onclick="openModal('img2pdf')">
-          <div class="tool-card-glow"></div>
-          <div class="tool-icon-wrap" style="--icon-color:#26C6DA;">
-            <svg class="tool-icon" viewBox="0 0 24 24" fill="none"><rect x="8" y="3" width="14" height="18" rx="2" stroke="currentColor" stroke-width="2"/><circle cx="13" cy="9" r="2" stroke="currentColor" stroke-width="1.5"/><path d="M9 18l4-4 5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </div>
-          <h3 class="tool-name">Images to PDF</h3>
-          <p class="tool-desc">Combine JPG, PNG, or multiple images into a single PDF.</p>
-          <div class="tool-arrow"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-        </div>
-
-        <!-- 7. Watermark -->
-        <div class="tool-card" id="card-watermark" onclick="openModal('watermark')">
-          <div class="tool-card-glow"></div>
-          <div class="tool-icon-wrap" style="--icon-color:#00E5FF;">
-            <svg class="tool-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </div>
-          <h3 class="tool-name">Add Watermark</h3>
-          <p class="tool-desc">Overlay custom text watermarks on all pages of your PDF.</p>
-          <div class="tool-arrow"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-        </div>
-
-        <!-- 8. Protect PDF -->
-        <div class="tool-card" id="card-protect" onclick="openModal('protectPDF')">
-          <div class="tool-card-glow"></div>
-          <div class="tool-icon-wrap" style="--icon-color:#00BCD4;">
-            <svg class="tool-icon" viewBox="0 0 24 24" fill="none"><path d="M12 2l8 4v6c0 5-4 9-8 10C8 21 4 17 4 12V6l8-4z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-          </div>
-          <h3 class="tool-name">Protect PDF</h3>
-          <p class="tool-desc">Password-protect your PDF with AES-128 encryption.</p>
-          <div class="tool-arrow"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-        </div>
-
-        <!-- 9. Extract Pages -->
-        <div class="tool-card" id="card-extract" onclick="openModal('extractPages')">
-          <div class="tool-card-glow"></div>
-          <div class="tool-icon-wrap" style="--icon-color:#26C6DA;">
-            <svg class="tool-icon" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2"/><polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="2"/></svg>
-          </div>
-          <h3 class="tool-name">Extract Pages</h3>
-          <p class="tool-desc">Select specific pages to extract into a brand new PDF file.</p>
-          <div class="tool-arrow"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-        </div>
-
-        <!-- 10. PDF Viewer -->
-        <div class="tool-card" id="card-viewer" onclick="openModal('pdfViewer')">
-          <div class="tool-card-glow"></div>
-          <div class="tool-icon-wrap" style="--icon-color:#00E5FF;">
-            <svg class="tool-icon" viewBox="0 0 24 24" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
-          </div>
-          <h3 class="tool-name">PDF Viewer</h3>
-          <p class="tool-desc">View and navigate any PDF file directly in your browser with zoom.</p>
-          <div class="tool-arrow"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-        </div>
-
-        <!-- 11. PDF to Word (NEW) -->
-        <div class="tool-card tool-card-new" id="card-pdf2word" onclick="openModal('pdf2word')">
-          <div class="tool-card-glow"></div>
-          <div class="tool-badge-new">NEW</div>
-          <div class="tool-icon-wrap" style="--icon-color:#7C4DFF;">
-            <svg class="tool-icon" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="14" height="18" rx="2" stroke="currentColor" stroke-width="2"/><path d="M16 7h5M16 12h5M16 17h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M6 9h6M6 12h4M6 15h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-          </div>
-          <h3 class="tool-name">PDF to Word</h3>
-          <p class="tool-desc">Convert PDF to editable .docx with text, Arabic support &amp; spacing.</p>
-          <div class="tool-arrow"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-        </div>
-
-        <!-- 12. Word to PDF (NEW) -->
-        <div class="tool-card tool-card-new" id="card-word2pdf" onclick="openModal('word2pdf')">
-          <div class="tool-card-glow"></div>
-          <div class="tool-badge-new">NEW</div>
-          <div class="tool-icon-wrap" style="--icon-color:#FF6D00;">
-            <svg class="tool-icon" viewBox="0 0 24 24" fill="none"><rect x="8" y="3" width="14" height="18" rx="2" stroke="currentColor" stroke-width="2"/><path d="M2 7h6M2 12h4M2 17h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 9h6M12 12h4M12 15h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-          </div>
-          <h3 class="tool-name">Word to PDF</h3>
-          <p class="tool-desc">Convert .docx Word documents to PDF preserving images &amp; text.</p>
-          <div class="tool-arrow"><svg viewBox="0 0 24 24" fill="none"><path d="M5 12h14M12 5l7 7-7 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-        </div>
-
-      </div><!-- end .tools-grid -->
-    </div>
-  </section>
-
-  <!-- ===== FEATURES SECTION ===== -->
-  <section class="features-section" id="features">
-    <div class="container">
-      <div class="section-header">
-        <div class="section-badge">Why PDF BOX?</div>
-        <h2 class="section-title">Built for Everyone</h2>
-        <p class="section-subtitle">Fast, secure, and completely free — no hidden fees, no sign-up.</p>
-      </div>
-      <div class="features-grid">
-        <div class="feature-card">
-          <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2"/></svg></div>
-          <h3>100% Private</h3>
-          <p>All processing happens in your browser. Your files are never uploaded to any server.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><polyline points="12 6 12 12 16 14" stroke="currentColor" stroke-width="2"/></svg></div>
-          <h3>Lightning Fast</h3>
-          <p>No waiting for uploads. Tools work instantly using your device's own processing power.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" stroke="currentColor" stroke-width="2"/></svg></div>
-          <h3>Completely Free</h3>
-          <p>No subscriptions, no limits, no watermarks on output files. Totally free forever.</p>
-        </div>
-        <div class="feature-card">
-          <div class="feature-icon"><svg viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="14" rx="2" stroke="currentColor" stroke-width="2"/><path d="M8 21h8M12 17v4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></div>
-          <h3>Works Everywhere</h3>
-          <p>Compatible with all modern browsers on desktop and mobile. No installation needed.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ===== FAQ ===== -->
-  <section class="faq-section" id="faq">
-    <div class="container">
-      <div class="section-header">
-        <div class="section-badge">FAQ</div>
-        <h2 class="section-title">Frequently Asked Questions</h2>
-      </div>
-      <div class="faq-list">
-        <div class="faq-item">
-          <button class="faq-question" onclick="toggleFAQ(this)">Are my files safe? <span class="faq-icon">+</span></button>
-          <div class="faq-answer"><p>Yes! PDF BOX processes everything locally in your browser using JavaScript. Your files are never sent to any server, so they remain completely private and secure.</p></div>
-        </div>
-        <div class="faq-item">
-          <button class="faq-question" onclick="toggleFAQ(this)">Is there a file size limit? <span class="faq-icon">+</span></button>
-          <div class="faq-answer"><p>Since processing happens in your browser, the limit depends on your device's available RAM. Generally, files up to 100MB work great. Very large files may slow down on older devices.</p></div>
-        </div>
-        <div class="faq-item">
-          <button class="faq-question" onclick="toggleFAQ(this)">Do I need to create an account? <span class="faq-icon">+</span></button>
-          <div class="faq-answer"><p>No account needed! PDF BOX is 100% free and requires no registration. Just open the site and start using the tools right away.</p></div>
-        </div>
-        <div class="faq-item">
-          <button class="faq-question" onclick="toggleFAQ(this)">Does the PDF to Word tool support Arabic? <span class="faq-icon">+</span></button>
-          <div class="faq-answer"><p>Yes! The PDF to Word converter automatically detects Arabic, Hebrew, and other RTL languages and applies the correct right-to-left text direction and alignment in the output .docx file.</p></div>
-        </div>
-        <div class="faq-item">
-          <button class="faq-question" onclick="toggleFAQ(this)">Does it work on mobile? <span class="faq-icon">+</span></button>
-          <div class="faq-answer"><p>Yes! PDF BOX is fully responsive and works on smartphones and tablets running modern browsers like Chrome, Firefox, Safari, or Edge.</p></div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- ===== FOOTER ===== -->
-  <footer class="footer">
-    <div class="container">
-      <div class="footer-top">
-        <div class="footer-brand">
-          <div class="nav-logo">
-            <div class="logo-icon">
-              <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-                <rect x="3" y="2" width="16" height="20" rx="2" fill="url(#footerLogoGrad)"/>
-                <rect x="9" y="6" width="14" height="20" rx="2" fill="url(#footerLogoGrad2)" opacity="0.8"/>
-                <path d="M7 9h8M7 12h8M7 15h5" stroke="#0A0F2E" stroke-width="1.5" stroke-linecap="round"/>
-                <defs>
-                  <linearGradient id="footerLogoGrad" x1="3" y1="2" x2="19" y2="22" gradientUnits="userSpaceOnUse">
-                    <stop stop-color="#00E5FF"/><stop offset="1" stop-color="#00BCD4"/>
-                  </linearGradient>
-                  <linearGradient id="footerLogoGrad2" x1="9" y1="6" x2="23" y2="26" gradientUnits="userSpaceOnUse">
-                    <stop stop-color="#00BCD4"/><stop offset="1" stop-color="#0288D1"/>
-                  </linearGradient>
-                </defs>
-              </svg>
+        <div class="hero-art" aria-hidden="true">
+          <div class="scan-stack">
+            <div class="scan-page p3"></div>
+            <div class="scan-page p2"></div>
+            <div class="scan-page p1">
+              <span class="scan-line-a"></span>
+              <span class="scan-line-b"></span>
+              <span class="scan-line-c"></span>
             </div>
-            <span class="logo-text">PDF <span class="logo-accent">BOX</span></span>
-          </div>
-          <p class="footer-tagline">Free, fast, and private PDF tools for everyone.</p>
-        </div>
-        <div class="footer-links-wrap">
-          <div class="footer-links-col">
-            <h4>Tools</h4>
-            <a onclick="openModal('mergePDF')">Merge PDF</a>
-            <a onclick="openModal('splitPDF')">Split PDF</a>
-            <a onclick="openModal('compressPDF')">Compress PDF</a>
-            <a onclick="openModal('rotatePDF')">Rotate PDF</a>
-            <a onclick="openModal('pdf2img')">PDF to Images</a>
-            <a onclick="openModal('pdf2word')">PDF to Word</a>
-          </div>
-          <div class="footer-links-col">
-            <h4>More Tools</h4>
-            <a onclick="openModal('img2pdf')">Images to PDF</a>
-            <a onclick="openModal('watermark')">Add Watermark</a>
-            <a onclick="openModal('protectPDF')">Protect PDF</a>
-            <a onclick="openModal('extractPages')">Extract Pages</a>
-            <a onclick="openModal('pdfViewer')">PDF Viewer</a>
-            <a onclick="openModal('word2pdf')">Word to PDF</a>
-          </div>
-          <div class="footer-links-col">
-            <h4>Company</h4>
-            <a onclick="openModal('aboutUs')" style="cursor:pointer;">About Us</a>
-            <a onclick="openModal('contactPage')" style="cursor:pointer;">Contact</a>
-            <a onclick="openModal('privacyPolicy')" style="cursor:pointer;">Privacy Policy</a>
+            <div class="scan-beam-wrap"><div class="scan-beam"></div></div>
           </div>
         </div>
       </div>
-      <div class="footer-bottom">
-        <p>&copy; 2024 PDF BOX. All processing is done locally in your browser.</p>
-        <div class="footer-badge">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="currentColor"/></svg>
-          Files never leave your device
+    </section>
+
+    <section class="tool-grid-section" id="tools">
+      <div class="section-heading">
+        <p class="eyebrow">The toolkit</p>
+        <h2>Eleven tools. No tab-hopping between sketchy sites.</h2>
+      </div>
+
+      <div class="filter-chips" role="tablist" aria-label="Filter tools by category">
+        <button class="chip is-active" data-filter="all">All</button>
+        <button class="chip" data-filter="organize">Organize</button>
+        <button class="chip" data-filter="convert">Convert</button>
+        <button class="chip" data-filter="optimize">Optimize</button>
+        <button class="chip" data-filter="personalize">Personalize</button>
+      </div>
+
+      <div class="tool-grid" id="toolGrid">
+
+        <button class="tool-card" data-tool="merge" data-category="organize">
+          <svg class="tool-icon" width="26" height="26"><use href="#icon-merge"></use></svg>
+          <h3>Merge PDFs</h3>
+          <p>Combine multiple PDFs into one, in the order you choose.</p>
+          <span class="tool-tag">Organize</span>
+        </button>
+
+        <button class="tool-card" data-tool="organize" data-category="organize">
+          <svg class="tool-icon" width="26" height="26"><use href="#icon-organize"></use></svg>
+          <h3>Organize Pages</h3>
+          <p>Reorder, rotate, delete, or pull pages out of a PDF.</p>
+          <span class="tool-tag">Organize</span>
+        </button>
+
+        <button class="tool-card" data-tool="split" data-category="organize">
+          <svg class="tool-icon" width="26" height="26"><use href="#icon-split"></use></svg>
+          <h3>Split PDF</h3>
+          <p>Break a PDF into smaller files by page range.</p>
+          <span class="tool-tag">Organize</span>
+        </button>
+
+        <button class="tool-card" data-tool="compress" data-category="optimize">
+          <svg class="tool-icon" width="26" height="26"><use href="#icon-compress"></use></svg>
+          <h3>Compress PDF</h3>
+          <p>Shrink a PDF's file size so it's easier to upload or email.</p>
+          <span class="tool-tag">Optimize</span>
+        </button>
+
+        <button class="tool-card" data-tool="img2pdf" data-category="convert">
+          <svg class="tool-icon" width="26" height="26"><use href="#icon-img2pdf"></use></svg>
+          <h3>Images to PDF</h3>
+          <p>Turn a batch of photos or scans into a single PDF.</p>
+          <span class="tool-tag">Convert</span>
+        </button>
+
+        <button class="tool-card" data-tool="pdf2img" data-category="convert">
+          <svg class="tool-icon" width="26" height="26"><use href="#icon-pdf2img"></use></svg>
+          <h3>PDF to Images</h3>
+          <p>Export every page as a PNG or JPG.</p>
+          <span class="tool-tag">Convert</span>
+        </button>
+
+        <button class="tool-card" data-tool="pdf2text" data-category="convert">
+          <svg class="tool-icon" width="26" height="26"><use href="#icon-pdf2text"></use></svg>
+          <h3>PDF to Text</h3>
+          <p>Pull the plain text out of a PDF to copy or edit.</p>
+          <span class="tool-tag">Convert</span>
+        </button>
+
+        <button class="tool-card" data-tool="pdf2word" data-category="convert">
+          <svg class="tool-icon" width="26" height="26"><use href="#icon-pdf2word"></use></svg>
+          <h3>PDF to Word</h3>
+          <p>Turn a PDF's text into an editable .docx file.</p>
+          <span class="tool-tag">Convert</span>
+        </button>
+
+        <button class="tool-card" data-tool="word2pdf" data-category="convert">
+          <svg class="tool-icon" width="26" height="26"><use href="#icon-word2pdf"></use></svg>
+          <h3>Word to PDF</h3>
+          <p>Turn a .docx file into a PDF you can share or submit.</p>
+          <span class="tool-tag">Convert</span>
+        </button>
+
+        <button class="tool-card" data-tool="watermark" data-category="personalize">
+          <svg class="tool-icon" width="26" height="26"><use href="#icon-watermark"></use></svg>
+          <h3>Add Watermark</h3>
+          <p>Stamp a diagonal or tiled watermark across every page.</p>
+          <span class="tool-tag">Personalize</span>
+        </button>
+
+        <button class="tool-card" data-tool="pagenum" data-category="personalize">
+          <svg class="tool-icon" width="26" height="26"><use href="#icon-pagenum"></use></svg>
+          <h3>Add Page Numbers</h3>
+          <p>Number every page, right where you want it.</p>
+          <span class="tool-tag">Personalize</span>
+        </button>
+
+      </div>
+    </section>
+
+    <section class="how-section" id="how">
+      <div class="section-heading">
+        <p class="eyebrow">How it works</p>
+        <h2>Three steps. No account required.</h2>
+      </div>
+      <div class="how-grid">
+        <div class="how-step">
+          <span class="how-num">01</span>
+          <svg width="22" height="22"><use href="#icon-cursor"></use></svg>
+          <h3>Choose a tool</h3>
+          <p>Pick from eleven PDF and Word tools built around actual coursework — not a generic converter.</p>
+        </div>
+        <div class="how-step">
+          <span class="how-num">02</span>
+          <svg width="22" height="22"><use href="#icon-upload"></use></svg>
+          <h3>Drop your file</h3>
+          <p>Your file is read directly by your browser. It never touches a server.</p>
+        </div>
+        <div class="how-step">
+          <span class="how-num">03</span>
+          <svg width="22" height="22"><use href="#icon-download"></use></svg>
+          <h3>Get your result</h3>
+          <p>Download it instantly, ready to submit, print, or share.</p>
         </div>
       </div>
-    </div>
-  </footer>
+    </section>
 
-  <!-- ===================================================================
-       MODALS
-  ==================================================================== -->
-
-  <!-- Modal Overlay -->
-  <div class="modal-overlay" id="modalOverlay" onclick="closeModal()"></div>
-
-  <!-- ===== MODAL: Merge PDF ===== -->
-  <div class="modal" id="modal-mergePDF">
-    <div class="modal-header">
-      <div class="modal-title-wrap">
-        <div class="modal-icon-wrap" style="--icon-color:#00E5FF;">
-          <svg viewBox="0 0 24 24" fill="none"><path d="M4 6h6v12H4zM14 6h6v12h-6z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M10 12h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+    <section class="trust-section">
+      <div class="trust-inner">
+        <svg width="28" height="28"><use href="#icon-privacy"></use></svg>
+        <div>
+          <h3>Your files never leave your device</h3>
+          <p>Fathom does all of its work locally in your browser using JavaScript — there's no server in the loop, no file storage, and nothing to sign up for. That also means it's fast, and it means your transcripts, essays, and half-finished lab reports stay yours.</p>
         </div>
-        <div><h2 class="modal-title">Merge PDF</h2><p class="modal-subtitle">Combine multiple PDFs into one file</p></div>
       </div>
-      <button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
-    </div>
-    <div class="modal-body">
-      <div class="dropzone" id="dz-merge" onclick="document.getElementById('input-merge').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,'input-merge')">
-        <input type="file" id="input-merge" accept=".pdf" multiple hidden onchange="handleFileSelect('merge', this.files)" />
-        <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="2"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2"/></svg></div>
-        <p class="dz-text">Drop PDFs here or <span class="dz-link">browse files</span></p>
-        <p class="dz-hint">Select multiple PDF files to merge</p>
-      </div>
-      <div class="file-list" id="files-merge"></div>
-      <div class="modal-options">
-        <label class="option-label">Output filename</label>
-        <input type="text" class="text-input" id="merge-output" value="merged" placeholder="Output filename (without .pdf)" />
-      </div>
-      <button class="btn btn-primary btn-full" id="btn-merge" onclick="mergePDFs()" disabled>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M4 6h6v12H4zM14 6h6v12h-6z" stroke="currentColor" stroke-width="2"/><path d="M10 12h4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        Merge PDFs
+    </section>
+
+  </section>
+
+  <!-- ============ WORKSPACE VIEW ============ -->
+  <section id="view-workspace" class="view" hidden>
+    <div class="workspace-wrap">
+      <button class="back-btn" id="backBtn">
+        <svg width="16" height="16"><use href="#icon-arrow-left"></use></svg>
+        Back to tools
       </button>
-      <div class="progress-wrap" id="progress-merge" style="display:none;"><div class="progress-bar"><div class="progress-fill" id="pf-merge"></div></div><p class="progress-text" id="pt-merge">Processing…</p></div>
-      <div class="result-box" id="result-merge"></div>
-      <div class="tool-description">
-        <h4>About Merge PDF</h4>
-        <p>PDF BOX's Merge PDF tool is one of the most essential utilities for anyone who regularly works with PDF documents. Whether you're a student compiling research chapters, a professional assembling multi-section reports, or an office worker combining scanned invoices, this tool makes the entire process effortless and instant.</p>
-        <p>The tool uses pdf-lib — a powerful open-source JavaScript library — to load each PDF you provide, copy all its pages verbatim into a brand-new document, and stitch them together into a single, cohesive output file. Every element from each source PDF is preserved with complete fidelity: embedded fonts, raster images, vector graphics, hyperlinks, bookmarks, and all page formatting. The output PDF is 100% standards-compliant and opens perfectly in Adobe Acrobat, Chrome, Firefox, Preview, or any other PDF reader on any platform.</p>
-        <p><strong>How to use:</strong> Click the upload area or drag and drop your PDF files directly onto the dropzone. Add as many PDFs as you need — there is no hard limit beyond your device's available memory. Review the file list below the dropzone; click the ✕ button beside any file to remove it. The merge order follows the order in the list, so arrange files as desired. Enter a custom output filename (or keep the default "merged") and click the Merge PDFs button. The progress bar will track the operation page-by-page. Once complete, a download button appears — click it to save your merged document.</p>
-        <p><strong>Key advantages:</strong> All processing happens locally in your browser — your files are never uploaded to any server, ensuring complete privacy. There are no file size limits imposed by the tool (only your device's RAM applies), no watermarks added to the output, and no quality loss whatsoever. Different page sizes and orientations coexist perfectly in the same merged document, making it ideal for combining A4 and Letter-sized pages without reformatting.</p>
-        <p><strong>Common use cases:</strong> Combining monthly bank statements into a yearly archive, assembling thesis chapters, merging scanned document batches, consolidating presentation handouts, or creating complete portfolios from individual project files. PDF BOX Merge PDF is free, unlimited, and fully private — your documents are always yours.</p>
+      <div class="workspace-header">
+        <h2 id="workspaceTitle">Tool</h2>
+        <p id="workspaceDesc">Description</p>
       </div>
+      <div id="workspaceBody" class="workspace-body"></div>
     </div>
+  </section>
+
+</main>
+
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <svg class="logo-mark" width="24" height="24"><use href="#icon-logo"></use></svg>
+      <span>Fathom</span>
+    </div>
+    <nav class="footer-links" aria-label="Footer">
+      <a href="about.html">About</a>
+      <a href="privacy.html">Privacy Policy</a>
+      <a href="contact.html">Contact</a>
+    </nav>
+    <p class="footer-tagline">Built for students. No login, no tracking, no file-size games.</p>
+    <p class="footer-credit">All processing happens locally in your browser, powered by pdf-lib, pdf.js, JSZip, and docx.</p>
   </div>
+</footer>
 
-  <!-- ===== MODAL: Split PDF ===== -->
-  <div class="modal" id="modal-splitPDF">
-    <div class="modal-header">
-      <div class="modal-title-wrap">
-        <div class="modal-icon-wrap" style="--icon-color:#00BCD4;">
-          <svg viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/><line x1="12" y1="3" x2="12" y2="21" stroke="currentColor" stroke-width="2" stroke-dasharray="3 2"/></svg>
-        </div>
-        <div><h2 class="modal-title">Split PDF</h2><p class="modal-subtitle">Extract a page range into a new PDF</p></div>
-      </div>
-      <button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
-    </div>
-    <div class="modal-body">
-      <div class="dropzone" id="dz-split" onclick="document.getElementById('input-split').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,'input-split')">
-        <input type="file" id="input-split" accept=".pdf" hidden onchange="handleFileSelect('split', this.files)" />
-        <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="2"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2"/></svg></div>
-        <p class="dz-text">Drop a PDF here or <span class="dz-link">browse</span></p>
-        <p class="dz-hint">Select one PDF file</p>
-      </div>
-      <div class="file-list" id="files-split"></div>
-      <div class="modal-options">
-        <label class="option-label">Page range (e.g. 1-3 or 2,4,5)</label>
-        <input type="text" class="text-input" id="split-range" placeholder="e.g. 1-5 or 1,3,5" />
-        <p class="option-hint" id="split-page-count"></p>
-      </div>
-      <button class="btn btn-primary btn-full" id="btn-split" onclick="splitPDF()" disabled>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" stroke="currentColor" stroke-width="2"/><line x1="12" y1="3" x2="12" y2="21" stroke="currentColor" stroke-width="2" stroke-dasharray="3 2"/></svg>
-        Split PDF
-      </button>
-      <div class="progress-wrap" id="progress-split" style="display:none;"><div class="progress-bar"><div class="progress-fill" id="pf-split"></div></div><p class="progress-text" id="pt-split">Processing…</p></div>
-      <div class="result-box" id="result-split"></div>
-      <div class="tool-description">
-        <h4>About Split PDF</h4>
-        <p>The Split PDF tool gives you surgical precision over your PDF documents, letting you extract any subset of pages into a brand-new file within seconds. Whether you need to isolate a single chapter from a book, separate a contract from an appendix, or extract slides from a presentation, this tool handles it effortlessly — all without any software installation.</p>
-        <p>Under the hood, the tool uses pdf-lib to load your document, parse your requested page range, copy only the specified pages into a fresh PDF document, and save it as a clean, self-contained file. All embedded content — images, fonts, annotations, and links — on those pages is preserved exactly as it appeared in the original.</p>
-        <p><strong>How to use:</strong> Upload your PDF by clicking the dropzone or dragging a file onto it. The tool will automatically detect and display the total page count. Enter your desired page range in the text box using standard notation: use hyphens for ranges (1-5 means pages 1 through 5), commas for individual pages (1,3,7), or combine them (1-3,5,8-10). Click Split PDF and download your extracted document.</p>
-        <p><strong>Page range syntax:</strong> You can combine any ranges and individual pages in one expression. For example, "2-4,6,9-11" extracts pages 2, 3, 4, 6, 9, 10, and 11. Pages are always output in the order specified, so you can also use this tool to reorder pages by listing them in a custom sequence (e.g., "5,3,1,2,4").</p>
-        <p><strong>Key advantages:</strong> No quality loss — pages are copied byte-for-byte. No page count limit — works on PDFs with thousands of pages. Completely private — nothing is uploaded anywhere. Instant processing on modern devices. No watermarks or branding in the output file.</p>
-        <p><strong>Common use cases:</strong> Extracting a single invoice from a batch statement, separating chapters from an e-book, pulling specific slides from a PDF presentation, removing the first or last few pages from a report, or archiving only the relevant section of a legal document.</p>
-      </div>
-    </div>
-  </div>
+<div id="toastContainer" class="toast-container" aria-live="polite"></div>
 
-  <!-- ===== MODAL: Compress PDF ===== -->
-  <div class="modal" id="modal-compressPDF">
-    <div class="modal-header">
-      <div class="modal-title-wrap">
-        <div class="modal-icon-wrap" style="--icon-color:#26C6DA;">
-          <svg viewBox="0 0 24 24" fill="none"><path d="M12 3v14M12 3l-4 4M12 3l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 17v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        </div>
-        <div><h2 class="modal-title">Compress PDF</h2><p class="modal-subtitle">Reduce file size for easy sharing</p></div>
-      </div>
-      <button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
-    </div>
-    <div class="modal-body">
-      <div class="dropzone" id="dz-compress" onclick="document.getElementById('input-compress').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,'input-compress')">
-        <input type="file" id="input-compress" accept=".pdf" hidden onchange="handleFileSelect('compress', this.files)" />
-        <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="2"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2"/></svg></div>
-        <p class="dz-text">Drop a PDF here or <span class="dz-link">browse</span></p>
-        <p class="dz-hint">Select one PDF file to compress</p>
-      </div>
-      <div class="file-list" id="files-compress"></div>
-      <div class="modal-options">
-        <label class="option-label">Compression level</label>
-        <div class="radio-group">
-          <label class="radio-option"><input type="radio" name="compress-level" value="low" /> <span>Low (best quality)</span></label>
-          <label class="radio-option"><input type="radio" name="compress-level" value="medium" checked /> <span>Medium (balanced)</span></label>
-          <label class="radio-option"><input type="radio" name="compress-level" value="high" /> <span>High (smallest size)</span></label>
-        </div>
-      </div>
-      <button class="btn btn-primary btn-full" id="btn-compress" onclick="compressPDF()" disabled>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 3v14M12 3l-4 4M12 3l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        Compress PDF
-      </button>
-      <div class="progress-wrap" id="progress-compress" style="display:none;"><div class="progress-bar"><div class="progress-fill" id="pf-compress"></div></div><p class="progress-text" id="pt-compress">Processing…</p></div>
-      <div class="result-box" id="result-compress"></div>
-      <div class="tool-description">
-        <h4>About Compress PDF</h4>
-        <p>Large PDF files can be a headache — they fill up storage, clog email inboxes, and take forever to upload. The PDF BOX Compress PDF tool intelligently reduces your PDF file size without requiring you to sacrifice the quality of your document's content. Everything happens in-browser in seconds, with zero file uploads and complete privacy.</p>
-        <p>The compression works by re-serializing the PDF through pdf-lib's optimized save routine, which uses object stream compression (cross-reference stream compression) to pack the PDF's internal structure more efficiently. The High compression mode additionally strips unnecessary metadata like author information, creation history, and redundant producer tags — a common source of "hidden bloat" in PDFs generated by Microsoft Office, LibreOffice, or print-to-PDF drivers.</p>
-        <p><strong>How to use:</strong> Upload your PDF, select your preferred compression level (Low preserves maximum visual quality, Medium is the best all-around choice, High produces the smallest file at the cost of some metadata), then click Compress PDF. The result shows both the new file size and how many bytes were saved, expressed as a percentage.</p>
-        <p><strong>Compression levels explained:</strong> Low re-encodes the file structure only, keeping all metadata intact — ideal for archival copies. Medium applies structural optimization and minor metadata cleanup. High strips all non-essential metadata and applies maximum object stream compression — best for sharing via email or messaging apps with attachment limits.</p>
-        <p><strong>Important note:</strong> PDF BOX uses pure JavaScript compression, which is highly effective for text-heavy PDFs, documents with redundant metadata, and files created by verbose PDF generators. For PDFs that are already well-optimized or consist primarily of high-resolution scanned images, the size reduction may be modest (typically 5–15%). For typical office documents, savings of 20–60% are common.</p>
-        <p><strong>Common use cases:</strong> Reducing PDF size for email attachments, compressing reports for cloud storage, optimizing scanned documents for archiving, or making large presentations easier to share on messaging platforms.</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== MODAL: Rotate PDF ===== -->
-  <div class="modal" id="modal-rotatePDF">
-    <div class="modal-header">
-      <div class="modal-title-wrap">
-        <div class="modal-icon-wrap" style="--icon-color:#00E5FF;">
-          <svg viewBox="0 0 24 24" fill="none"><path d="M1 4v6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.51 15a9 9 0 1 0 .49-5.05" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        </div>
-        <div><h2 class="modal-title">Rotate PDF</h2><p class="modal-subtitle">Rotate pages in any direction</p></div>
-      </div>
-      <button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
-    </div>
-    <div class="modal-body">
-      <div class="dropzone" id="dz-rotate" onclick="document.getElementById('input-rotate').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,'input-rotate')">
-        <input type="file" id="input-rotate" accept=".pdf" hidden onchange="handleFileSelect('rotate', this.files)" />
-        <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="2"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2"/></svg></div>
-        <p class="dz-text">Drop a PDF here or <span class="dz-link">browse</span></p>
-      </div>
-      <div class="file-list" id="files-rotate"></div>
-      <div class="modal-options">
-        <label class="option-label">Rotation angle</label>
-        <div class="btn-group">
-          <button class="btn-option active" id="rot-90" onclick="selectRotation(90, this)">↻ 90°</button>
-          <button class="btn-option" id="rot-180" onclick="selectRotation(180, this)">↺ 180°</button>
-          <button class="btn-option" id="rot-270" onclick="selectRotation(270, this)">↺ 270°</button>
-        </div>
-        <label class="option-label" style="margin-top:14px;">Apply to</label>
-        <div class="radio-group">
-          <label class="radio-option"><input type="radio" name="rotate-pages" value="all" checked /> <span>All pages</span></label>
-          <label class="radio-option"><input type="radio" name="rotate-pages" value="specific" /> <span>Specific pages (e.g. 1,3,5)</span></label>
-        </div>
-        <input type="text" class="text-input" id="rotate-specific" placeholder="e.g. 1,3,5" style="margin-top:8px; display:none;" />
-      </div>
-      <button class="btn btn-primary btn-full" id="btn-rotate" onclick="rotatePDF()" disabled>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M1 4v6h6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M3.51 15a9 9 0 1 0 .49-5.05" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        Rotate PDF
-      </button>
-      <div class="progress-wrap" id="progress-rotate" style="display:none;"><div class="progress-bar"><div class="progress-fill" id="pf-rotate"></div></div><p class="progress-text" id="pt-rotate">Processing…</p></div>
-      <div class="result-box" id="result-rotate"></div>
-      <div class="tool-description">
-        <h4>About Rotate PDF</h4>
-        <p>A scanned document in the wrong orientation, a phone-photographed receipt turned sideways, or a report whose pages alternate between portrait and landscape — these are everyday problems that the PDF BOX Rotate PDF tool solves instantly. Correct the orientation of any page or every page in your PDF with a single click, directly in your browser.</p>
-        <p>The tool uses pdf-lib's built-in page rotation API, which applies the rotation by modifying each page's internal rotation value in the PDF structure. This is a lossless operation — no re-rendering, no quality loss, and no changes to the actual content on the page. The rotation is baked into the PDF metadata, so every reader — Adobe Acrobat, Chrome, mobile PDF viewers — will display the page in the corrected orientation.</p>
-        <p><strong>How to use:</strong> Upload your PDF, choose your rotation angle (90°, 180°, or 270° clockwise), then choose whether to rotate all pages or only specific ones. If you select "Specific pages," enter the page numbers or ranges in the text box (e.g., "1,3,5-7"). Click Rotate PDF and download your corrected document.</p>
-        <p><strong>Rotation angles:</strong> 90° rotates each selected page a quarter turn clockwise — ideal for fixing landscape pages in a portrait document. 180° flips the page upside down, useful when a document was scanned in reverse. 270° rotates counter-clockwise (equivalent to 90° counter-clockwise), handy for pages scanned from the wrong side.</p>
-        <p><strong>Selective rotation:</strong> The selective page mode is particularly powerful. You can enter any combination of individual pages and ranges — for example, "2,4,6-10,15" — to rotate only those specific pages while leaving the rest untouched. The rotation is additive, meaning if a page was already rotated 90°, applying another 90° results in 180° total.</p>
-        <p><strong>Common use cases:</strong> Fixing scanned documents, correcting mobile phone photos of documents converted to PDF, adjusting mixed-orientation PDFs, rotating individual pages before merging, or correcting PDFs received from other people in the wrong orientation.</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== MODAL: PDF to Images ===== -->
-  <div class="modal" id="modal-pdf2img">
-    <div class="modal-header">
-      <div class="modal-title-wrap">
-        <div class="modal-icon-wrap" style="--icon-color:#00BCD4;">
-          <svg viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="14" height="18" rx="2" stroke="currentColor" stroke-width="2"/><circle cx="7" cy="9" r="2" stroke="currentColor" stroke-width="1.5"/><path d="M3 18l4-4 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </div>
-        <div><h2 class="modal-title">PDF to Images</h2><p class="modal-subtitle">Convert each page to a PNG image</p></div>
-      </div>
-      <button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
-    </div>
-    <div class="modal-body">
-      <div class="dropzone" id="dz-pdf2img" onclick="document.getElementById('input-pdf2img').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,'input-pdf2img')">
-        <input type="file" id="input-pdf2img" accept=".pdf" hidden onchange="handleFileSelect('pdf2img', this.files)" />
-        <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="2"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2"/></svg></div>
-        <p class="dz-text">Drop a PDF here or <span class="dz-link">browse</span></p>
-      </div>
-      <div class="file-list" id="files-pdf2img"></div>
-      <div class="modal-options">
-        <label class="option-label">Resolution (DPI)</label>
-        <div class="btn-group">
-          <button class="btn-option" id="dpi-72" onclick="selectDPI(72, this)">72 DPI</button>
-          <button class="btn-option active" id="dpi-150" onclick="selectDPI(150, this)">150 DPI</button>
-          <button class="btn-option" id="dpi-300" onclick="selectDPI(300, this)">300 DPI</button>
-        </div>
-      </div>
-      <button class="btn btn-primary btn-full" id="btn-pdf2img" onclick="pdfToImages()" disabled>Convert to Images</button>
-      <div class="progress-wrap" id="progress-pdf2img" style="display:none;"><div class="progress-bar"><div class="progress-fill" id="pf-pdf2img"></div></div><p class="progress-text" id="pt-pdf2img">Processing…</p></div>
-      <div class="result-box" id="result-pdf2img"></div>
-      <div class="tool-description">
-        <h4>About PDF to Images</h4>
-        <p>The PDF to Images converter renders every page of your PDF document into a high-quality PNG image file. This is incredibly useful for embedding PDF content in presentations, websites, documents, or any platform that accepts images but not PDFs. Each page becomes its own independently downloadable PNG file — sharp, transparent-background-free, and ready to use.</p>
-        <p>The conversion is powered by PDF.js, Mozilla's powerful open-source PDF rendering engine (the same engine that powers Firefox's built-in PDF viewer). PDF.js renders each page to an HTML canvas at your chosen DPI, then exports that canvas as a lossless PNG file. The rendering faithfully reproduces all visual elements: text, images, charts, diagrams, vector graphics, and color information — exactly as they appear in the original PDF.</p>
-        <p><strong>How to use:</strong> Upload your PDF, select your preferred DPI (resolution), and click Convert to Images. The progress bar tracks the rendering of each page. Once complete, a visual grid of all pages appears — click any thumbnail to download that page as a PNG image. All pages are rendered in sequence and available individually.</p>
-        <p><strong>Choosing the right DPI:</strong> 72 DPI is suitable for web display and produces the smallest file sizes. 150 DPI is the recommended default — it produces crisp, readable images ideal for most use cases including presentations and document sharing. 300 DPI produces print-quality images where every detail is razor-sharp — ideal for archiving, professional printing, or when the PDF contains fine details like engineering diagrams or medical charts.</p>
-        <p><strong>Key advantages:</strong> Lossless PNG format preserves all color and detail. No server uploads — everything renders in your browser. Each page is individually downloadable. Supports PDFs of any size with any number of pages. Handles complex PDFs with fonts, gradients, shadows, and transparency correctly.</p>
-        <p><strong>Common use cases:</strong> Extracting cover art from PDF brochures, creating web-optimized images from PDF reports, capturing specific pages for use in presentations, converting scanned PDF pages for OCR processing, or archiving PDF content as image files.</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== MODAL: Images to PDF ===== -->
-  <div class="modal" id="modal-img2pdf">
-    <div class="modal-header">
-      <div class="modal-title-wrap">
-        <div class="modal-icon-wrap" style="--icon-color:#26C6DA;">
-          <svg viewBox="0 0 24 24" fill="none"><rect x="8" y="3" width="14" height="18" rx="2" stroke="currentColor" stroke-width="2"/><circle cx="13" cy="9" r="2" stroke="currentColor" stroke-width="1.5"/><path d="M9 18l4-4 5 5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </div>
-        <div><h2 class="modal-title">Images to PDF</h2><p class="modal-subtitle">Combine images into a single PDF</p></div>
-      </div>
-      <button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
-    </div>
-    <div class="modal-body">
-      <div class="dropzone" id="dz-img2pdf" onclick="document.getElementById('input-img2pdf').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,'input-img2pdf')">
-        <input type="file" id="input-img2pdf" accept="image/jpeg,image/png,image/webp" multiple hidden onchange="handleFileSelect('img2pdf', this.files)" />
-        <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="2"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2"/></svg></div>
-        <p class="dz-text">Drop images here or <span class="dz-link">browse</span></p>
-        <p class="dz-hint">JPG, PNG, or WebP files</p>
-      </div>
-      <div class="file-list" id="files-img2pdf"></div>
-      <div class="modal-options">
-        <label class="option-label">Page size</label>
-        <div class="select-wrap">
-          <select class="styled-select" id="img2pdf-pagesize">
-            <option value="A4">A4 (210 × 297 mm)</option>
-            <option value="Letter">Letter (8.5 × 11 in)</option>
-            <option value="fit">Fit to image</option>
-          </select>
-        </div>
-        <label class="option-label" style="margin-top:14px;">Output filename</label>
-        <input type="text" class="text-input" id="img2pdf-output" value="images" placeholder="Output filename (without .pdf)" />
-      </div>
-      <button class="btn btn-primary btn-full" id="btn-img2pdf" onclick="imagesToPDF()" disabled>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="8" y="3" width="14" height="18" rx="2" stroke="currentColor" stroke-width="2"/></svg>
-        Convert to PDF
-      </button>
-      <div class="progress-wrap" id="progress-img2pdf" style="display:none;"><div class="progress-bar"><div class="progress-fill" id="pf-img2pdf"></div></div><p class="progress-text" id="pt-img2pdf">Processing…</p></div>
-      <div class="result-box" id="result-img2pdf"></div>
-      <div class="tool-description">
-        <h4>About Images to PDF</h4>
-        <p>The Images to PDF tool turns any collection of JPG, PNG, or WebP images into a single, professional-quality PDF document. Whether you have scanned pages, photo scans of handwritten notes, downloaded images from a website, or a series of screenshots, this tool bundles them all into one portable, universally readable PDF — right in your browser, with no server involved.</p>
-        <p>Each image becomes one page in the output PDF. The tool embeds images using pdf-lib's image embedding API: PNG files are embedded with full lossless quality, JPEG files are embedded directly from their original bytes (no re-compression), and WebP files are converted to JPEG via the browser's Canvas API before embedding. Images are automatically scaled to fit your chosen page size while maintaining their original aspect ratio and centering them on the page.</p>
-        <p><strong>How to use:</strong> Click the dropzone or drag your image files onto it. You can select multiple files at once — add them in the order you want them to appear in the PDF. Use the ✕ button to remove any unwanted image. Choose your page size (A4, Letter, or Fit to image), enter an output filename, and click Convert to PDF. The progress bar tracks each image as it is embedded. Download your complete PDF when processing finishes.</p>
-        <p><strong>Page size options:</strong> A4 and Letter options scale your images to fit standard paper sizes — ideal for printing or professional use. "Fit to image" sets each page's dimensions exactly to the image's pixel dimensions (useful for preserving exact image content at 1:1 scale).</p>
-        <p><strong>Key advantages:</strong> Supports mixing different image formats in the same PDF. No quality loss for PNG or JPEG inputs. No file count limit. Completely private — no uploads. Automatic centering and scaling maintains aspect ratios perfectly. Supports images of any resolution and dimension.</p>
-        <p><strong>Common use cases:</strong> Compiling scanned document pages into a single PDF, creating photo albums, assembling screenshot reports, converting a series of exported chart images into a presentation PDF, or packaging artwork files for submission.</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== MODAL: Watermark ===== -->
-  <div class="modal" id="modal-watermark">
-    <div class="modal-header">
-      <div class="modal-title-wrap">
-        <div class="modal-icon-wrap" style="--icon-color:#00E5FF;">
-          <svg viewBox="0 0 24 24" fill="none"><path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </div>
-        <div><h2 class="modal-title">Add Watermark</h2><p class="modal-subtitle">Overlay text on all PDF pages</p></div>
-      </div>
-      <button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
-    </div>
-    <div class="modal-body">
-      <div class="dropzone" id="dz-watermark" onclick="document.getElementById('input-watermark').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,'input-watermark')">
-        <input type="file" id="input-watermark" accept=".pdf" hidden onchange="handleFileSelect('watermark', this.files)" />
-        <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="2"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2"/></svg></div>
-        <p class="dz-text">Drop a PDF here or <span class="dz-link">browse</span></p>
-      </div>
-      <div class="file-list" id="files-watermark"></div>
-      <div class="modal-options">
-        <label class="option-label">Watermark text</label>
-        <input type="text" class="text-input" id="wm-text" value="CONFIDENTIAL" placeholder="Watermark text" />
-        <label class="option-label" style="margin-top:14px;">Font size</label>
-        <input type="range" class="range-input" id="wm-size" min="20" max="100" value="50" oninput="document.getElementById('wm-size-val').textContent = this.value" />
-        <span class="range-value" id="wm-size-val">50</span>
-        <label class="option-label" style="margin-top:14px;">Opacity (%)</label>
-        <input type="range" class="range-input" id="wm-opacity" min="5" max="80" value="25" oninput="document.getElementById('wm-opacity-val').textContent = this.value" />
-        <span class="range-value" id="wm-opacity-val">25</span>
-        <label class="option-label" style="margin-top:14px;">Color</label>
-        <input type="color" class="color-input" id="wm-color" value="#ff0000" />
-      </div>
-      <button class="btn btn-primary btn-full" id="btn-watermark" onclick="addWatermark()" disabled>Add Watermark</button>
-      <div class="progress-wrap" id="progress-watermark" style="display:none;"><div class="progress-bar"><div class="progress-fill" id="pf-watermark"></div></div><p class="progress-text" id="pt-watermark">Processing…</p></div>
-      <div class="result-box" id="result-watermark"></div>
-      <div class="tool-description">
-        <h4>About Add Watermark</h4>
-        <p>The Add Watermark tool lets you brand, label, or protect your PDF documents by overlaying a semi-transparent diagonal text stamp across every page. Watermarks are used by businesses, publishers, and individuals to assert ownership, mark document status (DRAFT, CONFIDENTIAL, COPY), or discourage unauthorized redistribution — all without affecting the readable content beneath.</p>
-        <p>The watermark is rendered using pdf-lib's text drawing API with the Helvetica Bold font, positioned diagonally at 45° across the center of each page. The text is rendered at a configurable opacity (transparency level), so it's clearly visible as a watermark without obscuring the underlying content. The color is fully customizable using any hex color you choose with the built-in color picker.</p>
-        <p><strong>How to use:</strong> Upload your PDF, type your watermark text (default: CONFIDENTIAL), adjust the font size slider (20–100 pt), set the opacity (5–80%, where lower is more transparent), pick your color, and click Add Watermark. The tool processes every page simultaneously, then produces a watermarked PDF ready for download.</p>
-        <p><strong>Customization options:</strong> Text can be anything — company names, "DRAFT," "DO NOT COPY," copyright notices, or custom identifiers. Font size controls how large the watermark text appears on each page. Opacity lets you balance visibility with readability of the underlying content: 10–20% creates a subtle ghost watermark, while 40–60% creates a bold, visible stamp. Color choice lets you match your brand or create contrast against the page background.</p>
-        <p><strong>Key advantages:</strong> Applied to every page automatically with no page limit. Completely non-destructive to the underlying document — the original content is preserved. Output is a standard PDF compatible with all readers. No server uploads — your documents stay on your device. No visible "PDF BOX" branding or secondary watermarks are added.</p>
-        <p><strong>Common use cases:</strong> Marking draft documents before distribution, branding PDFs with company names, adding copyright notices to published materials, marking personal copies of contracts, or labeling documents as "SAMPLE" or "PROOF" during review processes.</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== MODAL: Protect PDF ===== -->
-  <div class="modal" id="modal-protectPDF">
-    <div class="modal-header">
-      <div class="modal-title-wrap">
-        <div class="modal-icon-wrap" style="--icon-color:#00BCD4;">
-          <svg viewBox="0 0 24 24" fill="none"><path d="M12 2l8 4v6c0 5-4 9-8 10C8 21 4 17 4 12V6l8-4z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </div>
-        <div><h2 class="modal-title">Protect PDF</h2><p class="modal-subtitle">Password-protect your PDF file</p></div>
-      </div>
-      <button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
-    </div>
-    <div class="modal-body">
-      <div class="dropzone" id="dz-protect" onclick="document.getElementById('input-protect').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,'input-protect')">
-        <input type="file" id="input-protect" accept=".pdf" hidden onchange="handleFileSelect('protect', this.files)" />
-        <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="2"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2"/></svg></div>
-        <p class="dz-text">Drop a PDF here or <span class="dz-link">browse</span></p>
-      </div>
-      <div class="file-list" id="files-protect"></div>
-      <div class="modal-options">
-        <label class="option-label">User Password (required to open)</label>
-        <div class="password-wrap">
-          <input type="password" class="text-input" id="protect-pass" placeholder="Enter password" />
-          <button class="pwd-toggle" onclick="togglePwd('protect-pass', this)" type="button">
-            <svg viewBox="0 0 24 24" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
-          </button>
-        </div>
-        <label class="option-label" style="margin-top:14px;">Confirm Password</label>
-        <div class="password-wrap">
-          <input type="password" class="text-input" id="protect-pass2" placeholder="Confirm password" />
-          <button class="pwd-toggle" onclick="togglePwd('protect-pass2', this)" type="button">
-            <svg viewBox="0 0 24 24" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
-          </button>
-        </div>
-      </div>
-      <button class="btn btn-primary btn-full" id="btn-protect" onclick="protectPDF()" disabled>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 2l8 4v6c0 5-4 9-8 10C8 21 4 17 4 12V6l8-4z" stroke="currentColor" stroke-width="2"/></svg>
-        Protect PDF
-      </button>
-      <div class="progress-wrap" id="progress-protect" style="display:none;"><div class="progress-bar"><div class="progress-fill" id="pf-protect"></div></div><p class="progress-text" id="pt-protect">Processing…</p></div>
-      <div class="result-box" id="result-protect"></div>
-      <div class="tool-description">
-        <h4>About Protect PDF</h4>
-        <p>The Protect PDF tool secures your sensitive documents with password-based encryption, ensuring that only authorized recipients can open and view the file. When a protected PDF is opened in any standard PDF reader — Adobe Acrobat, Chrome, Edge, Preview on macOS, or any mobile PDF viewer — the reader will immediately prompt for the password before displaying any content.</p>
-        <p>PDF BOX implements real PDF encryption using a combination of RC4 and MD5 cryptographic operations as specified in the PDF Standard Security Handler specification. When pdf-lib-with-encrypt is available, AES-128 encryption is applied — the industry standard for PDF document security. The encryption key is derived from your password using multiple MD5 hash iterations, making brute-force attacks computationally expensive. A randomly generated owner password is also applied, preventing unauthorized editing or permission changes even if someone attempts to bypass the user password.</p>
-        <p><strong>How to use:</strong> Upload your PDF, enter your chosen password in the "User Password" field, confirm it in the second field, and click Protect PDF. Use the eye icon to toggle password visibility. Your password must be at least 4 characters — use a longer, more complex password for better security. Download the protected PDF when processing completes.</p>
-        <p><strong>Security permissions applied:</strong> The protected PDF allows opening and reading when the correct password is entered, but restricts copying of text, modifying the document structure, adding annotations, or assembling pages. High-resolution printing is permitted (for legitimate use), but document assembly and content extraction are locked.</p>
-        <p><strong>Important security note:</strong> The password is never transmitted to any server — all encryption happens locally in your browser using the Web Crypto API and JavaScript cryptographic libraries. Choose a strong password (8+ characters, mixed case, numbers) for sensitive documents. Store your password securely — there is no recovery mechanism if you forget it.</p>
-        <p><strong>Common use cases:</strong> Securing legal contracts before sending by email, protecting financial statements, locking exam papers or confidential reports, controlling access to copyrighted materials, or preventing unauthorized modification of official documents.</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== MODAL: Extract Pages ===== -->
-  <div class="modal" id="modal-extractPages">
-    <div class="modal-header">
-      <div class="modal-title-wrap">
-        <div class="modal-icon-wrap" style="--icon-color:#26C6DA;">
-          <svg viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="currentColor" stroke-width="2"/><polyline points="14 2 14 8 20 8" stroke="currentColor" stroke-width="2"/></svg>
-        </div>
-        <div><h2 class="modal-title">Extract Pages</h2><p class="modal-subtitle">Save specific pages as a new PDF</p></div>
-      </div>
-      <button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
-    </div>
-    <div class="modal-body">
-      <div class="dropzone" id="dz-extract" onclick="document.getElementById('input-extract').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,'input-extract')">
-        <input type="file" id="input-extract" accept=".pdf" hidden onchange="handleFileSelect('extract', this.files)" />
-        <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="2"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2"/></svg></div>
-        <p class="dz-text">Drop a PDF here or <span class="dz-link">browse</span></p>
-      </div>
-      <div class="file-list" id="files-extract"></div>
-      <div class="modal-options">
-        <label class="option-label">Pages to extract (e.g. 1,3,5-7)</label>
-        <input type="text" class="text-input" id="extract-pages" placeholder="e.g. 1,3,5-7" />
-        <p class="option-hint" id="extract-page-count"></p>
-      </div>
-      <button class="btn btn-primary btn-full" id="btn-extract" onclick="extractPages()" disabled>Extract Pages</button>
-      <div class="progress-wrap" id="progress-extract" style="display:none;"><div class="progress-bar"><div class="progress-fill" id="pf-extract"></div></div><p class="progress-text" id="pt-extract">Processing…</p></div>
-      <div class="result-box" id="result-extract"></div>
-      <div class="tool-description">
-        <h4>About Extract Pages</h4>
-        <p>The Extract Pages tool lets you cherry-pick any combination of individual pages or page ranges from a PDF and bundle them into a brand-new PDF document. While the Split PDF tool is designed for extracting a contiguous block of pages, Extract Pages handles non-contiguous selections — perfect for pulling scattered pages from a large document without affecting the original file.</p>
-        <p>The extraction is lossless and precise: each selected page is copied byte-for-byte using pdf-lib's page copy API, preserving all embedded fonts, images, vector artwork, annotations, hyperlinks, and formatting. The original PDF remains completely unchanged — the tool only reads from it and creates a new document from the requested pages.</p>
-        <p><strong>How to use:</strong> Upload your PDF — the tool will show you the total number of pages so you know the valid range. Enter your page selection using the same intuitive notation: individual pages separated by commas (1,3,7), ranges connected by hyphens (5-10), or any combination (1,3,5-7,12,15-18). Click Extract Pages and download your new PDF.</p>
-        <p><strong>Advanced selection:</strong> You can list pages in any order, and the output will contain them in the order you specified. This means Extract Pages doubles as a page reordering tool — listing "5,1,3,2,4" produces a PDF with those pages in exactly that sequence. Duplicate page numbers in the selection are automatically de-duplicated.</p>
-        <p><strong>Key advantages:</strong> Handles PDFs of any size. No quality loss — pages are copied, not re-rendered. Non-contiguous page selection lets you extract any arbitrary combination of pages. Completely private — no server uploads. Output is a clean, standalone PDF.</p>
-        <p><strong>Common use cases:</strong> Extracting appendices from a report, pulling selected slides from a presentation PDF, saving specific invoices from a multi-page statement, collecting only the signature pages from a contract package, or reordering chapters in a book before sharing.</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== MODAL: PDF Viewer ===== -->
-  <div class="modal modal-wide" id="modal-pdfViewer">
-    <div class="modal-header">
-      <div class="modal-title-wrap">
-        <div class="modal-icon-wrap" style="--icon-color:#00E5FF;">
-          <svg viewBox="0 0 24 24" fill="none"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/></svg>
-        </div>
-        <div><h2 class="modal-title">PDF Viewer</h2><p class="modal-subtitle">Browse PDF pages with zoom</p></div>
-      </div>
-      <button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
-    </div>
-    <div class="modal-body">
-      <div class="dropzone" id="dz-viewer" onclick="document.getElementById('input-viewer').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,'input-viewer')">
-        <input type="file" id="input-viewer" accept=".pdf" hidden onchange="handleFileSelect('viewer', this.files)" />
-        <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="2"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2"/></svg></div>
-        <p class="dz-text">Drop a PDF here or <span class="dz-link">browse</span></p>
-      </div>
-      <div id="viewer-controls" class="viewer-controls" style="display:none;">
-        <button class="viewer-btn" onclick="viewerPrevPage()" id="viewer-prev">‹ Prev</button>
-        <span class="viewer-page-info"><input type="number" id="viewer-page-input" min="1" onchange="viewerGoToPage()" /> / <span id="viewer-total">0</span></span>
-        <button class="viewer-btn" onclick="viewerNextPage()" id="viewer-next">Next ›</button>
-        <div class="viewer-zoom">
-          <button class="viewer-btn" onclick="viewerZoomOut()">−</button>
-          <span id="viewer-zoom-val">100%</span>
-          <button class="viewer-btn" onclick="viewerZoomIn()">+</button>
-        </div>
-      </div>
-      <div class="viewer-canvas-wrap" id="viewer-canvas-wrap">
-        <canvas id="viewer-canvas"></canvas>
-      </div>
-      <div class="tool-description">
-        <h4>About PDF Viewer</h4>
-        <p>The PDF BOX PDF Viewer provides a clean, fast, fully in-browser way to read and navigate any PDF document without installing Adobe Acrobat or relying on a browser's built-in PDF viewer. Open any PDF, navigate page-by-page, and zoom in or out to read fine details — all within a smooth, responsive interface that works on both desktop and mobile.</p>
-        <p>The viewer is powered by PDF.js — the same battle-tested rendering engine used by Firefox's built-in PDF viewer. PDF.js renders each page to an HTML canvas at the precise resolution dictated by your zoom level and device pixel ratio. This means text is crisp and antialiased, vector graphics are sharp at any zoom level, and images display with full fidelity. The viewer supports high-DPI (Retina) displays by automatically doubling the canvas resolution on appropriate screens.</p>
-        <p><strong>How to use:</strong> Upload your PDF by clicking the dropzone or dropping a file. The document loads instantly and the first page renders immediately. Use the Prev / Next buttons to navigate between pages, or type a specific page number directly into the page input and press Enter to jump there. Use the − and + zoom buttons to decrease or increase the zoom level in 25% increments (range: 25% to 400%). The current zoom percentage is shown between the zoom controls.</p>
-        <p><strong>Keyboard shortcuts (coming soon):</strong> Arrow keys for page navigation, +/- for zoom, Home/End for first/last page.</p>
-        <p><strong>Key advantages:</strong> No software installation required — works in any modern browser. High-DPI support for crystal-clear rendering on Retina and 4K displays. Handles PDFs of any page count. Privacy guaranteed — your document is never uploaded anywhere. Renders pages on-demand (not all at once), so even very large PDFs open instantly. Supports PDFs with complex layouts, embedded fonts, vector graphics, and scanned image pages.</p>
-        <p><strong>Common use cases:</strong> Previewing a PDF before printing, reviewing documents on a device without Adobe Acrobat installed, quickly checking the page layout of a PDF, reading e-books or reports, or verifying the output of other PDF BOX tools before downloading.</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== MODAL: PDF to Word (NEW) ===== -->
-  <div class="modal" id="modal-pdf2word">
-    <div class="modal-header">
-      <div class="modal-title-wrap">
-        <div class="modal-icon-wrap" style="--icon-color:#7C4DFF;">
-          <svg viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="14" height="18" rx="2" stroke="currentColor" stroke-width="2"/><path d="M16 7h5M16 12h5M16 17h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M6 9h6M6 12h4M6 15h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-        </div>
-        <div><h2 class="modal-title">PDF to Word</h2><p class="modal-subtitle">Convert PDF to editable .docx document</p></div>
-      </div>
-      <button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
-    </div>
-    <div class="modal-body">
-      <div class="dropzone" id="dz-pdf2word" onclick="document.getElementById('input-pdf2word').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,'input-pdf2word')">
-        <input type="file" id="input-pdf2word" accept=".pdf" hidden onchange="handleFileSelect('pdf2word', this.files)" />
-        <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="2"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2"/></svg></div>
-        <p class="dz-text">Drop a PDF here or <span class="dz-link">browse</span></p>
-        <p class="dz-hint">Select a PDF file to convert</p>
-      </div>
-      <div class="file-list" id="files-pdf2word"></div>
-      <button class="btn btn-primary btn-full" id="btn-pdf2word" onclick="pdfToWord()" disabled>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="14" height="18" rx="2" stroke="currentColor" stroke-width="2"/><path d="M16 7h5M16 12h5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        Convert to Word
-      </button>
-      <div class="progress-wrap" id="progress-pdf2word" style="display:none;"><div class="progress-bar"><div class="progress-fill" id="pf-pdf2word"></div></div><p class="progress-text" id="pt-pdf2word">Processing…</p></div>
-      <div class="result-box" id="result-pdf2word"></div>
-      <div class="tool-description">
-        <h4>About PDF to Word</h4>
-        <p>The PDF to Word converter is one of the most sought-after document tools available, and PDF BOX delivers it completely free, in-browser, and with robust support for all languages — including Arabic, Hebrew, Persian, and other right-to-left scripts. The output is a real .docx file that opens natively in Microsoft Word, LibreOffice Writer, Google Docs, and any other word processor that supports the modern Office Open XML format.</p>
-        <p>The conversion engine uses two powerful technologies working in tandem. First, PDF.js extracts the text content from every page of your PDF, retrieving each text item's content, position, font size, and coordinates. Second, docx.js constructs a properly structured Word document with correctly formatted paragraphs, appropriate font sizes, and — critically — accurate text direction for every line of text.</p>
-        <p><strong>Arabic and RTL language support:</strong> The tool automatically detects Arabic, Hebrew, Persian, Urdu, and other right-to-left languages by checking for characters in the Unicode RTL code ranges. When RTL text is detected, the paragraph is set to bidirectional mode with right-alignment and the appropriate RTL text direction flag. This ensures Arabic text flows correctly from right to left in the Word document, just as it did in the original PDF.</p>
-        <p><strong>Word spacing accuracy:</strong> PDF files store text as individual positioned glyphs rather than simple strings with spaces. The tool analyses the X-coordinate gaps between consecutive text items on each line and inserts word spaces wherever the gap exceeds a calculated threshold based on the font size. This recovers accurate word spacing from the raw glyph data, producing natural, readable text in the output document.</p>
-        <p><strong>How to use:</strong> Upload your PDF, click Convert to Word, and wait for the conversion to complete (larger PDFs may take 10–30 seconds). Download the .docx file and open it in your word processor. The document is organized page-by-page, with page breaks between each original PDF page and font sizes that match the original as closely as possible.</p>
-        <p><strong>Common use cases:</strong> Editing contract text that was received as a PDF, extracting and reformatting academic papers, converting Arabic or multilingual PDFs into editable documents, recovering text from old PDF reports for reuse, or making a scanned PDF's text accessible for editing.</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== MODAL: Word to PDF (NEW) ===== -->
-  <div class="modal" id="modal-word2pdf">
-    <div class="modal-header">
-      <div class="modal-title-wrap">
-        <div class="modal-icon-wrap" style="--icon-color:#FF6D00;">
-          <svg viewBox="0 0 24 24" fill="none"><rect x="8" y="3" width="14" height="18" rx="2" stroke="currentColor" stroke-width="2"/><path d="M2 7h6M2 12h4M2 17h3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M12 9h6M12 12h4M12 15h5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg>
-        </div>
-        <div><h2 class="modal-title">Word to PDF</h2><p class="modal-subtitle">Convert .docx documents to PDF</p></div>
-      </div>
-      <button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
-    </div>
-    <div class="modal-body">
-      <div class="dropzone" id="dz-word2pdf" onclick="document.getElementById('input-word2pdf').click()" ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event,'input-word2pdf')">
-        <input type="file" id="input-word2pdf" accept=".docx,.doc" hidden onchange="handleFileSelect('word2pdf', this.files)" />
-        <div class="dz-icon"><svg viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="2"/><polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="2"/><line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="2"/></svg></div>
-        <p class="dz-text">Drop a Word file here or <span class="dz-link">browse</span></p>
-        <p class="dz-hint">Accepts .docx and .doc files</p>
-      </div>
-      <div class="file-list" id="files-word2pdf"></div>
-      <button class="btn btn-primary btn-full" id="btn-word2pdf" onclick="wordToPDF()" disabled>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><rect x="8" y="3" width="14" height="18" rx="2" stroke="currentColor" stroke-width="2"/></svg>
-        Convert to PDF
-      </button>
-      <div class="progress-wrap" id="progress-word2pdf" style="display:none;"><div class="progress-bar"><div class="progress-fill" id="pf-word2pdf"></div></div><p class="progress-text" id="pt-word2pdf">Processing…</p></div>
-      <div class="result-box" id="result-word2pdf"></div>
-      <div class="tool-description">
-        <h4>About Word to PDF</h4>
-        <p>The Word to PDF converter transforms your Microsoft Word .docx documents into universally compatible PDF files — directly in your browser, with no Microsoft Office installation required and no file uploads to any server. The output PDF preserves the visual appearance of your document: text content, paragraph structure, tables, embedded images, headings, lists, bold and italic formatting, and blockquotes are all faithfully reproduced.</p>
-        <p>The conversion pipeline uses two best-in-class open source libraries. Mammoth.js reads your .docx file and converts it into clean, structured HTML — a format that captures all the semantic and visual information in the Word document, including embedded images encoded as base64 data URIs. The HTML is then rendered by html2canvas (the same engine used in popular screenshot tools) into a high-resolution canvas at 2× pixel density for sharp output. Finally, pdf-lib packages the rendered canvas into a properly structured A4 PDF document with automatic page splitting.</p>
-        <p><strong>Image preservation:</strong> Embedded images in your Word document — photos, charts, diagrams, logos, and illustrations — are extracted by mammoth.js as base64-encoded image data and rendered into the HTML canvas. This means your images appear in the PDF at their full resolution, positioned as they were in the original Word document.</p>
-        <p><strong>How to use:</strong> Click the dropzone or drag your .docx file onto it. Click Convert to PDF. Conversion time depends on document length and image content — simple text documents convert in seconds, while image-heavy documents may take 15–30 seconds. Once complete, download your PDF. The output is A4 sized and rendered at print quality (2× DPI scaling for clarity).</p>
-        <p><strong>Supported formatting:</strong> Headings (H1–H3), paragraphs, bold, italic, tables with borders, bulleted and numbered lists, blockquotes, and inline images. Complex Word features like tracked changes, comments, macros, and custom fonts are gracefully handled through mammoth.js's intelligent conversion rules.</p>
-        <p><strong>Common use cases:</strong> Sharing a Word document as a non-editable PDF, submitting assignments in PDF format, creating PDF versions of reports or proposals, archiving Word documents as PDFs for long-term storage, or converting documents for printing without Microsoft Word.</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== MODAL: About Us ===== -->
-  <div class="modal modal-page" id="modal-aboutUs">
-    <div class="modal-header">
-      <div class="modal-title-wrap">
-        <div class="modal-icon-wrap" style="--icon-color:#00E5FF;">
-          <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M12 8v4M12 16h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-        </div>
-        <div><h2 class="modal-title">About PDF BOX</h2><p class="modal-subtitle">Our story and mission</p></div>
-      </div>
-      <button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
-    </div>
-    <div class="modal-body">
-      <div class="page-content">
-        <div class="page-hero-icon">📦</div>
-        <h3>What is PDF BOX?</h3>
-        <p>PDF BOX is a free, browser-based PDF toolbox designed to make document management effortless for everyone — students, professionals, developers, and everyday users. We believe that powerful PDF tools should not require expensive software, online accounts, or trust in third-party servers with your private files.</p>
-
-        <h3>Our Mission</h3>
-        <p>To provide the most private, fastest, and most capable PDF tools on the web — completely free, forever. Every tool in PDF BOX runs entirely in your browser using modern JavaScript APIs. Your files never leave your device, your data is never collected, and there are no hidden fees or premium tiers.</p>
-
-        <h3>What We Offer</h3>
-        <div class="about-tools-grid">
-          <div class="about-tool-item">🔗 Merge PDF</div>
-          <div class="about-tool-item">✂️ Split PDF</div>
-          <div class="about-tool-item">📉 Compress PDF</div>
-          <div class="about-tool-item">🔄 Rotate PDF</div>
-          <div class="about-tool-item">🖼️ PDF to Images</div>
-          <div class="about-tool-item">📸 Images to PDF</div>
-          <div class="about-tool-item">💧 Add Watermark</div>
-          <div class="about-tool-item">🔒 Protect PDF</div>
-          <div class="about-tool-item">📄 Extract Pages</div>
-          <div class="about-tool-item">👁️ PDF Viewer</div>
-          <div class="about-tool-item">📝 PDF to Word</div>
-          <div class="about-tool-item">📤 Word to PDF</div>
-        </div>
-
-        <h3>Technology Stack</h3>
-        <p>PDF BOX is built with vanilla HTML, CSS, and JavaScript — no frameworks, no build tools, no complexity. We use the finest open-source libraries available:</p>
-        <ul>
-          <li><strong>pdf-lib</strong> — PDF creation and editing</li>
-          <li><strong>PDF.js</strong> by Mozilla — PDF rendering and text extraction</li>
-          <li><strong>docx.js</strong> — Word document creation</li>
-          <li><strong>mammoth.js</strong> — Word document parsing</li>
-          <li><strong>html2canvas</strong> — HTML-to-image rendering</li>
-        </ul>
-
-        <h3>Privacy First</h3>
-        <p>We take privacy seriously. PDF BOX does not collect any personal data, does not use cookies for tracking, does not upload your files to any server, and does not log your activity. All document processing happens exclusively on your device using browser-native JavaScript APIs.</p>
-
-        <h3>Contact</h3>
-        <p>Have questions, suggestions, or found a bug? We'd love to hear from you. Reach us at <a href="https://mail.google.com/mail/?view=cm&fs=1&to=hasan.saad898@gmail.com" target="_blank" class="about-link">hasan.saad898@gmail.com</a> or use the <a href="#" onclick="openModal('contactPage');return false;" class="about-link">Contact form</a>.</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== MODAL: Privacy Policy ===== -->
-  <div class="modal modal-page" id="modal-privacyPolicy">
-    <div class="modal-header">
-      <div class="modal-title-wrap">
-        <div class="modal-icon-wrap" style="--icon-color:#26C6DA;">
-          <svg viewBox="0 0 24 24" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" stroke="currentColor" stroke-width="2"/></svg>
-        </div>
-        <div><h2 class="modal-title">Privacy Policy</h2><p class="modal-subtitle">How we handle your data</p></div>
-      </div>
-      <button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
-    </div>
-    <div class="modal-body">
-      <div class="page-content">
-        <p class="privacy-date">Last updated: July 2024</p>
-
-        <h3>1. No Data Collection</h3>
-        <p>PDF BOX does not collect, store, or transmit any personal information. We do not require registration, log-in, or any form of account creation. All interactions with the website are anonymous.</p>
-
-        <h3>2. File Processing — 100% Local</h3>
-        <p>All file processing — including PDF merging, splitting, compression, rotation, encryption, conversion, and watermarking — occurs exclusively in your web browser using client-side JavaScript. <strong>Your files are never uploaded to any server.</strong> No copies of your documents are made on our infrastructure at any point.</p>
-
-        <h3>3. No Cookies or Tracking</h3>
-        <p>PDF BOX does not use tracking cookies, analytics scripts, advertising pixels, or any form of session tracking. We do not use Google Analytics, Facebook Pixel, or similar tools. There is no behavioral profiling of any kind.</p>
-
-        <h3>4. External Libraries</h3>
-        <p>PDF BOX loads third-party JavaScript libraries (pdf-lib, PDF.js, docx.js, mammoth.js, html2canvas) from public CDN servers (unpkg.com, cdnjs.cloudflare.com). These CDN requests do not transmit your file contents — only standard browser metadata such as your IP address is exposed to the CDN provider as part of the HTTP request, as is normal for any webpage you visit.</p>
-
-        <h3>5. Contact Information</h3>
-        <p>If you choose to contact us via the contact form, your message is transmitted directly via your email client using the mailto protocol. PDF BOX does not operate an email server or store contact messages — the email goes directly from your device to our inbox.</p>
-
-        <h3>6. Security</h3>
-        <p>Because no data is transmitted to our servers, there is no central database that could be breached. Your documents are processed and immediately discarded in browser memory when you close or navigate away from the tool. The browser's sandboxing model ensures your files cannot be accessed by other websites or browser tabs.</p>
-
-        <h3>7. Changes to This Policy</h3>
-        <p>We may update this privacy policy from time to time. Any changes will be reflected on this page with an updated date. We encourage you to review this policy periodically.</p>
-
-        <h3>8. Contact Us</h3>
-        <p>If you have any questions about this privacy policy, please contact us at <a href="https://mail.google.com/mail/?view=cm&fs=1&to=hasan.saad898@gmail.com" target="_blank" class="about-link">hasan.saad898@gmail.com</a>.</p>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== MODAL: Contact ===== -->
-  <div class="modal modal-page" id="modal-contactPage">
-    <div class="modal-header">
-      <div class="modal-title-wrap">
-        <div class="modal-icon-wrap" style="--icon-color:#00BCD4;">
-          <svg viewBox="0 0 24 24" fill="none"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" stroke-width="2"/><polyline points="22,6 12,13 2,6" stroke="currentColor" stroke-width="2"/></svg>
-        </div>
-        <div><h2 class="modal-title">Contact Us</h2><p class="modal-subtitle">We'd love to hear from you</p></div>
-      </div>
-      <button class="modal-close" onclick="closeModal()"><svg viewBox="0 0 24 24" fill="none"><path d="M18 6L6 18M6 6l12 12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button>
-    </div>
-    <div class="modal-body">
-      <div class="page-content">
-        <div class="contact-intro">
-          <p>Have a question, found a bug, or want to suggest a new feature? Send us a message — we read every email and respond as quickly as possible.</p>
-          <div class="contact-email-badge">
-            <svg viewBox="0 0 24 24" fill="none" width="18" height="18"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" stroke="currentColor" stroke-width="2"/><polyline points="22,6 12,13 2,6" stroke="currentColor" stroke-width="2"/></svg>
-            <a href="https://mail.google.com/mail/?view=cm&fs=1&to=hasan.saad898@gmail.com" target="_blank">hasan.saad898@gmail.com</a>
-          </div>
-        </div>
-
-        <div class="contact-form">
-          <div class="form-row">
-            <div class="form-group">
-              <label class="form-label">Your Name <span class="required">*</span></label>
-              <input type="text" class="text-input" id="contact-name" placeholder="John Doe" />
-            </div>
-            <div class="form-group">
-              <label class="form-label">Your Email <span class="required">*</span></label>
-              <input type="email" class="text-input" id="contact-email" placeholder="you@example.com" />
-            </div>
-          </div>
-          <div class="form-group">
-            <label class="form-label">Subject</label>
-            <input type="text" class="text-input" id="contact-subject" placeholder="e.g. Bug report, Feature request, Question…" />
-          </div>
-          <div class="form-group">
-            <label class="form-label">Message <span class="required">*</span></label>
-            <textarea class="text-input contact-textarea" id="contact-message" placeholder="Tell us what's on your mind…" rows="6"></textarea>
-          </div>
-          <button class="btn btn-primary btn-full" id="btn-contact" onclick="sendContact()">
-            <svg viewBox="0 0 24 24" fill="none" width="18" height="18"><line x1="22" y1="2" x2="11" y2="13" stroke="currentColor" stroke-width="2"/><polygon points="22 2 15 22 11 13 2 9 22 2" stroke="currentColor" stroke-width="2" fill="none"/></svg>
-            Send Message
-          </button>
-          <p class="contact-note">Clicking Send Message will open Gmail with your message pre-filled. Your privacy is protected — nothing is sent through our servers.</p>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- ===== TOAST NOTIFICATION ===== -->
-  <div class="toast" id="toast"></div>
-
-  <!-- Scripts -->
-  <!-- External CDNs -->
-  <script src="https://unpkg.com/pdf-lib-with-encrypt/dist/pdf-lib.min.js"></script>
-  <script>
-    if (typeof PDFLib === 'undefined') {
-      var s = document.createElement('script');
-      s.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js';
-      document.head.appendChild(s);
-    }
-  </script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-  <!-- Tesseract.js: Arabic OCR engine for PDF-to-Word Arabic text extraction -->
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  
-
-  <script>
-    if (typeof pdfjsLib !== 'undefined') {
-      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-    }
-  </script>
-
-  <!-- Local Custom Scripts -->
-  <script src="./main.js"></script>
+<!-- ============ LIBRARIES ============ -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://unpkg.com/docx@9.6.1/dist/index.umd.cjs"></script>
+<script src="script.js"></script>
 </body>
 </html>

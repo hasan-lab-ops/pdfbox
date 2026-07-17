@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Contact — Fathom</title>
+<meta name="description" content="Get in touch with Fathom.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23081824'/%3E%3Cpath d='M6 18c2-4 5-4 7 0s5 4 7 0s5-4 7 0' fill='none' stroke='%232DE0C9' stroke-width='2.4' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+  <symbol id="icon-logo" viewBox="0 0 32 32"><circle cx="16" cy="16" r="12.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M6 18c2-4 5-4 7 0s5 4 7 0s5-4 7 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+  <symbol id="icon-privacy" viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 5-3.5 8-7 9-3.5-1-7-4-7-9V6l7-3Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="icon-arrow-left" viewBox="0 0 24 24"><path d="M19 12H5m0 0 6-6m-6 6 6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="icon-mail" viewBox="0 0 24 24"><rect x="2.5" y="5" width="19" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M3.5 6.5 12 13l8.5-6.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="icon-copy" viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.6"/><path d="M4 15V5a1 1 0 0 1 1-1h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></symbol>
+  <symbol id="icon-check" viewBox="0 0 24 24"><path d="M5 13l4.5 4.5L19 7" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<div class="grain" aria-hidden="true"></div>
+
+<header class="site-header">
+  <div class="header-inner">
+    <a class="logo" href="index.html" aria-label="Fathom home">
+      <svg class="logo-mark" width="30" height="30"><use href="#icon-logo"></use></svg>
+      <span>Fathom</span>
+    </a>
+    <nav class="main-nav" aria-label="Primary">
+      <a class="nav-link" href="index.html#tools">Tools</a>
+      <a class="nav-link" href="index.html#how">How it works</a>
+    </nav>
+    <div class="header-badge">
+      <svg width="14" height="14"><use href="#icon-privacy"></use></svg>
+      Runs in your browser
+    </div>
+  </div>
+</header>
+
+<main>
+<div class="static-page">
+  <a class="back-btn" href="index.html">
+    <svg width="16" height="16"><use href="#icon-arrow-left"></use></svg>
+    Back to Fathom
+  </a>
+
+  <h1>Contact</h1>
+  <p class="page-sub">Found a bug, have a tool request, or just want to say hi? Reach out directly.</p>
+
+  <div class="contact-card">
+    <h3>Email</h3>
+    <div class="contact-email-row">
+      <a
+        class="btn btn-primary"
+        href="https://mail.google.com/mail/?view=cm&fs=1&to=hasan.saad898@gmail.com&su=Fathom%20PDF%20Tools"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        <svg width="16" height="16"><use href="#icon-mail"></use></svg>
+        Email us on Gmail
+      </a>
+      <a class="btn btn-ghost" href="mailto:hasan.saad898@gmail.com">Use my own mail app instead</a>
+    </div>
+
+    <div class="contact-email-row">
+      <span class="contact-email-text" id="emailText">hasan.saad898@gmail.com</span>
+      <button class="btn-icon" id="copyEmailBtn" aria-label="Copy email address" type="button">
+        <svg width="15" height="15"><use href="#icon-copy"></use></svg>
+      </button>
+    </div>
+
+    <p class="contact-note">"Email us on Gmail" opens Gmail's compose window in a new tab, addressed to us. If you're not signed in to a Google account, Google will ask you to sign in first. If you use a different mail provider, use "Use my own mail app instead" or just copy the address above.</p>
+  </div>
+
+  <h2>Before you email</h2>
+  <p>Remember that no file you process on Fathom is ever sent anywhere — so if something looks wrong with a converted file, a screenshot or a description of what you tried is far more useful to us than the file itself (and there's no way to attach it through the buttons above regardless, since this site was built with exactly that kind of privacy in mind).</p>
+</div>
+</main>
+
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <svg class="logo-mark" width="24" height="24"><use href="#icon-logo"></use></svg>
+      <span>Fathom</span>
+    </div>
+    <nav class="footer-links" aria-label="Footer">
+      <a href="about.html">About</a>
+      <a href="privacy.html">Privacy Policy</a>
+      <a href="contact.html">Contact</a>
+    </nav>
+    <p class="footer-tagline">Built for students. No login, no tracking, no file-size games.</p>
+    <p class="footer-credit">All processing happens locally in your browser, powered by pdf-lib, pdf.js, JSZip, and docx.</p>
+  </div>
+</footer>
+
+<div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
+<script>
+  (function () {
+    var btn = document.getElementById('copyEmailBtn');
+    var email = document.getElementById('emailText').textContent.trim();
+    btn.addEventListener('click', function () {
+      function showCopied() {
+        var container = document.getElementById('toastContainer');
+        var toast = document.createElement('div');
+        toast.className = 'toast toast-success';
+        var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('width', '18');
+        svg.setAttribute('height', '18');
+        var use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+        use.setAttribute('href', '#icon-check');
+        svg.appendChild(use);
+        var span = document.createElement('span');
+        span.textContent = 'Email address copied.';
+        toast.appendChild(svg);
+        toast.appendChild(span);
+        container.appendChild(toast);
+        requestAnimationFrame(function () { toast.classList.add('is-visible'); });
+        setTimeout(function () {
+          toast.classList.remove('is-visible');
+          setTimeout(function () { toast.remove(); }, 300);
+        }, 3200);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(email).then(showCopied).catch(function () {
+          window.prompt('Copy this email address:', email);
+        });
+      } else {
+        window.prompt('Copy this email address:', email);
+      }
+    });
+  })();
+</script>
+
+</body>
+</html>

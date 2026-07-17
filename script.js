@@ -55,6 +55,160 @@ function loadPdfJsDoc(buf) {
   return pdfjsLib.getDocument({ data: buf, verbosity: 0 }).promise;
 }
 
+/**
+ * Groups pdf.js text items into paragraphs. Items on the same visual line
+ * (similar Y position) are joined; a larger-than-normal vertical gap between
+ * lines is treated as a paragraph break, smaller gaps as a soft line wrap.
+ */
+function groupTextIntoParagraphs(items) {
+  const lines = [];
+  let curLine = null;
+  for (const item of items) {
+    if (typeof item.str !== 'string') continue;
+    const y = item.transform ? item.transform[5] : 0;
+    if (curLine && Math.abs(curLine.y - y) < 2) {
+      curLine.text += item.str;
+    } else {
+      if (curLine) lines.push(curLine);
+      curLine = { y, text: item.str, height: item.height || 10 };
+    }
+    if (item.hasEOL) {
+      lines.push(curLine);
+      curLine = null;
+    }
+  }
+  if (curLine) lines.push(curLine);
+
+  const avgHeight = lines.length ? lines.reduce((a, l) => a + (l.height || 10), 0) / lines.length : 12;
+  const paragraphs = [];
+  let cur = '';
+  let prevY = null;
+  lines.forEach((line) => {
+    const text = line.text.trim();
+    if (!text) {
+      if (cur) { paragraphs.push(cur); cur = ''; }
+      prevY = line.y;
+      return;
+    }
+    if (prevY !== null && Math.abs(prevY - line.y) > avgHeight * 1.6) {
+      if (cur) paragraphs.push(cur);
+      cur = text;
+    } else {
+      cur = cur ? cur + ' ' + text : text;
+    }
+    prevY = line.y;
+  });
+  if (cur) paragraphs.push(cur);
+  return paragraphs;
+}
+
+/**
+ * Parses a .docx's word/document.xml into a simple paragraph list.
+ * Covers plain text, paragraph-level bold/italic, heading styles, and
+ * bullet/numbered list items \u2014 not images, tables, or per-character formatting.
+ */
+function parseDocxParagraphs(xmlText) {
+  const xmlDoc = new DOMParser().parseFromString(xmlText, 'application/xml');
+  if (xmlDoc.getElementsByTagName('parsererror').length) {
+    throw new Error('Couldn\u2019t read that document\u2019s contents.');
+  }
+
+  const paragraphEls = Array.from(xmlDoc.getElementsByTagName('w:p'));
+  return paragraphEls.map((p) => {
+    const pStyleEl = p.getElementsByTagName('w:pStyle')[0];
+    const styleVal = pStyleEl ? pStyleEl.getAttribute('w:val') : null;
+    const isTitle = !!styleVal && /^Title/i.test(styleVal);
+    const headingMatch = styleVal && styleVal.match(/^Heading(\d)/i);
+    const headingLevel = headingMatch ? parseInt(headingMatch[1], 10) : (isTitle ? 0 : null);
+    const isListItem = p.getElementsByTagName('w:numPr').length > 0;
+
+    const runs = Array.from(p.getElementsByTagName('w:r'));
+    let text = '';
+    let bold = false;
+    let italic = false;
+    runs.forEach((r) => {
+      const rPr = r.getElementsByTagName('w:rPr')[0];
+      if (rPr) {
+        if (rPr.getElementsByTagName('w:b').length) bold = true;
+        if (rPr.getElementsByTagName('w:i').length) italic = true;
+      }
+      Array.from(r.getElementsByTagName('w:t')).forEach((t) => { text += t.textContent; });
+      if (r.getElementsByTagName('w:tab').length) text += ' ';
+    });
+
+    if (isListItem && headingLevel === null && text.trim()) {
+      text = '\u2022 ' + text.trim();
+    }
+
+    return { text, bold, italic, headingLevel };
+  });
+}
+
+/** Lays out parsed docx paragraphs onto US Letter PDF pages with word-wrap, via pdf-lib. */
+async function renderParagraphsToPdf(paragraphs) {
+  const pageWidth = 612;
+  const pageHeight = 792;
+  const margin = 56;
+  const maxWidth = pageWidth - margin * 2;
+  const outDoc = await PDFDocument.create();
+  const fontRegular = await outDoc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await outDoc.embedFont(StandardFonts.HelveticaBold);
+  const fontItalic = await outDoc.embedFont(StandardFonts.HelveticaOblique);
+  const fontBoldItalic = await outDoc.embedFont(StandardFonts.HelveticaBoldOblique);
+
+  function pickFont(bold, italic) {
+    if (bold && italic) return fontBoldItalic;
+    if (bold) return fontBold;
+    if (italic) return fontItalic;
+    return fontRegular;
+  }
+
+  function wrapText(text, font, size, width) {
+    const words = text.split(/\s+/).filter(Boolean);
+    const lines = [];
+    let cur = '';
+    words.forEach((w) => {
+      const test = cur ? cur + ' ' + w : w;
+      if (cur && font.widthOfTextAtSize(test, size) > width) {
+        lines.push(cur);
+        cur = w;
+      } else {
+        cur = test;
+      }
+    });
+    if (cur) lines.push(cur);
+    return lines;
+  }
+
+  let page = outDoc.addPage([pageWidth, pageHeight]);
+  let y = pageHeight - margin;
+
+  paragraphs.forEach((para) => {
+    const text = (para.text || '').trim();
+    if (!text) {
+      y -= 8;
+      return;
+    }
+    const isHeading = para.headingLevel !== null && para.headingLevel !== undefined;
+    const size = para.headingLevel === 0 ? 22 : isHeading ? Math.max(13, 18 - para.headingLevel * 2) : 11;
+    const bold = para.bold || isHeading;
+    const font = pickFont(bold, para.italic);
+    const lineHeight = size * 1.35;
+
+    wrapText(text, font, size, maxWidth).forEach((line) => {
+      if (y < margin + lineHeight) {
+        page = outDoc.addPage([pageWidth, pageHeight]);
+        y = pageHeight - margin;
+      }
+      page.drawText(line, { x: margin, y: y - size, size, font, color: rgb(0.1, 0.1, 0.12) });
+      y -= lineHeight;
+    });
+    y -= size * 0.5;
+  });
+
+  return outDoc.save();
+}
+
 function hexToRgbTuple(hex) {
   const clean = hex.replace('#', '');
   const r = parseInt(clean.substring(0, 2), 16) / 255;
@@ -1672,6 +1826,207 @@ Tools.pagenum = {
       } catch (err) {
         console.error(err);
         showToast('Something went wrong while numbering the pages.', 'error');
+      } finally {
+        overlay.remove();
+      }
+    }
+  },
+};
+
+/* ---------------------------------------------------------
+   10. PDF TO WORD
+   --------------------------------------------------------- */
+Tools.pdf2word = {
+  title: 'PDF to Word',
+  desc: 'Extract the text from a PDF into an editable .docx file, organized page by page.',
+  render(container) {
+    let file = null;
+
+    container.appendChild(
+      el('div', { class: 'info-banner' }, [
+        svgUse('icon-bolt', 18),
+        el('div', {}, [
+          el('span', {}, [
+            el('strong', {}, ['How this works: ']),
+            'This pulls the text out of your PDF and rebuilds it as paragraphs in a Word document. It keeps paragraph breaks where it can detect them, but it doesn\u2019t preserve exact layout, images, or tables \u2014 and a scanned PDF with no selectable text has nothing to extract.',
+          ]),
+        ]),
+      ])
+    );
+
+    const dz = createDropzone({
+      accept: 'application/pdf,.pdf',
+      multiple: false,
+      hint: 'One PDF at a time',
+      onFiles: (fs) => loadFile(fs[0]),
+    });
+    const fileBarWrap = el('div', {});
+    const actions = el('div', { class: 'workspace-actions', hidden: 'hidden' }, []);
+    const resultWrap = el('div', {});
+
+    container.appendChild(dz);
+    container.appendChild(fileBarWrap);
+    container.appendChild(actions);
+    container.appendChild(resultWrap);
+
+    function loadFile(f) {
+      if (!isPdfFile(f)) { showToast('Please choose a PDF file.', 'error'); return; }
+      file = f;
+      dz.hidden = true;
+      resultWrap.innerHTML = '';
+      fileBarWrap.innerHTML = '';
+      fileBarWrap.appendChild(createFileInfoBar(file, resetTool));
+      actions.innerHTML = '';
+      actions.appendChild(
+        el('button', { class: 'btn btn-primary', onClick: doConvert }, [svgUse('icon-pdf2word', 16), 'Convert to Word'])
+      );
+      actions.hidden = false;
+    }
+
+    function resetTool() {
+      file = null;
+      dz.hidden = false;
+      fileBarWrap.innerHTML = '';
+      actions.hidden = true;
+      resultWrap.innerHTML = '';
+    }
+
+    async function doConvert() {
+      const overlay = createLoader('Reading your PDF…');
+      container.style.position = 'relative';
+      container.appendChild(overlay);
+      resultWrap.innerHTML = '';
+      try {
+        const buf = await file.arrayBuffer();
+        const pdfjsDoc = await loadPdfJsDoc(buf);
+        const { Document, Paragraph, TextRun, Packer } = docx;
+        const children = [];
+        let anyText = false;
+
+        for (let i = 1; i <= pdfjsDoc.numPages; i++) {
+          overlay.update(`Extracting page ${i} of ${pdfjsDoc.numPages}…`, (i / pdfjsDoc.numPages) * 90);
+          const page = await pdfjsDoc.getPage(i);
+          const content = await page.getTextContent();
+          const paragraphs = groupTextIntoParagraphs(content.items);
+
+          if (i > 1) children.push(new Paragraph({ children: [], pageBreakBefore: true }));
+          paragraphs.forEach((text) => {
+            anyText = true;
+            children.push(new Paragraph({ children: [new TextRun(text)], spacing: { after: 200 } }));
+          });
+        }
+
+        if (!anyText) {
+          resultWrap.appendChild(
+            el('div', { class: 'info-banner' }, [
+              svgUse('icon-doc', 18),
+              el('span', {}, ['This PDF doesn\u2019t seem to contain selectable text \u2014 it may be a scanned document made entirely of images, so there\u2019s no text to convert.']),
+            ])
+          );
+          showToast('No selectable text was found in this PDF.', 'info');
+          return;
+        }
+
+        overlay.update('Building your Word document…', 95);
+        const wordDoc = new Document({ sections: [{ children }] });
+        const blob = await Packer.toBlob(wordDoc);
+        downloadBlob(blob, file.name.replace(/\.pdf$/i, '') + '.docx');
+        showToast('Your Word document is ready.', 'success');
+      } catch (err) {
+        console.error(err);
+        showToast('Something went wrong while converting the PDF.', 'error');
+      } finally {
+        overlay.remove();
+      }
+    }
+  },
+};
+
+/* ---------------------------------------------------------
+   11. WORD TO PDF
+   --------------------------------------------------------- */
+Tools.word2pdf = {
+  title: 'Word to PDF',
+  desc: 'Turn a .docx file into a PDF, ready to submit or share.',
+  render(container) {
+    let file = null;
+
+    container.appendChild(
+      el('div', { class: 'info-banner' }, [
+        svgUse('icon-bolt', 18),
+        el('div', {}, [
+          el('span', {}, [
+            el('strong', {}, ['How this works: ']),
+            'This reads the text, headings, lists, and basic bold/italic formatting out of your .docx and lays it out on PDF pages. Images, tables, columns, and precise Word formatting aren\u2019t carried over \u2014 it\u2019s built for text-heavy documents like essays and notes.',
+          ]),
+        ]),
+      ])
+    );
+
+    function isDocxFile(f) {
+      return (
+        f &&
+        (/\.docx$/i.test(f.name) ||
+          f.type === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+      );
+    }
+
+    const dz = createDropzone({
+      accept: '.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      multiple: false,
+      hint: 'One .docx file at a time',
+      onFiles: (fs) => loadFile(fs[0]),
+    });
+    const fileBarWrap = el('div', {});
+    const actions = el('div', { class: 'workspace-actions', hidden: 'hidden' }, []);
+
+    container.appendChild(dz);
+    container.appendChild(fileBarWrap);
+    container.appendChild(actions);
+
+    function loadFile(f) {
+      if (!isDocxFile(f)) { showToast('Please choose a .docx file.', 'error'); return; }
+      file = f;
+      dz.hidden = true;
+      fileBarWrap.innerHTML = '';
+      fileBarWrap.appendChild(createFileInfoBar(file, resetTool));
+      actions.innerHTML = '';
+      actions.appendChild(
+        el('button', { class: 'btn btn-primary', onClick: doConvert }, [svgUse('icon-word2pdf', 16), 'Convert to PDF'])
+      );
+      actions.hidden = false;
+    }
+
+    function resetTool() {
+      file = null;
+      dz.hidden = false;
+      fileBarWrap.innerHTML = '';
+      actions.hidden = true;
+    }
+
+    async function doConvert() {
+      const overlay = createLoader('Reading your Word document…');
+      container.style.position = 'relative';
+      container.appendChild(overlay);
+      try {
+        const buf = await file.arrayBuffer();
+        const zip = await JSZip.loadAsync(buf);
+        const docXmlFile = zip.file('word/document.xml');
+        if (!docXmlFile) throw new Error('That doesn\u2019t look like a valid .docx file.');
+        const xmlText = await docXmlFile.async('text');
+
+        overlay.update('Parsing your document…', 40);
+        const paragraphs = parseDocxParagraphs(xmlText);
+        const hasText = paragraphs.some((p) => (p.text || '').trim().length > 0);
+        if (!hasText) throw new Error('No readable text was found in that document.');
+
+        overlay.update('Laying out your PDF…', 70);
+        const pdfBytes = await renderParagraphsToPdf(paragraphs);
+        downloadBlob(new Blob([pdfBytes], { type: 'application/pdf' }), file.name.replace(/\.docx$/i, '') + '.pdf');
+        showToast('Your PDF is ready to download.', 'success');
+      } catch (err) {
+        console.error(err);
+        showToast(err.message || 'Something went wrong while converting the document.', 'error');
       } finally {
         overlay.remove();
       }
