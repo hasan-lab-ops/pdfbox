@@ -1426,7 +1426,7 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
 
     const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     const numPages = pdfDoc.numPages;
-    const ARABIC_REGEX = /[\u0600-\u06FF]/;
+    const ARABIC_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
 
     const _esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     const _bullets = (s) => s
@@ -1438,6 +1438,19 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
       .replace(/\uF020/g, ' ')
       .replace(/\u2022/g, '\u2022');
 
+    const decodeVisualArabic = (text) => {
+      if (!ARABIC_REGEX.test(text)) return text;
+      let reversed = text.split('').reverse().join('');
+      reversed = reversed.replace(/[a-zA-Z0-9]+(?:[\s.,\-_\@/'"]+[a-zA-Z0-9]+)*/g, (match) => {
+        return match.split('').reverse().join('');
+      });
+      reversed = reversed.replace(/[()\[\]{}<>]/g, (char) => {
+        const pairs = { '(': ')', ')': '(', '[': ']', ']': '[', '{': '}', '}': '{', '<': '>', '>': '<' };
+        return pairs[char] || char;
+      });
+      return reversed;
+    };
+
     let allPagesHtml = '';
 
     for (let pageNum = 1; pageNum <= numPages; pageNum++) {
@@ -1446,80 +1459,161 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
       }
 
       const page = await pdfDoc.getPage(pageNum);
-      const pageViewport = page.getViewport({ scale: 1.0 });
-
-      const textContent = await page.getTextContent({ normalizeWhitespace: false });
-      let textHtml = '';
-
+      const textContent = await page.getTextContent({ normalizeWhitespace: true });
+      
+      const lineMap = new Map();
+      
       for (const item of textContent.items) {
         if (!item.str || !item.str.trim()) continue;
         
-        const raw = _bullets(item.str);
+        const y = item.transform[5];
         
-        const x = item.transform[4];
-        const y = pageViewport.height - item.transform[5];
-
-        let extractedColor = '#000000';
-        if (item.color) {
-          if (Array.isArray(item.color) || item.color instanceof Uint8Array || item.color instanceof Uint8ClampedArray) {
-            extractedColor = `rgb(${item.color[0]},${item.color[1]},${item.color[2]})`;
-          } else if (typeof item.color === 'string') {
-            extractedColor = item.color.startsWith('#') || item.color.startsWith('rgb') ? item.color : `#${item.color}`;
+        let matchedY = null;
+        for (const [keyY] of lineMap.keys()) {
+          if (Math.abs(keyY - y) <= 5) {
+            matchedY = keyY;
+            break;
           }
-        } else if (item.fillColor) {
-           if (Array.isArray(item.fillColor) || item.fillColor instanceof Uint8Array || item.fillColor instanceof Uint8ClampedArray) {
-             extractedColor = `rgb(${item.fillColor[0]},${item.fillColor[1]},${item.fillColor[2]})`;
-           } else if (typeof item.fillColor === 'string') {
-             extractedColor = item.fillColor.startsWith('#') || item.fillColor.startsWith('rgb') ? item.fillColor : `#${item.fillColor}`;
-           }
         }
-
-        const isArabic = ARABIC_REGEX.test(raw);
-        const direction = isArabic ? 'rtl' : 'ltr';
-        const textAlign = isArabic ? 'right' : 'left';
-
-        // Ensure font-size fallback since item.height may be 0 sometimes
-        const fontSize = item.height || Math.abs(item.transform[3]) || Math.abs(item.transform[0]) || 12;
-
-        textHtml += `<span style="position: absolute; left: ${x}px; top: ${y}px; font-size:${fontSize}px; color: ${extractedColor}; white-space: nowrap; direction:${direction}; text-align: ${textAlign};">` + _esc(raw) + `</span>\n`;
+        
+        if (matchedY === null) {
+          matchedY = y;
+          lineMap.set(matchedY, []);
+        }
+        
+        lineMap.get(matchedY).push({
+          item,
+          x: item.transform[4]
+        });
       }
 
-      const pageBreak = pageNum < numPages ? 'page-break-after: always;' : '';
-      allPagesHtml += `<div style="position: relative; width: 800px; height: 1100px; background: #ffffff; ${pageBreak}">\n`
-        + textHtml
-        + `</div>\n`;
+      const sortedY = Array.from(lineMap.keys()).sort((a, b) => b - a);
+
+      let pageHtml = '';
+
+      for (const y of sortedY) {
+        const lineItems = lineMap.get(y);
+        
+        const fullLineText = lineItems.map(i => i.item.str).join(' ');
+        const isArabicLine = ARABIC_REGEX.test(fullLineText);
+        const lineClass = isArabicLine ? 'arabic-line' : 'english-line';
+        
+        let lineHtml = `<p class="${lineClass}">`;
+
+        if (isArabicLine) {
+          lineItems.sort((a, b) => b.x - a.x);
+        } else {
+          lineItems.sort((a, b) => a.x - b.x);
+        }
+
+        let lastEdge = null;
+
+        for (let i = 0; i < lineItems.length; i++) {
+          const { item, x } = lineItems[i];
+          let rawText = _bullets(item.str);
+          
+          if (isArabicLine) {
+            rawText = decodeVisualArabic(rawText);
+          }
+          const textHtml = _esc(rawText);
+
+          let extractedColor = '#000000';
+          if (item.color) {
+            if (Array.isArray(item.color) || item.color instanceof Uint8Array || item.color instanceof Uint8ClampedArray) {
+              extractedColor = `rgb(${item.color[0]},${item.color[1]},${item.color[2]})`;
+            } else if (typeof item.color === 'string') {
+              extractedColor = item.color.startsWith('#') || item.color.startsWith('rgb') ? item.color : `#${item.color}`;
+            }
+          } else if (item.fillColor) {
+             if (Array.isArray(item.fillColor) || item.fillColor instanceof Uint8Array || item.fillColor instanceof Uint8ClampedArray) {
+               extractedColor = `rgb(${item.fillColor[0]},${item.fillColor[1]},${item.fillColor[2]})`;
+             } else if (typeof item.fillColor === 'string') {
+               extractedColor = item.fillColor.startsWith('#') || item.fillColor.startsWith('rgb') ? item.fillColor : `#${item.fillColor}`;
+             }
+          }
+
+          const fontSize = Math.abs(item.transform[3]) || Math.abs(item.transform[0]) || item.height || 12;
+          const fontName = item.fontName ? item.fontName.toLowerCase() : '';
+          const isBold = fontName.includes('bold');
+          const isItalic = fontName.includes('italic');
+          const fontWeight = isBold ? 'bold' : 'normal';
+          const fontStyle = isItalic ? 'italic' : 'normal';
+
+          let spacesHtml = '';
+          if (lastEdge !== null) {
+            let gap = 0;
+            if (isArabicLine) {
+              gap = lastEdge - (x + (item.width || 0));
+            } else {
+              gap = x - lastEdge;
+            }
+            
+            const spaceWidth = fontSize * 0.3;
+            if (gap > spaceWidth) {
+              const spaceCount = Math.max(1, Math.round(gap / spaceWidth));
+              spacesHtml = '&nbsp;'.repeat(spaceCount);
+            }
+          } else {
+            let indent = 0;
+            if (isArabicLine) {
+              indent = 595 - (x + (item.width || 0));
+            } else {
+              indent = x;
+            }
+            const spaceWidth = fontSize * 0.3;
+            if (indent > spaceWidth * 2) {
+               const spaceCount = Math.max(1, Math.round(indent / spaceWidth));
+               spacesHtml = '&nbsp;'.repeat(spaceCount);
+            }
+          }
+
+          if (isArabicLine) {
+            lastEdge = x;
+          } else {
+            lastEdge = x + (item.width || 0);
+          }
+
+          const spanStyle = `color: ${extractedColor}; font-size: ${fontSize}px; font-weight: ${fontWeight}; font-style: ${fontStyle};`;
+          lineHtml += `${spacesHtml}<span style="${spanStyle}">${textHtml}</span>`;
+        }
+
+        lineHtml += `</p>\n`;
+        pageHtml += lineHtml;
+      }
+
+      const pageBreak = pageNum < numPages ? '<br clear="all" style="page-break-before:always" />' : '';
+      allPagesHtml += pageHtml + pageBreak + '\n';
     }
 
-    const wordHtml = `<!DOCTYPE html>
-<html xmlns:o="urn:schemas-microsoft-com:office:office"
-      xmlns:w="urn:schemas-microsoft-com:office:word"
-      xmlns="http://www.w3.org/TR/REC-html40">
+    const wordDocXml = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
 <head>
-  <meta charset="UTF-8">
-  <meta name="ProgId" content="Word.Document">
-  <meta name="Generator" content="PDF BOX">
+  <meta charset="utf-8">
+  <!--[if gte mso 9]>
+  <xml>
+    <w:WordDocument>
+      <w:View>Print</w:View>
+      <w:Zoom>100</w:Zoom>
+    </w:WordDocument>
+  </xml>
+  <![endif]-->
   <style>
-    @page WordSection1 {
-      size: auto;
-      margin: 0pt;
-      mso-header-margin: 0pt;
-      mso-footer-margin: 0pt;
-    }
-    body { margin: 0; padding: 0; background: #ffffff; }
-    div.WordSection1 { page: WordSection1; }
+    body { font-family: 'Arial', 'Calibri', sans-serif; background-color: #ffffff; color: #000000; }
+    p { margin: 6px 0; }
+    .arabic-line { direction: rtl; text-align: right; unicode-bidi: embed; }
+    .english-line { direction: ltr; text-align: left; }
   </style>
 </head>
 <body>
-<div class="WordSection1">
-${allPagesHtml}</div>
+  <div class="WordSection1">
+${allPagesHtml}  </div>
 </body>
 </html>`;
 
-    if (typeof setProgress === 'function') setProgress('pdf2word', 95, 'Building document...');
-    return new Blob([wordHtml], { type: 'application/msword' });
+    if (typeof setProgress === 'function') setProgress('pdf2word', 95, 'Building Word document...');
+    return new Blob([wordDocXml], { type: 'application/msword;charset=utf-8' });
 
   } catch (error) {
-    console.error('[PDF BOX] PDF\u2192Word (Absolute Layout) Error:', error);
+    console.error('[PDF BOX] PDF to Word Error:', error);
     alert('An error occurred during conversion: ' + error.message);
     throw error;
   }
