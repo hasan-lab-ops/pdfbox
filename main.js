@@ -1440,14 +1440,19 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
 
     const decodeVisualArabic = (text) => {
       if (!ARABIC_REGEX.test(text)) return text;
-      let reversed = text.split('').reverse().join('');
+      
+      let normalized = text.normalize('NFKC');
+      let reversed = normalized.split('').reverse().join('');
+      
       reversed = reversed.replace(/[a-zA-Z0-9]+(?:[\s.,\-_\@/'"]+[a-zA-Z0-9]+)*/g, (match) => {
         return match.split('').reverse().join('');
       });
+      
       reversed = reversed.replace(/[()\[\]{}<>]/g, (char) => {
         const pairs = { '(': ')', ')': '(', '[': ']', ']': '[', '{': '}', '}': '{', '<': '>', '>': '<' };
         return pairs[char] || char;
       });
+      
       return reversed;
     };
 
@@ -1507,6 +1512,7 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
         }
 
         let lastEdge = null;
+        let segmentsHtml = [];
 
         for (let i = 0; i < lineItems.length; i++) {
           const { item, x } = lineItems[i];
@@ -1531,13 +1537,28 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
                extractedColor = item.fillColor.startsWith('#') || item.fillColor.startsWith('rgb') ? item.fillColor : `#${item.fillColor}`;
              }
           }
+          
+          if (extractedColor === '#ffffff' || extractedColor === 'rgb(255,255,255)' || extractedColor === 'rgb(255, 255, 255)') {
+             extractedColor = '#000000';
+          }
 
           const fontSize = Math.abs(item.transform[3]) || Math.abs(item.transform[0]) || item.height || 12;
-          const fontName = item.fontName ? item.fontName.toLowerCase() : '';
-          const isBold = fontName.includes('bold');
-          const isItalic = fontName.includes('italic');
+          
+          const fontNameRaw = item.fontName || '';
+          const fontNameLower = fontNameRaw.toLowerCase();
+          const isBold = fontNameLower.includes('bold');
+          const isItalic = fontNameLower.includes('italic');
           const fontWeight = isBold ? 'bold' : 'normal';
           const fontStyle = isItalic ? 'italic' : 'normal';
+          
+          let fontFamily = 'Arial, sans-serif';
+          if (fontNameLower.includes('times')) fontFamily = '"Times New Roman", serif';
+          else if (fontNameLower.includes('courier')) fontFamily = '"Courier New", monospace';
+          else if (fontNameLower.includes('arial')) fontFamily = 'Arial, sans-serif';
+          else if (fontNameLower.includes('calibri')) fontFamily = 'Calibri, sans-serif';
+          else if (fontNameRaw) fontFamily = `'${fontNameRaw.replace(/['"]/g, '')}', Arial, sans-serif`;
+
+          const textDecoration = fontNameLower.includes('underline') ? 'underline' : 'none';
 
           let spacesHtml = '';
           if (lastEdge !== null) {
@@ -1549,21 +1570,9 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
             }
             
             const spaceWidth = fontSize * 0.3;
-            if (gap > spaceWidth) {
+            if (gap > spaceWidth * 0.8) {
               const spaceCount = Math.max(1, Math.round(gap / spaceWidth));
               spacesHtml = '&nbsp;'.repeat(spaceCount);
-            }
-          } else {
-            let indent = 0;
-            if (isArabicLine) {
-              indent = 595 - (x + (item.width || 0));
-            } else {
-              indent = x;
-            }
-            const spaceWidth = fontSize * 0.3;
-            if (indent > spaceWidth * 2) {
-               const spaceCount = Math.max(1, Math.round(indent / spaceWidth));
-               spacesHtml = '&nbsp;'.repeat(spaceCount);
             }
           }
 
@@ -1573,16 +1582,19 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
             lastEdge = x + (item.width || 0);
           }
 
-          const spanStyle = `color: ${extractedColor}; font-size: ${fontSize}px; font-weight: ${fontWeight}; font-style: ${fontStyle};`;
-          lineHtml += `${spacesHtml}<span style="${spanStyle}">${textHtml}</span>`;
+          const spanStyle = `font-family: ${fontFamily}; color: ${extractedColor}; font-size: ${fontSize}px; font-weight: ${fontWeight}; font-style: ${fontStyle}; text-decoration: ${textDecoration};`;
+          segmentsHtml.push(`${spacesHtml}<span style="${spanStyle}">${textHtml}</span>`);
         }
 
-        lineHtml += `</p>\n`;
+        lineHtml += segmentsHtml.join('') + `</p>\n`;
         pageHtml += lineHtml;
       }
 
-      const pageBreak = pageNum < numPages ? '<br clear="all" style="page-break-before:always" />' : '';
-      allPagesHtml += pageHtml + pageBreak + '\n';
+      if (pageNum < numPages) {
+         pageHtml += '<br clear="all" style="page-break-before:always" />\n';
+      }
+      
+      allPagesHtml += pageHtml;
     }
 
     const wordDocXml = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
@@ -1597,8 +1609,8 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
   </xml>
   <![endif]-->
   <style>
-    body { font-family: 'Arial', 'Calibri', sans-serif; background-color: #ffffff; color: #000000; }
-    p { margin: 6px 0; }
+    body { background-color: #ffffff; color: #000000; }
+    p { margin: 6px 0; line-height: 1.3; }
     .arabic-line { direction: rtl; text-align: right; unicode-bidi: embed; }
     .english-line { direction: ltr; text-align: left; }
   </style>
