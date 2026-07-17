@@ -1473,45 +1473,67 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
       try {
         const opList = await page.getOperatorList();
         const OPS = pdfjsLib.OPS;
-        // Walk operator list looking for paintImageXObject / paintInlineImageXObject
+
         const imageOps = new Set([
           OPS.paintImageXObject,
           OPS.paintImageXObjectRepeat,
           OPS.paintInlineImageXObject,
+          OPS.paintImageMaskXObject,
         ]);
 
-        let currentTransform = [1, 0, 0, 1, 0, 0]; // identity CTM
+        // Multiply two PDF matrices [a,b,c,d,e,f]
+        const multiplyMatrix = (m1, m2) => [
+          m1[0]*m2[0] + m1[1]*m2[2],
+          m1[0]*m2[1] + m1[1]*m2[3],
+          m1[2]*m2[0] + m1[3]*m2[2],
+          m1[2]*m2[1] + m1[3]*m2[3],
+          m1[4]*m2[0] + m1[5]*m2[2] + m2[4],
+          m1[4]*m2[1] + m1[5]*m2[3] + m2[5],
+        ];
+
+        // Proper CTM stack - identity matrix to start
+        const ctmStack = [];
+        let currentCTM = [1, 0, 0, 1, 0, 0];
 
         for (let i = 0; i < opList.fnArray.length; i++) {
           const fn = opList.fnArray[i];
           const args = opList.argsArray[i];
 
-          // Track CTM changes so we know where images are placed
-          if (fn === OPS.transform) {
-            currentTransform = args; // [a,b,c,d,e,f]
-          } else if (fn === OPS.save) {
-            // We don't need full stack tracking for image bounds; use currentTransform as-is
+          if (fn === OPS.save) {
+            ctmStack.push([...currentCTM]);
+          } else if (fn === OPS.restore) {
+            if (ctmStack.length > 0) currentCTM = ctmStack.pop();
+          } else if (fn === OPS.transform) {
+            // Concatenate the new transform onto the current CTM
+            currentCTM = multiplyMatrix(currentCTM, args);
           } else if (imageOps.has(fn)) {
-            // args[0] is the image name / key
-            // currentTransform = [a,b,c,d,e,f] => the image is painted into a unit square
-            // mapped by this CTM in PDF user space
-            // PDF y-axis is flipped; e = x offset, f = y offset, a = width, d = height
-            const [a, b, c, d, e, f] = currentTransform;
-            const pdfX = e;
-            const pdfY = f;
-            const pdfW = Math.abs(a);
-            const pdfH = Math.abs(d);
+            // The image unit square [0,1]x[0,1] is mapped by currentCTM.
+            // Transform all 4 corners through the CTM to find the true bounding box.
+            // PDF transform: x' = a*x + c*y + e,  y' = b*x + d*y + f
+            const [a, b, c, d, e, f] = currentCTM;
+            const corners = [
+              [e,       f      ],  // (0,0)
+              [a+e,     b+f    ],  // (1,0)
+              [c+e,     d+f    ],  // (0,1)
+              [a+c+e,   b+d+f  ],  // (1,1)
+            ];
+            const xs = corners.map(p => p[0]);
+            const ys = corners.map(p => p[1]);
+            const pdfX = Math.min(...xs);
+            const pdfY = Math.min(...ys);
+            const pdfW = Math.max(...xs) - pdfX;
+            const pdfH = Math.max(...ys) - pdfY;
 
-            // Convert to canvas pixel coords (scale 2x, y flipped)
+            // Convert to canvas pixel coords (SCALE factor, y-axis flipped)
             const cx = pdfX * SCALE;
             const cy = canvas.height - (pdfY * SCALE) - (pdfH * SCALE);
-            const cw = pdfW * SCALE;
-            const ch = pdfH * SCALE;
+            const cw = Math.abs(pdfW * SCALE);
+            const ch = Math.abs(pdfH * SCALE);
 
-            // Only extract reasonably sized images (skip tiny icons < 20px)
+            // Only extract reasonably sized images (skip tiny decorative icons < 20px)
             if (cw > 20 && ch > 20) {
               const cropCanvas = document.createElement('canvas');
-              cropCanvas.width = Math.ceil(cw);
+              cropCanvas.width  = Math.ceil(cw);
               cropCanvas.height = Math.ceil(ch);
               const cropCtx = cropCanvas.getContext('2d');
               cropCtx.drawImage(
@@ -1522,17 +1544,17 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
                 Math.ceil(cw), Math.ceil(ch)
               );
               const dataUrl = cropCanvas.toDataURL('image/png');
-              // pdfY is the bottom-left corner in PDF space; use it as sort key (high y = near top)
-              images.push({ dataUrl, pdfY, pdfX, pdfW, pdfH });
+              // Use pdfY + pdfH (the top edge in PDF space) for sort ordering
+              images.push({ dataUrl, pdfY: pdfY + pdfH, pdfX, pdfW, pdfH });
             }
           }
         }
       } catch (e) {
-        // Image extraction is best-effort; don't fail the whole conversion
         console.warn('[PDF2WORD] Image extraction error:', e);
       }
       return images;
     };
+
 
     for (let pageNum = 1; pageNum <= numPages; pageNum++) {
       if (typeof setProgress === 'function') {
