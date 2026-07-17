@@ -1486,14 +1486,14 @@ async function wordToPDF() {
     container.appendChild(innerContent);
     document.body.appendChild(container);
 
-    // Use docx-preview to render visually
+    // Use docx-preview to render visually (text, tables, inline images)
     await docxPreview.renderAsync(arrayBuffer, docxContainer, null, {
-        className: "docx", // default
-        inWrapper: true,   // wrap in a .docx-wrapper
-        ignoreWidth: false, // preserve original document width
-        ignoreHeight: false, // preserve original document height
-        ignoreFonts: false,  // preserve fonts
-        breakPages: false,   // we slice it manually to avoid complex html2canvas multi-element targeting
+        className: "docx",
+        inWrapper: true,
+        ignoreWidth: false,
+        ignoreHeight: false,
+        ignoreFonts: false,
+        breakPages: false,
         renderHeaders: true,
         renderFooters: true,
         renderFootnotes: true,
@@ -1501,40 +1501,59 @@ async function wordToPDF() {
         experimental: true
     });
 
-    // --- SMART FALLBACK: INJECT MISSING IMAGES ---
-    // Count valid rendered images (ignore tiny ones)
-    const renderedImgs = Array.from(docxContainer.querySelectorAll("img")).filter(img => img.width > 20 || img.height > 20);
-    
-    // If docx-preview missed ANY images that we extracted from the ZIP, inject them manually!
-    if (extractedImages.length > renderedImgs.length) {
-      const firstPage = docxContainer.querySelector(".docx");
-      if (firstPage) {
-        // Create a header container for the missing logos
-        const imageHeader = document.createElement("div");
-        imageHeader.style.cssText = "display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; width: 100%; padding: 0 40px; box-sizing: border-box;";
-        
-        extractedImages.forEach(src => {
-          const img = document.createElement("img");
-          img.src = src;
-          img.style.cssText = "max-width: 120px; max-height: 120px; object-fit: contain;";
-          imageHeader.appendChild(img);
-        });
-        
-        firstPage.insertBefore(imageHeader, firstPage.firstChild);
-        // Force a border just in case the detection failed but the user requested it
-        firstPage.style.border = "3px double #000";
-        firstPage.style.padding = "40px";
-      }
-    }
-    // ------------------------------------------------
-
-    // Wait for all rendered images to load
-    const allImgs = innerContent.querySelectorAll("img");
+    // Wait for all docx-preview rendered images to fully load first
+    const docxImgs = Array.from(docxContainer.querySelectorAll("img"));
     await Promise.all(
-      Array.from(allImgs).map((img) =>
-        img.complete ? Promise.resolve() : new Promise((r) => { img.onload = r; img.onerror = r; })
+      docxImgs.map(img =>
+        img.complete ? Promise.resolve() : new Promise(r => { img.onload = r; img.onerror = r; })
       )
     );
+    // Brief extra delay to allow layout to fully paint
+    await new Promise(r => setTimeout(r, 200));
+
+    // --- UNCONDITIONAL FALLBACK: INJECT EXTRACTED IMAGES ---
+    // docx-preview NEVER renders floating/anchored images (logos anchored to page corners).
+    // These are VML/DrawingML objects that are discarded. So if we extracted any images
+    // from the ZIP that are NOT already visible in the rendered output, inject them ALWAYS.
+    if (extractedImages.length > 0) {
+      // Count how many images are actually visible (natural size > 20px means real image)
+      const visibleImgs = docxImgs.filter(img => img.naturalWidth > 20 || img.naturalHeight > 20);
+      const missingCount = extractedImages.length - visibleImgs.length;
+      
+      if (missingCount > 0) {
+        const firstPage = docxContainer.querySelector(".docx");
+        if (firstPage) {
+          // Force page border (double border to match the original document style)
+          firstPage.style.cssText += "; border: 3px double #000 !important; padding: 30px !important; box-sizing: border-box !important;";
+
+          // Build image header row with missing images
+          const missingImages = extractedImages.slice(0, missingCount); // only missing ones
+          const imageHeader = document.createElement("div");
+          imageHeader.style.cssText = "display: flex; justify-content: space-between; align-items: flex-start; width: 100%; margin-bottom: 16px;";
+          
+          missingImages.forEach(src => {
+            const wrap = document.createElement("div");
+            wrap.style.cssText = "flex: 0 0 auto;";
+            const img = document.createElement("img");
+            img.src = src;
+            img.style.cssText = "max-width: 130px; max-height: 130px; object-fit: contain; display: block;";
+            wrap.appendChild(img);
+            imageHeader.appendChild(wrap);
+          });
+          
+          firstPage.insertBefore(imageHeader, firstPage.firstChild);
+          
+          // Wait for the newly injected images to load
+          const injectedImgs = Array.from(imageHeader.querySelectorAll("img"));
+          await Promise.all(
+            injectedImgs.map(img =>
+              img.complete ? Promise.resolve() : new Promise(r => { img.onload = r; img.onerror = r; })
+            )
+          );
+        }
+      }
+    }
+    // -------------------------------------------------------
 
     setProgress("word2pdf", 55, "Measuring document length…");
     const totalHeight = innerContent.scrollHeight;
