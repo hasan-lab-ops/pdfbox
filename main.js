@@ -1,19 +1,19 @@
 /* ===================================================   PDF BOX — Main JavaScript   Tools: Merge, Split, Compress, Rotate,          PDF→Images, Images→PDF, Watermark, Protect,          Extract Pages, PDF Viewer, PDF→Word, Word→PDF   Libraries: pdf-lib-with-encrypt, PDF.js, docx.js,              mammoth.js, html2canvas, FileSaver.js   =================================================== */ "use strict";
 /* ──────────────────────────────────────────────────   STATE   ────────────────────────────────────────────────── */ const state =
-  {
-    merge: { files: [] },
-    split: { file: null, pageCount: 0 },
-    compress: { file: null },
-    rotate: { file: null, angle: 90 },
-    pdf2img: { file: null, dpi: 150 },
-    img2pdf: { files: [] },
-    watermark: { file: null },
-    protect: { file: null },
-    extract: { file: null, pageCount: 0 },
-    viewer: { file: null, pdf: null, page: 1, total: 0, zoom: 1.0 },
-    pdf2word: { file: null },
-    word2pdf: { file: null },
-  };
+{
+  merge: { files: [] },
+  split: { file: null, pageCount: 0 },
+  compress: { file: null },
+  rotate: { file: null, angle: 90 },
+  pdf2img: { file: null, dpi: 150 },
+  img2pdf: { files: [] },
+  watermark: { file: null },
+  protect: { file: null },
+  extract: { file: null, pageCount: 0 },
+  viewer: { file: null, pdf: null, page: 1, total: 0, zoom: 1.0 },
+  pdf2word: { file: null },
+  word2pdf: { file: null },
+};
 /* ──────────────────────────────────────────────────   NAVBAR SCROLL   ────────────────────────────────────────────────── */ window.addEventListener(
   "scroll",
   () => {
@@ -773,10 +773,10 @@ function hexToRgb(hex) {
   const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
   return result
     ? {
-        r: parseInt(result[1], 16),
-        g: parseInt(result[2], 16),
-        b: parseInt(result[3], 16),
-      }
+      r: parseInt(result[1], 16),
+      g: parseInt(result[2], 16),
+      b: parseInt(result[3], 16),
+    }
     : { r: 255, g: 0, b: 0 };
 }
 /* ──────────────────────────────────────────────────   8. PROTECT PDF — Real AES-128 Encryption   Uses pdf-lib-with-encrypt (superset of pdf-lib)   ────────────────────────────────────────────────── */ async function protectPDF() {
@@ -815,20 +815,20 @@ function hexToRgb(hex) {
       Date.now().toString(36);
     if (typeof doc.encrypt === "function") {
       /* Real AES-128 encryption via pdf-lib-with-encrypt       */ await doc.encrypt(
-        {
-          userPassword: pass,
-          ownerPassword: ownerPass,
-          permissions: {
-            printing: "highResolution",
-            modifying: false,
-            copying: false,
-            annotating: false,
-            fillingForms: true,
-            contentAccessibility: true,
-            documentAssembly: false,
-          },
+      {
+        userPassword: pass,
+        ownerPassword: ownerPass,
+        permissions: {
+          printing: "highResolution",
+          modifying: false,
+          copying: false,
+          annotating: false,
+          fillingForms: true,
+          contentAccessibility: true,
+          documentAssembly: false,
         },
-      );
+      },
+    );
       setProgress("protect", 80, "Saving encrypted PDF…");
       const out = await doc.save();
       const blob = new Blob([out], { type: "application/pdf" });
@@ -910,9 +910,9 @@ function hexToRgb(hex) {
     for (let i = 0; i < len; i += 4) {
       words.push(
         bytes[i] |
-          (bytes[i + 1] << 8) |
-          (bytes[i + 2] << 16) |
-          (bytes[i + 3] << 24),
+        (bytes[i + 1] << 8) |
+        (bytes[i + 2] << 16) |
+        (bytes[i + 3] << 24),
       );
     }
     words[len >> 2] |= 0x80 << ((len % 4) << 3);
@@ -1041,11 +1041,11 @@ function hexToRgb(hex) {
     .join("");
   /* Compute encryption key and U value (Rev 3)   */ const permBits = -3904;
   /* Allow printing, no modify/copy   */ const permArr = new Uint8Array([
-    permBits & 0xff,
-    (permBits >> 8) & 0xff,
-    (permBits >> 16) & 0xff,
-    (permBits >> 24) & 0xff,
-  ]);
+      permBits & 0xff,
+      (permBits >> 8) & 0xff,
+      (permBits >> 16) & 0xff,
+      (permBits >> 24) & 0xff,
+    ]);
   const keyInput = new Uint8Array([
     ...paddedUser,
     ...oValue,
@@ -1276,7 +1276,7 @@ async function convertPDFToWord(arrayBuffer) {
     ctx.fillStyle = "#ffffff";
     ctx.fillRect(0, 0, pageW, pageH);
     await page.render({ canvasContext: ctx, viewport }).promise;
-    
+
     // Convert the full page screenshot to a PNG ArrayBuffer
     const imgU8 = await canvasToUint8(canvas);
 
@@ -1292,8 +1292,8 @@ async function convertPDFToWord(arrayBuffer) {
     //   841.89pt * (96/72) = 1122.5 ≈ 1123px tall
     const A4_W_TWIPS = 11906;
     const A4_H_TWIPS = 16838;
-    const A4_W_PX    = 794;   // A4 width in pixels at 96dpi (no margins)
-    const A4_H_PX    = 1123;  // A4 height in pixels at 96dpi (no margins)
+    const A4_W_PX = 794;   // A4 width in pixels at 96dpi (no margins)
+    const A4_H_PX = 1123;  // A4 height in pixels at 96dpi (no margins)
 
     // Scale image to fill A4 exactly (stretch to fit)
     // The PDF page is already rendered at high DPI; we just declare the output size.
@@ -1325,11 +1325,11 @@ async function convertPDFToWord(arrayBuffer) {
   }
 
   if (typeof setProgress === "function") setProgress("pdf2word", 93, "Building .docx file...");
-  
+
   const doc = new docx.Document({
     sections: sections.length ? sections : [{ children: [new docx.Paragraph("No content extracted")] }]
   });
-  
+
   return docx.Packer.toBlob(doc);
 }
 
@@ -1363,7 +1363,7 @@ async function pdfToWord() {
    Uses docx-preview to render the Word document visually with exact layout.
    Includes a custom JSZip fallback to manually extract page borders and 
    missing floating images (like header logos) that docx-preview drops.
-   ────────────────────────────────────────────────── */ 
+   ────────────────────────────────────────────────── */
 async function wordToPDF() {
   const file = state.word2pdf.file;
   if (!file) {
@@ -1382,21 +1382,21 @@ async function wordToPDF() {
     showToast("JSZip library not loaded. Please check your internet connection.", "error");
     return;
   }
-  
+
   showResult("word2pdf", "");
   setProgress("word2pdf", 5, "Reading Word document…");
   setButtonEnabled("btn-word2pdf", false);
-  
+
   try {
     const arrayBuffer = await file.arrayBuffer();
-    
+
     // --- SMART FALLBACK: MANUALLY PARSE DOCX FOR BORDERS AND MISSING IMAGES ---
     setProgress("word2pdf", 10, "Analyzing document structure…");
     const zip = await JSZip.loadAsync(arrayBuffer);
-    
+
     let borderCss = "";
     let extractedImages = [];
-    
+
     // 1. Extract Page Borders
     try {
       const docXmlFile = zip.file("word/document.xml");
@@ -1408,7 +1408,7 @@ async function wordToPDF() {
           let borderStyle = "solid";
           if (docXml.includes('w:val="double"')) borderStyle = "double";
           else if (docXml.includes('w:val="dashed"')) borderStyle = "dashed";
-          
+
           // Apply a nice 3px border to the docx pages
           borderCss = `
             #w2p-render-content .docx { 
@@ -1432,7 +1432,7 @@ async function wordToPDF() {
         if (ext === "jpg" || ext === "jpeg") mime = "image/jpeg";
         else if (ext === "gif") mime = "image/gif";
         else if (ext === "svg") mime = "image/svg+xml";
-        
+
         const base64 = await zip.file(mediaPath).async("base64");
         // Remove size limits to ensure no logos are missed
         extractedImages.push(`data:${mime};base64,${base64}`);
@@ -1471,7 +1471,7 @@ async function wordToPDF() {
     // Container for docx-preview rendering
     const docxContainer = document.createElement("div");
     innerContent.appendChild(docxContainer);
-    
+
     // We inject custom CSS for full-width images and the extracted border
     const customStyle = document.createElement("style");
     customStyle.innerHTML = `
@@ -1486,17 +1486,17 @@ async function wordToPDF() {
 
     // Use docx-preview to render visually (text, tables, inline images)
     await docxPreview.renderAsync(arrayBuffer, docxContainer, null, {
-        className: "docx",
-        inWrapper: true,
-        ignoreWidth: false,
-        ignoreHeight: false,
-        ignoreFonts: false,
-        breakPages: false,
-        renderHeaders: true,
-        renderFooters: true,
-        renderFootnotes: true,
-        useBase64URL: true,
-        experimental: true
+      className: "docx",
+      inWrapper: true,
+      ignoreWidth: false,
+      ignoreHeight: false,
+      ignoreFonts: false,
+      breakPages: false,
+      renderHeaders: true,
+      renderFooters: true,
+      renderFootnotes: true,
+      useBase64URL: true,
+      experimental: true
     });
 
     // Wait for all docx-preview rendered images to fully load first
@@ -1513,12 +1513,12 @@ async function wordToPDF() {
     // Apply border directly to our own container so it can't be missed or overridden
     innerContent.style.border = "4px double #000";
     innerContent.style.padding = "40px";
-    
+
     // Inject all extracted images directly into our own container above the docx content
     if (extractedImages.length > 0) {
       const imageHeader = document.createElement("div");
       imageHeader.style.cssText = "display: flex; justify-content: space-between; align-items: flex-start; width: 100%; margin-bottom: 20px;";
-      
+
       // If there are exactly 2 images (like the user's logos), they will neatly go left and right.
       // If there are more, we just display them all.
       extractedImages.forEach(src => {
@@ -1529,9 +1529,9 @@ async function wordToPDF() {
         wrap.appendChild(img);
         imageHeader.appendChild(wrap);
       });
-      
+
       innerContent.insertBefore(imageHeader, docxContainer);
-      
+
       // Wait for injected images to load
       const injectedImgs = Array.from(imageHeader.querySelectorAll("img"));
       await Promise.all(
@@ -1550,7 +1550,7 @@ async function wordToPDF() {
     const A4W = 595.28, A4H = 841.89; // Exact A4 points
 
     setProgress("word2pdf", 60, `Building PDF (${numPdfPages} page${numPdfPages !== 1 ? "s" : ""})…`);
-    
+
     const pdfDoc = await PDFLib.PDFDocument.create();
     pdfDoc.setTitle(file.name.replace(/\.(docx?)$/i, ""));
     pdfDoc.setCreator("PDF BOX");
@@ -1559,10 +1559,10 @@ async function wordToPDF() {
     // Process page by page to avoid huge html2canvas memory crashes
     for (let p = 0; p < numPdfPages; p++) {
       setProgress("word2pdf", 60 + Math.round((p / numPdfPages) * 35), `Rendering page ${p + 1}…`);
-      
+
       // Shift content up so the window shows the current page
       innerContent.style.marginTop = `-${p * PAGE_H}px`;
-      
+
       // Wait a tiny bit for browser layout to settle
       await new Promise(r => setTimeout(r, 50));
 
@@ -1582,9 +1582,9 @@ async function wordToPDF() {
       const jpegBlob = dataURLtoBlob(jpegDataUrl);
       const jpegBuf = await jpegBlob.arrayBuffer();
       const embImg = await pdfDoc.embedJpg(new Uint8Array(jpegBuf));
-      
+
       const page = pdfDoc.addPage([A4W, A4H]);
-      
+
       page.drawImage(embImg, {
         x: 0,
         y: 0,
@@ -1701,6 +1701,6 @@ document
     });
   });
 /* ──────────────────────────────────────────────────   INIT   ────────────────────────────────────────────────── */ console.log(
-  "%c PDF BOX 📦 Ready! — 12 Tools Active",
-  "color:#00E5FF;font-size:16px;font-weight:bold;",
-);
+    "%c PDF BOX 📦 Ready! — 12 Tools Active",
+    "color:#00E5FF;font-size:16px;font-weight:bold;",
+  );
