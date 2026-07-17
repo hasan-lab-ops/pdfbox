@@ -1521,8 +1521,18 @@ async function convertPDFToWord(arrayBuffer) {
       const lineItems = block.items;
       lineItems.sort((a, b) => a.x - b.x); // STEP 1: sort horizontally
 
+      const ARABIC_RE =
+        /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/;
       const fullLineText = lineItems.map((li) => li.item.str).join(" ");
       const lineIsArabic = ARABIC_RE.test(fullLineText);
+
+      function reverseArabicSafe(str) {
+        // Keeps Arabic combining marks (Tashkeel) with their base letters when reversing
+        const charWithMarks =
+          /[\s\S][\u0610-\u061A\u064B-\u065F\u0670\u08D4-\u08E1\u08D3-\u08FF]*/g;
+        const match = str.match(charWithMarks);
+        return match ? match.reverse().join("") : str;
+      }
 
       // --- STEP 2: BIDI UNSHUFFLER ---
       const visualItems = [];
@@ -1579,7 +1589,7 @@ async function convertPDFToWord(arrayBuffer) {
 
       for (const v of visualItems) {
         if (!v.str) continue;
-        const hasArabic = /[\u0600-\u06FF]/.test(v.str);
+        const hasArabic = ARABIC_RE.test(v.str);
         const hasEnglish = /[a-zA-Z]/.test(v.str);
 
         let type = currentType;
@@ -1610,8 +1620,8 @@ async function convertPDFToWord(arrayBuffer) {
           const rev = [...b.items].reverse();
           for (const item of rev) {
             // PDF.js often extracts Arabic characters in visual (left-to-right) order inside strings too
-            if (!item.isSpace) {
-              item.str = item.str.split("").reverse().join("");
+            if (!item.isSpace && ARABIC_RE.test(item.str)) {
+              item.str = reverseArabicSafe(item.str);
             }
           }
           logicalItems.push(...rev);
@@ -1623,11 +1633,11 @@ async function convertPDFToWord(arrayBuffer) {
       const runs = [];
       for (const item of logicalItems) {
         if (!item.str) continue;
-        const segIsArabic = /[\u0600-\u06FF]/.test(item.str);
+        const segIsArabic = ARABIC_RE.test(item.str);
         runs.push(
           new docx.TextRun({
             text: item.str,
-            font: item.fontFamily,
+            font: segIsArabic ? "Arial" : item.fontFamily,
             size: ptToHp(item.sizePt),
             color: item.colorHex,
             bold: item.bold,
