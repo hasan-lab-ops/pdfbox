@@ -1205,7 +1205,7 @@ async function safeConvertPDFToWord(file, onProgress) {
     return rtl > ltr;
   };
 
-  const makeParagraph = (text, isRTL, fontSize = 24) => new docx.Paragraph({
+  const makeParagraph = (text, isRTL, fontSize = 24, pageBreakBefore = false) => new docx.Paragraph({ pageBreakBefore,
     children: [new docx.TextRun({
       text,
       font: isRTL ? 'Arial' : 'Times New Roman',
@@ -1277,7 +1277,7 @@ async function safeConvertPDFToWord(file, onProgress) {
         const { data } = await worker.recognize(canvas);
 
         // data.lines: each line has .text and .words[].bbox
-        for (const line of data.lines) {
+        let isFirstOnPage1 = true; for (const line of data.lines) { const cy = (line.bbox.y0 + line.bbox.y1) / 2; if ((cy > viewport.height - 150 || cy < 150) && /^\s*(?:-?\s*\d+\s*-?|Page\s*\d+)\s*$/i.test(line.text.trim())) continue;
           const rawText = line.text.replace(/\n/g, '').trim();
           if (!rawText) continue;
 
@@ -1288,7 +1288,7 @@ async function safeConvertPDFToWord(file, onProgress) {
           // OCR is at 2× scale, convert to points (72pt/inch, 96dpi screen)
           const fontSizePt = Math.max(8, Math.round((lineHeightPx / 2) * 0.75));
 
-          docxChildren.push(makeParagraph(rawText, rtl, fontSizePt * 2));
+          docxChildren.push(makeParagraph(rawText, rtl, fontSizePt * 2, pageNum > 1 && isFirstOnPage1)); isFirstOnPage1 = false;
         }
 
         // If no lines were pushed for this page, add a placeholder paragraph
@@ -1361,7 +1361,7 @@ async function safeConvertPDFToWord(file, onProgress) {
           if (!lineText) continue;
 
           const fontSize = Math.abs(lineItems[0].transform[0]) || 12;
-          docxChildren.push(makeParagraph(lineText, false, Math.round(fontSize * 2)));
+          docxChildren.push(makeParagraph(lineText, false, Math.round(fontSize * 2), pageNum > 1 && isFirstOnPage2)); isFirstOnPage2 = false;
           pageHasContent = true;
         }
 
