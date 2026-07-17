@@ -1469,7 +1469,7 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
         const y = item.transform[5];
         
         let matchedY = null;
-        for (const [keyY] of lineMap.keys()) {
+        for (const keyY of lineMap.keys()) {
           if (Math.abs(keyY - y) <= 5) {
             matchedY = keyY;
             break;
