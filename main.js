@@ -1237,12 +1237,10 @@ async function convertPDFToWord(arrayBuffer) {
   if (typeof docx === "undefined")
     throw new Error("docx.js library is not loaded.");
 
-  // ── Constants & helpers ──────────────────────────────────────────────────
-  const ARABIC_RE =
-    /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
-  const SCALE = 2.0; // render scale for colour sampling and image fallback
-  const LINE_TOL = 4; // px Y-axis tolerance for line clustering
-  const MIN_IMG_PX = 20; // skip image operands smaller than this
+  const ARABIC_RE = /[\u0600-\u06FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
+  const SCALE = 2.0;
+  const LINE_TOL = 4;
+  const MIN_IMG_PX = 20;
 
   const fixBullets = (s) =>
     s
@@ -1318,12 +1316,13 @@ async function convertPDFToWord(arrayBuffer) {
   const allChildren = [];
 
   for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-    if (typeof setProgress === "function")
+    if (typeof setProgress === "function") {
       setProgress(
         "pdf2word",
         10 + Math.floor((pageNum / numPages) * 80),
         "Processing page " + pageNum + " / " + numPages + "...",
       );
+    }
 
     const page = await pdfDoc.getPage(pageNum);
     const viewport = page.getViewport({ scale: SCALE });
@@ -1338,7 +1337,7 @@ async function convertPDFToWord(arrayBuffer) {
 
     const MAX_IMG_W = Math.round(Math.min(pageW / SCALE, 468) * (96 / 72));
 
-    // STEP 1 - Advanced Layout & Line Grouping
+    // 1. Y-Axis Layout Clustering
     const textContent = await page.getTextContent({
       normalizeWhitespace: true,
     });
@@ -1363,6 +1362,7 @@ async function convertPDFToWord(arrayBuffer) {
       const cY = pageH - rawY * SCALE - item.height * SCALE;
       const cW = (item.width || Math.abs(item.transform[0])) * SCALE;
       const cH = (item.height || Math.abs(item.transform[3])) * SCALE;
+
       lineMap.get(lineKey).push({
         item,
         x: rawX,
@@ -1373,7 +1373,7 @@ async function convertPDFToWord(arrayBuffer) {
 
     const sortedLineKeys = Array.from(lineMap.keys()).sort((a, b) => b - a);
 
-    // STEP 3 - Image Extraction via Operator List
+    // 3. Robust Image Operator Extraction
     const extractedImages = [];
     try {
       const opList = await page.getOperatorList();
@@ -1413,6 +1413,7 @@ async function convertPDFToWord(arrayBuffer) {
           const pdfW = Math.max(...xs) - pdfX;
           const pdfH = Math.max(...ys) - pdfY;
           if (pdfW < MIN_IMG_PX || pdfH < MIN_IMG_PX) continue;
+
           try {
             let imgObj = null;
             if (typeof imgRef === "object" && imgRef !== null) {
@@ -1490,7 +1491,6 @@ async function convertPDFToWord(arrayBuffer) {
       console.warn("[PDF2WORD] getOperatorList error:", opErr);
     }
 
-    // STEP 4 - Build unified chronological block list
     const blocks = [];
     for (const lineY of sortedLineKeys) {
       blocks.push({ type: "text", sortY: lineY, items: lineMap.get(lineY) });
@@ -1500,7 +1500,6 @@ async function convertPDFToWord(arrayBuffer) {
     }
     blocks.sort((a, b) => b.sortY - a.sortY);
 
-    // STEP 2 & 4 - BiDi + docx element construction
     for (const block of blocks) {
       if (block.type === "image") {
         try {
@@ -1510,6 +1509,7 @@ async function convertPDFToWord(arrayBuffer) {
           const outH = Math.round(dispH * scl);
           allChildren.push(
             new docx.Paragraph({
+              // 4. Explicit Document Spacing
               spacing: { before: 120, after: 120, line: 360 },
               children: [
                 new docx.ImageRun({
@@ -1526,15 +1526,12 @@ async function convertPDFToWord(arrayBuffer) {
         continue;
       }
 
-      const ARABIC_RE =
-        /[\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]/;
-      const fullLineText = block.items.map((li) => li.item.str).join(" ");
-      const lineIsArabic = ARABIC_RE.test(fullLineText);
-
-      // STEP 1: Layout Sorting (Y-Axis Clustering & X-Axis Sequence)
-      // Ensure the insertion order into the paragraph matches the reading sequence of the line's primary language.
+      // 1. Horizontal Sorting: strict left to right
       const lineItems = block.items;
-      lineItems.sort((a, b) => (lineIsArabic ? b.x - a.x : a.x - b.x));
+      lineItems.sort((a, b) => a.x - b.x);
+
+      const fullLineText = lineItems.map((li) => li.item.str).join(" ");
+      const lineIsArabic = ARABIC_RE.test(fullLineText);
 
       const runs = [];
       let lastEdge = null;
@@ -1542,11 +1539,6 @@ async function convertPDFToWord(arrayBuffer) {
       for (const li of lineItems) {
         let raw = fixBullets(li.item.str);
         if (!raw.trim()) continue;
-
-        // 1. Robust BiDi Normalization: map Presentation Forms to standard logical Arabic characters
-        if (ARABIC_RE.test(raw)) {
-          raw = raw.normalize("NFKD");
-        }
 
         const sizePt = Math.round(
           Math.abs(li.item.transform[3]) ||
@@ -1557,16 +1549,13 @@ async function convertPDFToWord(arrayBuffer) {
 
         let gap = "";
         if (lastEdge !== null) {
-          const gapPts = lineIsArabic
-            ? lastEdge - (li.x + (li.item.width || 0))
-            : li.x - lastEdge;
-
+          const gapPts = li.x - lastEdge;
           const spaceW = sizePt * 0.3;
           if (gapPts > spaceW * 0.8) {
             gap = " ".repeat(Math.max(1, Math.round(gapPts / spaceW)));
           }
         }
-        lastEdge = lineIsArabic ? li.x : li.x + (li.item.width || 0);
+        lastEdge = li.x + (li.item.width || 0);
 
         const fn = (li.item.fontName || "").toLowerCase();
         const fontFamily = fn.includes("times")
@@ -1577,10 +1566,15 @@ async function convertPDFToWord(arrayBuffer) {
               ? "Calibri"
               : "Arial";
 
-        // 2. Strict Bidirectional (BiDi) Segmentation
+        // Map presentation forms safely to standard Unicode to allow native Word shaping
+        if (ARABIC_RE.test(raw)) {
+          raw = raw.normalize("NFKD");
+        }
+
+        // 2. Native Arabic BiDi Tokenization
         const fullText = gap + raw;
         const tokenRegex =
-          /([\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]+)|([^\u0600-\u06FF\u0750-\u077F\uFB50-\uFDFF\uFE70-\uFEFF]+)/g;
+          /([\u0600-\u06FF\uFB50-\uFDFF\uFE70-\uFEFF]+)|([^\u0600-\u06FF\uFB50-\uFDFF\uFE70-\uFEFF]+)/g;
         let match;
 
         while ((match = tokenRegex.exec(fullText)) !== null) {
@@ -1604,13 +1598,14 @@ async function convertPDFToWord(arrayBuffer) {
 
       if (runs.length === 0) continue;
 
-      // 3. Paragraph Level Configuration
       allChildren.push(
         new docx.Paragraph({
+          // 2. Native Arabic BiDi Tokenization (Paragraph Config)
           bidirectional: lineIsArabic,
           alignment: lineIsArabic
             ? docx.AlignmentType.RIGHT
             : docx.AlignmentType.LEFT,
+          // 4. Explicit Document Spacing
           spacing: { before: 120, after: 120, line: 360 },
           children: runs,
         }),
