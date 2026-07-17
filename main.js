@@ -1305,7 +1305,15 @@ async function convertPDFToWord(arrayBuffer) {
 
   if (typeof setProgress === "function")
     setProgress("pdf2word", 10, "Loading PDF...");
-  const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+
+  const pdfDoc = await pdfjsLib.getDocument({
+    data: arrayBuffer,
+    cMapUrl: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/",
+    cMapPacked: true,
+    standardFontDataUrl:
+      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/standard_fonts/",
+  }).promise;
+
   const numPages = pdfDoc.numPages;
   const allChildren = [];
 
