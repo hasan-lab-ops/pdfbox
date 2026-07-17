@@ -1359,24 +1359,23 @@ async function pdfToWord() {
     setTimeout(() => setProgress("pdf2word", null), 1500);
   }
 }
-/* ──────────────────────────────────────────────────   12. WORD TO PDF   Uses mammoth.js to extract HTML from .docx,   then html2canvas + pdf-lib to render to PDF.   Preserves text, images, tables, and formatting.   ────────────────────────────────────────────────── */ async function wordToPDF() {
+/* ──────────────────────────────────────────────────   12. WORD TO PDF
+   Uses mammoth.js to extract HTML from .docx,
+   then html2canvas + pdf-lib to render to PDF.
+   Preserves text, images, tables, and formatting.
+   ────────────────────────────────────────────────── */ 
+async function wordToPDF() {
   const file = state.word2pdf.file;
   if (!file) {
     showToast("Please select a Word document.", "error");
     return;
   }
   if (typeof mammoth === "undefined") {
-    showToast(
-      "mammoth.js library not loaded. Please check your internet connection.",
-      "error",
-    );
+    showToast("mammoth.js library not loaded. Please check your internet connection.", "error");
     return;
   }
   if (typeof html2canvas === "undefined") {
-    showToast(
-      "html2canvas library not loaded. Please check your internet connection.",
-      "error",
-    );
+    showToast("html2canvas library not loaded. Please check your internet connection.", "error");
     return;
   }
   showResult("word2pdf", "");
@@ -1395,109 +1394,112 @@ async function pdfToWord() {
     });
     const htmlContent = result.value;
     setProgress("word2pdf", 40, "Rendering document…");
-    /* Create an off-screen container styled like a Word page */ const container =
-      document.createElement("div");
+
+    /* Create an off-screen container styled exactly like an A4 page */
+    const container = document.createElement("div");
     container.id = "w2p-render-container";
     container.style.cssText = [
       "position:fixed",
       "left:-9999px",
       "top:0",
-      "width:794px",
-      "min-height:1123px",
-      "padding:72px 90px",
+      "width:794px",         // Exact A4 width at 96dpi
+      "min-height:1123px",   // Exact A4 height at 96dpi
+      "padding:0",           // NO container padding, so images can touch edges!
       "background:#ffffff",
       "color:#1a1a1a",
-      /* Don't hardcode a single font — let CSS handle per-script font selection */ "font-size:12pt",
+      "font-size:12pt",
       "line-height:1.6",
       "box-sizing:border-box",
       "word-break:break-word",
       "overflow:hidden",
-      /* CRITICAL: let browser BiDi engine handle directional layout */ "unicode-bidi:plaintext",
+      "unicode-bidi:plaintext",
     ].join(";");
-    /* ── Post-process mammoth HTML for proper Arabic/RTL rendering ────────── */ /* mammoth.js strips dir= and lang= from the .docx content. We must restore */ /* them so the browser's Unicode Bidirectional Algorithm can shape Arabic */ /* glyphs correctly *before* html2canvas photographs the DOM. */ const ARABIC_REGEX =
-      /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFD\uFE70-\uFEFF]/;
-    /**     * Walk every block-level element in a DocumentFragment.     * If its text content contains Arabic characters, mark it RTL so the     * browser's built-in BiDi engine handles shaping and justification.     */ function applyBidiToFragment(
-      frag,
-    ) {
-      /* Block elements that carry a reading direction in Word */ const BLOCKS =
-        [
-          "P",
-          "H1",
-          "H2",
-          "H3",
-          "H4",
-          "H5",
-          "H6",
-          "LI",
-          "TD",
-          "TH",
-          "BLOCKQUOTE",
-          "DIV",
-        ];
+
+    const ARABIC_REGEX = /[؀-ۿݐ-ݿࢠ-ࣿﭐ-﷽ﹰ-﻿]/;
+
+    function applyBidiToFragment(frag) {
+      const BLOCKS = ["P", "H1", "H2", "H3", "H4", "H5", "H6", "LI", "TD", "TH", "BLOCKQUOTE", "DIV"];
       frag.querySelectorAll(BLOCKS.join(",")).forEach((el) => {
         const text = el.textContent || "";
         if (ARABIC_REGEX.test(text)) {
-          /* Use bdi on inline runs; set dir on block so the browser BiDi */ /* algorithm can order runs correctly within the paragraph. */ el.setAttribute(
-            "dir",
-            "rtl",
-          );
+          el.setAttribute("dir", "rtl");
           el.setAttribute("lang", "ar");
-          /* Wrap inline text nodes in <bdi dir="rtl"> so mixed LTR/RTL lines */ /* (e.g. Arabic paragraph with embedded English code) render cleanly. */ el.childNodes.forEach(
-            (node) => {
-              if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
-                const bdi = document.createElement("bdi");
-                bdi.setAttribute(
-                  "dir",
-                  ARABIC_REGEX.test(node.textContent) ? "rtl" : "ltr",
-                );
-                bdi.style.fontFamily = ARABIC_REGEX.test(node.textContent)
-                  ? "'Arial','Segoe UI','Tahoma',sans-serif"
-                  : "'Times New Roman',Times,serif";
-                bdi.textContent = node.textContent;
-                node.replaceWith(bdi);
-              } else if (node.nodeType === Node.ELEMENT_NODE) {
-                const inner = node.textContent || "";
-                if (ARABIC_REGEX.test(inner)) {
-                  node.style.fontFamily =
-                    "'Arial','Segoe UI','Tahoma',sans-serif";
-                  node.setAttribute("dir", "rtl");
-                }
+          el.childNodes.forEach((node) => {
+            if (node.nodeType === Node.TEXT_NODE && node.textContent.trim()) {
+              const bdi = document.createElement("bdi");
+              bdi.setAttribute("dir", ARABIC_REGEX.test(node.textContent) ? "rtl" : "ltr");
+              bdi.style.fontFamily = ARABIC_REGEX.test(node.textContent)
+                ? "'Arial','Segoe UI','Tahoma',sans-serif"
+                : "'Times New Roman',Times,serif";
+              bdi.textContent = node.textContent;
+              node.replaceWith(bdi);
+            } else if (node.nodeType === Node.ELEMENT_NODE) {
+              const inner = node.textContent || "";
+              if (ARABIC_REGEX.test(inner)) {
+                node.style.fontFamily = "'Arial','Segoe UI','Tahoma',sans-serif";
+                node.setAttribute("dir", "rtl");
               }
-            },
-          );
+            }
+          });
         } else {
-          /* Purely LTR block — be explicit so adjacent RTL blocks don't bleed */ if (
-            !el.getAttribute("dir")
-          ) {
+          if (!el.getAttribute("dir")) {
             el.setAttribute("dir", "ltr");
           }
         }
       });
     }
-    /* Parse mammoth HTML into a live fragment so we can walk the DOM */ const templateFrag =
-      document.createElement("template");
+
+    const templateFrag = document.createElement("template");
     templateFrag.innerHTML = htmlContent || "<p>(Empty document)</p>";
     applyBidiToFragment(templateFrag.content);
-    /* Serialize fragment back to HTML string for injection */ const rtlAwareHtml =
-      Array.from(templateFrag.content.childNodes)
-        .map((n) =>
-          n.nodeType === Node.ELEMENT_NODE ? n.outerHTML : n.textContent,
-        )
-        .join("");
-    /* Add inline styles for common HTML elements */ /* Note: Arabic text gets Arial/Segoe UI via per-element injection above. */ /* LTR text keeps Times New Roman. This mirrors Microsoft Word defaults. */ container.innerHTML = `      <style>        #w2p-render-container {          font-family: "Times New Roman", Times, serif;          unicode-bidi: plaintext;        }        #w2p-render-container h1{font-size:22pt;margin:16px 0 8px;line-height:1.3;}        #w2p-render-container h2{font-size:18pt;margin:14px 0 6px;}        #w2p-render-container h3{font-size:14pt;margin:12px 0 4px;}        #w2p-render-container p{margin:0 0 8px;unicode-bidi:plaintext;}        #w2p-render-container table{border-collapse:collapse;width:100%;margin-bottom:12px;}        #w2p-render-container td,#w2p-render-container th{border:1px solid #ccc;padding:6px 8px;unicode-bidi:plaintext;}        #w2p-render-container img{max-width:100%;height:auto;display:block;margin:8px auto;}        #w2p-render-container ul,#w2p-render-container ol{margin:0 0 8px 24px;}        #w2p-render-container li{margin-bottom:4px;unicode-bidi:plaintext;}        #w2p-render-container strong{font-weight:bold;}        #w2p-render-container em{font-style:italic;}        #w2p-render-container blockquote{border-left:3px solid #ccc;margin:8px 0;padding-left:16px;color:#555;}        /* Arabic blocks — right-aligned, correct font */        #w2p-render-container [dir="rtl"]{          text-align:right;          font-family:'Arial','Segoe UI','Tahoma',sans-serif;        }        /* Mixed paragraph: isolate each run's direction */        #w2p-render-container bdi{unicode-bidi:isolate;}      </style>      ${rtlAwareHtml}    `;
+
+    const rtlAwareHtml = Array.from(templateFrag.content.childNodes)
+      .map((n) => {
+        if (n.nodeType === Node.ELEMENT_NODE && n.tagName === 'P') {
+          const children = Array.from(n.childNodes).filter(c => 
+            c.nodeType === Node.ELEMENT_NODE || (c.nodeType === Node.TEXT_NODE && c.textContent.trim().length > 0)
+          );
+          if (children.length === 1 && children[0].tagName === 'IMG') {
+            n.classList.add('full-page-image-p');
+          }
+        }
+        return n.nodeType === Node.ELEMENT_NODE ? n.outerHTML : n.textContent;
+      })
+      .join("");
+
+    container.innerHTML = `
+      <style>
+        #w2p-render-container { font-family: "Times New Roman", Times, serif; unicode-bidi: plaintext; }
+        #w2p-render-container h1{font-size:22pt;margin:16px 90px 8px;line-height:1.3;}
+        #w2p-render-container h2{font-size:18pt;margin:14px 90px 6px;}
+        #w2p-render-container h3{font-size:14pt;margin:12px 90px 4px;}
+        #w2p-render-container p{margin:0 90px 8px;unicode-bidi:plaintext;}
+        #w2p-render-container table{border-collapse:collapse;width:calc(100% - 180px);margin:0 90px 12px;}
+        #w2p-render-container td,#w2p-render-container th{border:1px solid #ccc;padding:6px 8px;unicode-bidi:plaintext;}
+        #w2p-render-container img{max-width:100%;height:auto;display:block;margin:0 auto;}
+        #w2p-render-container ul,#w2p-render-container ol{margin:0 90px 8px 114px;}
+        #w2p-render-container li{margin-bottom:4px;unicode-bidi:plaintext;}
+        #w2p-render-container strong{font-weight:bold;}
+        #w2p-render-container em{font-style:italic;}
+        #w2p-render-container blockquote{border-left:3px solid #ccc;margin:8px 90px;padding-left:16px;color:#555;}
+        /* Full page image wrapper (no margins) */
+        #w2p-render-container p.full-page-image-p { margin: 0; padding: 0; }
+        #w2p-render-container p.full-page-image-p img { width: 100%; height: auto; }
+        #w2p-render-container [dir="rtl"]{ text-align:right; font-family:'Arial','Segoe UI','Tahoma',sans-serif; }
+        #w2p-render-container bdi{unicode-bidi:isolate;}
+      </style>
+      ${rtlAwareHtml}
+    `;
+
     document.body.appendChild(container);
-    /* Wait for images to load */ const imgs =
-      container.querySelectorAll("img");
+
+    const imgs = container.querySelectorAll("img");
     await Promise.all(
       Array.from(imgs).map((img) =>
-        img.complete
-          ? Promise.resolve()
-          : new Promise((r) => {
-              img.onload = r;
-              img.onerror = r;
-            }),
-      ),
+        img.complete ? Promise.resolve() : new Promise((r) => { img.onload = r; img.onerror = r; })
+      )
     );
+
     setProgress("word2pdf", 55, "Rendering to canvas…");
     const fullCanvas = await html2canvas(container, {
       scale: 2,
@@ -1509,28 +1511,24 @@ async function pdfToWord() {
       windowWidth: 794,
     });
     document.body.removeChild(container);
-    /* A4 in PDF points */ const A4W = 595,
-      A4H = 842;
+
+    const A4W = 595.28, A4H = 841.89; // Exact A4 points
     const imgScale = A4W / (fullCanvas.width / 2);
-    /* /2 because scale:2 */ const scaledHeight =
-      (fullCanvas.height / 2) * imgScale;
+    const scaledHeight = (fullCanvas.height / 2) * imgScale;
     const numPdfPages = Math.max(1, Math.ceil(scaledHeight / A4H));
-    setProgress(
-      "word2pdf",
-      72,
-      `Building PDF (${numPdfPages} page${numPdfPages !== 1 ? "s" : ""})…`,
-    );
+
+    setProgress("word2pdf", 72, `Building PDF (${numPdfPages} page${numPdfPages !== 1 ? "s" : ""})…`);
+    
     const pdfDoc = await PDFLib.PDFDocument.create();
     pdfDoc.setTitle(file.name.replace(/\.(docx?)$/i, ""));
     pdfDoc.setCreator("PDF BOX");
     pdfDoc.setProducer("PDF BOX — pdfbox.app");
+
     for (let p = 0; p < numPdfPages; p++) {
       const srcY = p * (A4H / imgScale) * 2;
-      /* *2 for canvas scale */ const srcH = Math.min(
-        (A4H / imgScale) * 2,
-        fullCanvas.height - srcY,
-      );
+      const srcH = Math.min((A4H / imgScale) * 2, fullCanvas.height - srcY);
       if (srcH <= 0) break;
+
       const pageCanvas = document.createElement("canvas");
       pageCanvas.width = fullCanvas.width;
       pageCanvas.height = Math.ceil(srcH);
@@ -1538,37 +1536,32 @@ async function pdfToWord() {
       pCtx.fillStyle = "#ffffff";
       pCtx.fillRect(0, 0, pageCanvas.width, pageCanvas.height);
       pCtx.drawImage(fullCanvas, 0, -srcY);
+
       const jpegDataUrl = pageCanvas.toDataURL("image/jpeg", 0.94);
       const jpegBlob = dataURLtoBlob(jpegDataUrl);
       const jpegBuf = await jpegBlob.arrayBuffer();
       const embImg = await pdfDoc.embedJpg(new Uint8Array(jpegBuf));
+      
       const page = pdfDoc.addPage([A4W, A4H]);
       const drawH = Math.min(A4H, (srcH / 2) * imgScale);
+      
+      // Image renders exactly at the A4 dimensions (no padding inside PDFLib drawing layer)
       page.drawImage(embImg, {
         x: 0,
         y: A4H - drawH,
         width: A4W,
         height: drawH,
       });
-      setProgress(
-        "word2pdf",
-        72 + Math.round((p / numPdfPages) * 20),
-        `Rendering page ${p + 1}…`,
-      );
+
+      setProgress("word2pdf", 72 + Math.round((p / numPdfPages) * 20), `Rendering page ${p + 1}…`);
     }
+
     setProgress("word2pdf", 95, "Saving PDF…");
     const out = await pdfDoc.save();
     const blob = new Blob([out], { type: "application/pdf" });
     const name = file.name.replace(/\.(docx?)$/i, "") + ".pdf";
     setProgress("word2pdf", 100, "Complete!");
-    showResult(
-      "word2pdf",
-      successResult(
-        name,
-        blob,
-        `${numPdfPages} page${numPdfPages !== 1 ? "s" : ""} · ${formatSize(blob.size)}`,
-      ),
-    );
+    showResult("word2pdf", successResult(name, blob, `${numPdfPages} page${numPdfPages !== 1 ? "s" : ""} · ${formatSize(blob.size)}`));
     showToast("Word document converted to PDF successfully!");
   } catch (err) {
     const container2 = document.getElementById("w2p-render-container");
@@ -1581,7 +1574,8 @@ async function pdfToWord() {
     setTimeout(() => setProgress("word2pdf", null), 1500);
   }
 }
-/* ──────────────────────────────────────────────────   CONTACT FORM   ────────────────────────────────────────────────── */ function sendContact() {
+/* ──────────────────────────────────────────────────   CONTACT FORM   ────────────────────────────────────────────────── */
+function sendContact() {
   const name = (document.getElementById("contact-name").value || "").trim();
   const email = (document.getElementById("contact-email").value || "").trim();
   const subject = (
