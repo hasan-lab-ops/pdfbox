@@ -1205,7 +1205,8 @@ async function safeConvertPDFToWord(file, onProgress) {
     return rtl > ltr;
   };
 
-  const makeParagraph = (text, isRTL, fontSize = 24, pageBreakBefore = false) => new docx.Paragraph({ pageBreakBefore,
+  const makeParagraph = (text, isRTL, fontSize = 24, pageBreakBefore = false) => new docx.Paragraph({
+    pageBreakBefore,
     children: [new docx.TextRun({
       text,
       font: isRTL ? 'Arial' : 'Times New Roman',
@@ -1277,7 +1278,8 @@ async function safeConvertPDFToWord(file, onProgress) {
         const { data } = await worker.recognize(canvas);
 
         // data.lines: each line has .text and .words[].bbox
-        let isFirstOnPage1 = true; for (const line of data.lines) { const cy = (line.bbox.y0 + line.bbox.y1) / 2; if ((cy > viewport.height - 150 || cy < 150) && /^\s*(?:-?\s*\d+\s*-?|Page\s*\d+)\s*$/i.test(line.text.trim())) continue;
+        let isFirstOnPage1 = true; for (const line of data.lines) {
+          const cy = (line.bbox.y0 + line.bbox.y1) / 2; if ((cy > viewport.height - 150 || cy < 150) && /^\s*(?:-?\s*\d+\s*-?|Page\s*\d+)\s*$/i.test(line.text.trim())) continue;
           const rawText = line.text.replace(/\n/g, '').trim();
           if (!rawText) continue;
 
@@ -1423,107 +1425,168 @@ async function safeConvertPDFToWord(file, onProgress) {
 window.convertPDFToWordIsolated = async function (arrayBuffer) {
   try {
     if (typeof pdfjsLib === 'undefined') throw new Error('PDF.js library is not loaded.');
+    if (typeof docx === 'undefined') throw new Error('docx.js library is not loaded.');
     if (typeof Tesseract === 'undefined') throw new Error('Tesseract.js library is not loaded.');
 
     const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     const numPages = pdfDoc.numPages;
     const ARABIC_REGEX = /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF]/;
-    const SCALE = 2.0; // render scale
+    const SCALE = 2.0; // high-res canvas scale for color sampling
 
-    const _esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     const _bullets = (s) => s
-      .replace(/\uF0D8/g, '\u27A2')
-      .replace(/\uF0B7/g, '\u2022')
-      .replace(/\uF0A7/g, '\u25A0')
-      .replace(/\uF0FC/g, '\u2713')
-      .replace(/\uF0E0/g, '\u2709')
-      .replace(/\uF020/g, ' ')
-      .replace(/\u2022/g, '\u2022');
+      .replace(/\uF0D8/g, '\u27A2').replace(/\uF0B7/g, '\u2022')
+      .replace(/\uF0A7/g, '\u25A0').replace(/\uF0FC/g, '\u2713')
+      .replace(/\uF0E0/g, '\u2709').replace(/\uF020/g, ' ');
 
-    if (typeof setProgress === 'function') setProgress('pdf2word', 15, 'Initializing OCR Engine...');
+    if (typeof setProgress === 'function') setProgress('pdf2word', 10, 'Initializing OCR Engine...');
 
     const worker = await Tesseract.createWorker(['ara', 'eng'], 1, {
       workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js',
       corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core-simd-lstm.wasm.js',
     });
 
-    let allPagesHtml = '';
+    // ── Helpers ──────────────────────────────────────────────────────────────
 
-    const getDominantColor = (ctx, x, y, w, h) => {
+    // Sample dominant non-white RGB from a canvas region; returns 6-char hex string
+    const getDominantHex = (ctx, x, y, w, h) => {
       const sx = Math.max(0, Math.min(Math.floor(x), ctx.canvas.width - 1));
       const sy = Math.max(0, Math.min(Math.floor(y), ctx.canvas.height - 1));
       const sw = Math.max(1, Math.min(Math.ceil(w), ctx.canvas.width - sx));
       const sh = Math.max(1, Math.min(Math.ceil(h), ctx.canvas.height - sy));
-      const imgData = ctx.getImageData(sx, sy, sw, sh).data;
-      let r = 0, g = 0, b = 0, count = 0;
-      for (let i = 0; i < imgData.length; i += 4) {
-        const a = imgData[i + 3];
-        if (a > 50) {
-          const pr = imgData[i], pg = imgData[i + 1], pb = imgData[i + 2];
-          if (pr < 240 || pg < 240 || pb < 240) { r += pr; g += pg; b += pb; count++; }
+      const d = ctx.getImageData(sx, sy, sw, sh).data;
+      let r = 0, g = 0, b = 0, n = 0;
+      for (let i = 0; i < d.length; i += 4) {
+        if (d[i + 3] > 50 && (d[i] < 240 || d[i + 1] < 240 || d[i + 2] < 240)) {
+          r += d[i]; g += d[i + 1]; b += d[i + 2]; n++;
         }
       }
-      if (count === 0) return '#000000';
-      return `rgb(${Math.round(r / count)},${Math.round(g / count)},${Math.round(b / count)})`;
+      if (!n) return '000000';
+      return [Math.round(r / n), Math.round(g / n), Math.round(b / n)]
+        .map(v => v.toString(16).padStart(2, '0')).join('');
     };
 
-    // Gap-based image extraction: find large vertical gaps between text lines,
-    // crop those regions from the rendered canvas, and verify they contain real content.
-    const extractGapImages = (ctx, canvas, sortedY, pageHeightPt) => {
+    // Extract images using operator list and page.objs
+    const extractImagesViaOperators = async (page, scale) => {
       const images = [];
-      const MIN_GAP_PT = 38; // minimum gap height in PDF points to suspect an image
+      try {
+        const opList = await page.getOperatorList();
+        const OPS = pdfjsLib.OPS;
+        const imageOps = new Set([
+          OPS.paintImageXObject,
+          OPS.paintImageXObjectRepeat,
+          OPS.paintInlineImageXObject,
+          OPS.paintImageMaskXObject,
+        ]);
 
-      // Sentinels: top and bottom of page
-      const ys = [pageHeightPt, ...sortedY, 0];
+        const multiplyMatrix = (m1, m2) => [
+          m1[0] * m2[0] + m1[1] * m2[2],
+          m1[0] * m2[1] + m1[1] * m2[3],
+          m1[2] * m2[0] + m1[3] * m2[2],
+          m1[2] * m2[1] + m1[3] * m2[3],
+          m1[4] * m2[0] + m1[5] * m2[2] + m2[4],
+          m1[4] * m2[1] + m1[5] * m2[3] + m2[5],
+        ];
 
-      for (let i = 0; i < ys.length - 1; i++) {
-        const topPt  = ys[i];
-        const botPt  = ys[i + 1];
-        const gapPt  = topPt - botPt;
-        if (gapPt < MIN_GAP_PT) continue;
+        const ctmStack = [];
+        let currentCTM = [1, 0, 0, 1, 0, 0];
 
-        // Convert gap to canvas pixels (y-axis is flipped)
-        const canvasTop = Math.max(0, Math.floor(canvas.height - topPt * SCALE));
-        const canvasBot = Math.min(canvas.height, Math.ceil(canvas.height - botPt * SCALE));
-        const ch = canvasBot - canvasTop;
-        if (ch <= 0) continue;
+        for (let i = 0; i < opList.fnArray.length; i++) {
+          const fn = opList.fnArray[i];
+          const args = opList.argsArray[i];
 
-        // Sample pixels to confirm real content exists (not just whitespace)
-        const imgData = ctx.getImageData(0, canvasTop, canvas.width, ch).data;
-        let darkPixels = 0;
-        const totalPixels = canvas.width * ch;
-        for (let p = 0; p < imgData.length; p += 4) {
-          const a = imgData[p + 3];
-          if (a > 50 && (imgData[p] < 220 || imgData[p+1] < 220 || imgData[p+2] < 220)) {
-            darkPixels++;
+          if (fn === OPS.save) {
+            ctmStack.push([...currentCTM]);
+          } else if (fn === OPS.restore) {
+            if (ctmStack.length > 0) currentCTM = ctmStack.pop();
+          } else if (fn === OPS.transform) {
+            currentCTM = multiplyMatrix(currentCTM, args);
+          } else if (imageOps.has(fn)) {
+            const imgName = args[0];
+            if (!imgName) continue;
+
+            const [a, b, c, d, e, f] = currentCTM;
+            const corners = [
+              [e, f],  // (0,0)
+              [a + e, b + f],  // (1,0)
+              [c + e, d + f],  // (0,1)
+              [a + c + e, b + d + f],  // (1,1)
+            ];
+            const ys = corners.map(p => p[1]);
+            const pdfY = Math.min(...ys);
+            const pdfH = Math.max(...ys) - pdfY;
+            const pdfX = Math.min(...corners.map(p => p[0]));
+            const pdfW = Math.max(...corners.map(p => p[0])) - pdfX;
+
+            // Only extract reasonably sized images (skip tiny icons)
+            if (Math.abs(pdfW) > 20 && Math.abs(pdfH) > 20) {
+              try {
+                // Fetch the image from page objs
+                let imgObj;
+                try {
+                  imgObj = await new Promise((resolve) => {
+                    page.objs.get(imgName, resolve);
+                  });
+                } catch (err) { }
+
+                if (imgObj) {
+                  let dispW = Math.round(Math.abs(pdfW));
+                  let dispH = Math.round(Math.abs(pdfH));
+
+                  const canvas = document.createElement('canvas');
+                  canvas.width = imgObj.width || dispW * scale;
+                  canvas.height = imgObj.height || dispH * scale;
+                  const ctx = canvas.getContext('2d');
+
+                  if (imgObj instanceof ImageBitmap || imgObj instanceof HTMLImageElement || imgObj instanceof HTMLCanvasElement) {
+                    ctx.drawImage(imgObj, 0, 0, canvas.width, canvas.height);
+                  } else if (imgObj.data && imgObj.width && imgObj.height) {
+                    const imgDataObj = new ImageData(
+                      new Uint8ClampedArray(imgObj.data),
+                      imgObj.width,
+                      imgObj.height
+                    );
+                    ctx.putImageData(imgDataObj, 0, 0);
+                  }
+
+                  const imgU8 = await canvasToUint8(canvas);
+
+                  // For sort ordering, use the top Y coordinate in PDF space: pdfY + pdfH
+                  images.push({
+                    pdfY: pdfY + pdfH,
+                    imgU8,
+                    dispW,
+                    dispH
+                  });
+                }
+              } catch (ex) {
+                console.warn('[PDF2WORD] Image fetch error for', imgName, ex);
+              }
+            }
           }
         }
-        // Need at least 0.5% non-white pixels to treat as an image
-        if (darkPixels / totalPixels < 0.005) continue;
-
-        const cropCanvas = document.createElement('canvas');
-        cropCanvas.width  = canvas.width;
-        cropCanvas.height = ch;
-        const cropCtx = cropCanvas.getContext('2d');
-        cropCtx.fillStyle = '#ffffff';
-        cropCtx.fillRect(0, 0, cropCanvas.width, cropCanvas.height);
-        cropCtx.drawImage(canvas, 0, canvasTop, canvas.width, ch, 0, 0, canvas.width, ch);
-
-        const dataUrl = cropCanvas.toDataURL('image/png');
-        // Store in PDF-point dimensions for Word embedding
-        const imgWPt = Math.round(canvas.width / SCALE);
-        const imgHPt = Math.round(gapPt);
-        // pdfY = topPt (for sort ordering: higher = closer to top of page)
-        images.push({ dataUrl, pdfY: topPt, imgWPt, imgHPt });
+      } catch (e) {
+        console.warn('[PDF2WORD] Operator list extraction error:', e);
       }
       return images;
     };
 
+    // Canvas → PNG Uint8Array (needed by docx.ImageRun)
+    const canvasToUint8 = (canvas) => new Promise((resolve, reject) => {
+      canvas.toBlob(async (blob) => {
+        if (!blob) return reject(new Error('Canvas.toBlob failed'));
+        resolve(new Uint8Array(await blob.arrayBuffer()));
+      }, 'image/png');
+    });
+
+    // Map a font-size in PDF points to docx half-points (docx size unit)
+    const ptToHalfPt = (pt) => Math.max(16, Math.round(pt) * 2);
+
+    // ── Per-page processing ──────────────────────────────────────────────────
+    const allDocChildren = [];
 
     for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-      if (typeof setProgress === 'function') {
-        setProgress('pdf2word', 20 + Math.floor((pageNum / numPages) * 70), `Processing Page ${pageNum} of ${numPages}...`);
-      }
+      if (typeof setProgress === 'function')
+        setProgress('pdf2word', 15 + Math.floor((pageNum / numPages) * 75), `Processing page ${pageNum} of ${numPages}...`);
 
       const page = await pdfDoc.getPage(pageNum);
       const viewport = page.getViewport({ scale: SCALE });
@@ -1534,180 +1597,191 @@ window.convertPDFToWordIsolated = async function (arrayBuffer) {
       await page.render({ canvasContext: ctx, viewport }).promise;
 
       const pageHeightPt = viewport.height / SCALE;
-      const pageWidthPt  = viewport.width  / SCALE;
+      const pageWidthPt = viewport.width / SCALE;
+      // Max display width inside Word (approx. A4 with margins, in screen-pixels at 96 DPI)
+      const MAX_IMG_W_PX = Math.round(Math.min(pageWidthPt, 468) * (96 / 72));
 
-      // --- EXTRACT TEXT ---
+      // ── TEXT extraction ──
       const textContent = await page.getTextContent({ normalizeWhitespace: true });
       const lineMap = new Map();
-
       for (const item of textContent.items) {
         if (!item.str || !item.str.trim()) continue;
         const y = item.transform[5];
-        let matchedY = null;
-        for (const keyY of lineMap.keys()) {
-          if (Math.abs(keyY - y) <= 5) { matchedY = keyY; break; }
-        }
-        if (matchedY === null) { matchedY = y; lineMap.set(matchedY, []); }
-
-        const canvasX = item.transform[4] * SCALE;
-        const canvasY = canvas.height - (y * SCALE) - (item.height * SCALE);
-        const canvasW = (item.width || item.transform[0]) * SCALE;
-        const canvasH = (item.height || Math.abs(item.transform[3])) * SCALE;
-        const color = getDominantColor(ctx, canvasX, canvasY, canvasW, canvasH);
-
-        lineMap.get(matchedY).push({ item, x: item.transform[4], y, canvasY, canvasH, color });
+        let mY = null;
+        for (const kY of lineMap.keys()) if (Math.abs(kY - y) <= 5) { mY = kY; break; }
+        if (mY === null) { mY = y; lineMap.set(mY, []); }
+        const cX = item.transform[4] * SCALE;
+        const cY = canvas.height - (y * SCALE) - (item.height * SCALE);
+        const cW = (item.width || item.transform[0]) * SCALE;
+        const cH = (item.height || Math.abs(item.transform[3])) * SCALE;
+        lineMap.get(mY).push({
+          item,
+          x: item.transform[4],
+          y,
+          cX, cY, cW, cH,
+          colorHex: getDominantHex(ctx, cX, cY, cW, cH),
+        });
       }
-
       const sortedY = Array.from(lineMap.keys()).sort((a, b) => b - a);
 
-      // --- EXTRACT IMAGES from canvas gaps (after text lines are known) ---
-      const pageImages = extractGapImages(ctx, canvas, sortedY, pageHeightPt);
-      let pageHtml = '';
+      // ── IMAGE extraction (operator list) ──
+      const pageImages = await extractImagesViaOperators(page, SCALE);
 
-      // We interleave images and text lines by their Y positions
-      // Build a flat list of content blocks: { type: 'text'|'image', y, html }
-      const contentBlocks = [];
-
-      // Page number detection: lone digit(s) centered in bottom 10% of page → skip as inline content
-      const isPageNumberLine = (y, lineItems) => {
-        if (y > pageHeightPt * 0.1) return false; // not in bottom 10%
-        const txt = lineItems.map(i => i.item.str).join('').trim();
-        return /^\d{1,4}$/.test(txt); // just a number
+      // ── Page-number filter: lone digit(s) in bottom 10% ──
+      const isPageNum = (y, items) => {
+        if (y > pageHeightPt * 0.1) return false;
+        return /^\d{1,4}$/.test(items.map(i => i.item.str).join('').trim());
       };
 
-      // Add text lines
+      // ── Combine and sort content blocks ──
+      const blocks = [];
       for (const y of sortedY) {
-        const lineItems = lineMap.get(y);
-        if (isPageNumberLine(y, lineItems)) continue; // skip page numbers
-        const fullLineText = lineItems.map(i => i.item.str).join(' ');
-        const isArabicLine = ARABIC_REGEX.test(fullLineText);
-        let lineHtml = '';
+        const items = lineMap.get(y);
+        if (isPageNum(y, items)) continue;
+        blocks.push({ type: 'text', y, items });
+      }
+      for (const img of pageImages) {
+        blocks.push({ type: 'image', y: img.pdfY, img });
+      }
+      blocks.sort((a, b) => b.y - a.y);
 
-        if (isArabicLine) {
-          let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-          for (const li of lineItems) {
-            const canvasX = li.item.transform[4] * SCALE;
-            const canvasW = (li.item.width || Math.abs(li.item.transform[0]) || 10) * SCALE;
-            if (canvasX < minX) minX = canvasX;
-            if (canvasX + canvasW > maxX) maxX = canvasX + canvasW;
-            if (li.canvasY < minY) minY = li.canvasY;
-            if (li.canvasY + li.canvasH > maxY) maxY = li.canvasY + li.canvasH;
-          }
-          const pad = 10;
-          minX = Math.max(0, minX - pad); minY = Math.max(0, minY - pad);
-          maxX = Math.min(canvas.width, maxX + pad); maxY = Math.min(canvas.height, maxY + pad);
-          const cropW = maxX - minX, cropH = maxY - minY;
+      // ── Build docx elements ──
+      for (const block of blocks) {
 
-          if (cropW > 0 && cropH > 0) {
-            const cropCanvas = document.createElement('canvas');
-            cropCanvas.width = cropW; cropCanvas.height = cropH;
-            const cropCtx = cropCanvas.getContext('2d');
-            cropCtx.drawImage(canvas, minX, minY, cropW, cropH, 0, 0, cropW, cropH);
-            const { data: { text } } = await worker.recognize(cropCanvas);
-            const dominantItemColor = lineItems.length > 0 ? lineItems[Math.floor(lineItems.length / 2)].color : '#000000';
-            // Use the raw PDF font size (in pt) — this matches original document sizing
-            const fontSizePt = Math.round(Math.abs(lineItems[0].item.transform[3])) || 12;
-            lineHtml = `<p class="arabic-line"><span style="font-family: Arial, sans-serif; color: ${dominantItemColor}; font-size: ${fontSizePt}pt;">${_esc(text.trim())}</span></p>\n`;
+        if (block.type === 'image') {
+          try {
+            const { imgU8, dispW: srcW, dispH: srcH } = block.img;
+            // Scale down to fit within Word content area
+            const scale = Math.min(1, MAX_IMG_W_PX / srcW);
+            const dispW = Math.round(srcW * scale);
+            const dispH = Math.round(srcH * scale);
+            allDocChildren.push(
+              new docx.Paragraph({
+                spacing: { before: 80, after: 80 },
+                children: [
+                  new docx.ImageRun({
+                    data: imgU8,
+                    transformation: { width: dispW, height: dispH },
+                    type: 'png',
+                  }),
+                ],
+              })
+            );
+          } catch (e) {
+            console.warn('[PDF2WORD] ImageRun failed:', e);
           }
+
         } else {
-          lineItems.sort((a, b) => a.x - b.x);
-          let lastEdge = null;
-          let segmentsHtml = [];
+          // TEXT block
+          const lineItems = block.items;
+          const fullText = lineItems.map(i => i.item.str).join(' ');
+          const isArabic = ARABIC_REGEX.test(fullText);
 
-          for (let i = 0; i < lineItems.length; i++) {
-            const { item, x, color } = lineItems[i];
-            const rawText = _bullets(item.str);
-            const textHtml = _esc(rawText);
-
-            // PDF transform[3] gives the font size in PDF points — use pt directly for Word
-            const fontSizePt = Math.round(Math.abs(item.transform[3]) || Math.abs(item.transform[0]) || item.height || 12);
-            const fontNameRaw = item.fontName || '';
-            const fontNameLower = fontNameRaw.toLowerCase();
-            const isBold = fontNameLower.includes('bold');
-            const isItalic = fontNameLower.includes('italic');
-            const fontWeight = isBold ? 'bold' : 'normal';
-            const fontStyle = isItalic ? 'italic' : 'normal';
-
-            let fontFamily = 'Arial, sans-serif';
-            if (fontNameLower.includes('times')) fontFamily = '"Times New Roman", serif';
-            else if (fontNameLower.includes('courier')) fontFamily = '"Courier New", monospace';
-            else if (fontNameLower.includes('arial')) fontFamily = 'Arial, sans-serif';
-            else if (fontNameLower.includes('calibri')) fontFamily = 'Calibri, sans-serif';
-            else if (fontNameRaw) fontFamily = `'${fontNameRaw.replace(/['"]/g, '')}', Arial, sans-serif`;
-
-            const textDecoration = fontNameLower.includes('underline') ? 'underline' : 'none';
-
-            let spacesHtml = '';
-            if (lastEdge !== null) {
-              const gap = x - lastEdge;
-              const spaceWidthPt = fontSizePt * 0.3;
-              if (gap > spaceWidthPt * 0.8) {
-                const spaceCount = Math.max(1, Math.round(gap / spaceWidthPt));
-                spacesHtml = '&nbsp;'.repeat(spaceCount);
+          if (isArabic) {
+            // OCR the cropped line from canvas → get correct logical Arabic
+            let minX = Infinity, maxX = -Infinity, minCY = Infinity, maxCY = -Infinity;
+            for (const li of lineItems) {
+              if (li.cX < minX) minX = li.cX;
+              if (li.cX + li.cW > maxX) maxX = li.cX + li.cW;
+              if (li.cY < minCY) minCY = li.cY;
+              if (li.cY + li.cH > maxCY) maxCY = li.cY + li.cH;
+            }
+            const pad = 12;
+            minX = Math.max(0, minX - pad); minCY = Math.max(0, minCY - pad);
+            maxX = Math.min(canvas.width, maxX + pad);
+            maxCY = Math.min(canvas.height, maxCY + pad);
+            const cW = maxX - minX, cH = maxCY - minCY;
+            if (cW > 0 && cH > 0) {
+              const crop = document.createElement('canvas');
+              crop.width = cW; crop.height = cH;
+              const cCtx = crop.getContext('2d');
+              cCtx.fillStyle = '#ffffff';
+              cCtx.fillRect(0, 0, cW, cH);
+              cCtx.drawImage(canvas, minX, minCY, cW, cH, 0, 0, cW, cH);
+              const { data: { text } } = await worker.recognize(crop);
+              const clean = text.trim();
+              if (clean) {
+                const mid = lineItems[Math.floor(lineItems.length / 2)];
+                const fontSizePt = Math.round(Math.abs(lineItems[0].item.transform[3])) || 12;
+                allDocChildren.push(
+                  new docx.Paragraph({
+                    bidirectional: true,
+                    alignment: docx.AlignmentType.RIGHT,
+                    spacing: { before: 60, after: 60 },
+                    children: [
+                      new docx.TextRun({
+                        text: clean,
+                        font: 'Arial',
+                        size: ptToHalfPt(fontSizePt),
+                        color: mid.colorHex,
+                        rtl: true,
+                      }),
+                    ],
+                  })
+                );
               }
             }
-            lastEdge = x + (item.width || 0);
 
-            const spanStyle = `font-family: ${fontFamily}; color: ${color}; font-size: ${fontSizePt}pt; font-weight: ${fontWeight}; font-style: ${fontStyle}; text-decoration: ${textDecoration};`;
-            segmentsHtml.push(`${spacesHtml}<span style="${spanStyle}">${textHtml}</span>`);
+          } else {
+            // English / mixed line — sort L→R and build runs
+            lineItems.sort((a, b) => a.x - b.x);
+            const runs = [];
+            for (const li of lineItems) {
+              const raw = _bullets(li.item.str);
+              if (!raw.trim()) continue;
+              const fnRaw = li.item.fontName || '';
+              const fnLower = fnRaw.toLowerCase();
+              const sizePt = Math.round(Math.abs(li.item.transform[3]) ||
+                Math.abs(li.item.transform[0]) || li.item.height || 12);
+              let fontFamily = 'Arial';
+              if (fnLower.includes('times')) fontFamily = 'Times New Roman';
+              else if (fnLower.includes('courier')) fontFamily = 'Courier New';
+              else if (fnLower.includes('calibri')) fontFamily = 'Calibri';
+              runs.push(
+                new docx.TextRun({
+                  text: raw,
+                  font: fontFamily,
+                  size: ptToHalfPt(sizePt),
+                  color: li.colorHex,
+                  bold: fnLower.includes('bold'),
+                  italics: fnLower.includes('italic'),
+                  underline: fnLower.includes('underline') ? {} : undefined,
+                })
+              );
+            }
+            if (runs.length) {
+              allDocChildren.push(
+                new docx.Paragraph({
+                  spacing: { before: 60, after: 60 },
+                  children: runs,
+                })
+              );
+            }
           }
-          lineHtml = `<p class="english-line">${segmentsHtml.join('')}</p>\n`;
-        }
-
-        if (lineHtml) {
-          contentBlocks.push({ type: 'text', y, html: lineHtml });
         }
       }
 
-      // Add image blocks (gap-detected)
-      for (const img of pageImages) {
-        const imgHtml = `<p class="english-line"><img src="${img.dataUrl}" width="${img.imgWPt}" height="${img.imgHPt}" style="display:block; max-width:100%; margin: 4px 0;" /></p>\n`;
-        contentBlocks.push({ type: 'image', y: img.pdfY, html: imgHtml });
-      }
-
-      // Sort all blocks top-to-bottom (descending y = top of page first)
-      contentBlocks.sort((a, b) => b.y - a.y);
-
-      for (const block of contentBlocks) {
-        pageHtml += block.html;
-      }
-
+      // Page break between pages (not after the last)
       if (pageNum < numPages) {
-        pageHtml += '<br clear="all" style="page-break-before:always" />\n';
+        allDocChildren.push(
+          new docx.Paragraph({
+            children: [new docx.TextRun({ text: '', break: 1 })],
+            pageBreakBefore: true,
+          })
+        );
       }
-      allPagesHtml += pageHtml;
     }
 
     await worker.terminate();
 
-    const wordDocXml = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-<head>
-  <meta charset="utf-8">
-  <!--[if gte mso 9]>
-  <xml>
-    <w:WordDocument>
-      <w:View>Print</w:View>
-      <w:Zoom>100</w:Zoom>
-    </w:WordDocument>
-  </xml>
-  <![endif]-->
-  <style>
-    body { background-color: #ffffff !important; color: #000000; }
-    .WordSection1 { background-color: #ffffff; padding: 20px; }
-    p { margin: 6px 0; line-height: 1.3; }
-    .arabic-line { direction: rtl; text-align: right; unicode-bidi: embed; }
-    .english-line { direction: ltr; text-align: left; }
-    img { border: none; }
-  </style>
-</head>
-<body bgcolor="#ffffff">
-  <div class="WordSection1">
-${allPagesHtml}  </div>
-</body>
-</html>`;
+    if (typeof setProgress === 'function') setProgress('pdf2word', 93, 'Building .docx file...');
 
-    if (typeof setProgress === 'function') setProgress('pdf2word', 95, 'Building Word document...');
-    return new Blob([wordDocXml], { type: 'application/msword;charset=utf-8' });
+    const doc = new docx.Document({
+      sections: [{ properties: {}, children: allDocChildren }],
+    });
+
+    const blob = await docx.Packer.toBlob(doc);
+    return blob;
 
   } catch (error) {
     console.error('[PDF BOX] PDF to Word Error:', error);
@@ -1715,7 +1789,6 @@ ${allPagesHtml}  </div>
     throw error;
   }
 };
-
 
 async function pdfToWord() {
   const file = state.pdf2word.file;
@@ -1730,7 +1803,7 @@ async function pdfToWord() {
     setProgress('pdf2word', 50, 'Converting to Word format...');
     const blob = await window.convertPDFToWordIsolated(arrayBuffer);
 
-    const name = file.name.replace(/\.pdf$/i, '') + '.doc'; // Word HTML format
+    const name = file.name.replace(/\.pdf$/i, '') + '.docx'; // proper Word format
     setProgress('pdf2word', 100, 'Complete!');
     showResult('pdf2word', successResult(name, blob, formatSize(blob.size)));
     showToast('PDF converted to Word successfully!');
@@ -1819,7 +1892,7 @@ async function wordToPDF() {
     function applyBidiToFragment(frag) {
       // Block elements that carry a reading direction in Word
       const BLOCKS = ['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6',
-                      'LI', 'TD', 'TH', 'BLOCKQUOTE', 'DIV'];
+        'LI', 'TD', 'TH', 'BLOCKQUOTE', 'DIV'];
 
       frag.querySelectorAll(BLOCKS.join(',')).forEach(el => {
         const text = el.textContent || '';
