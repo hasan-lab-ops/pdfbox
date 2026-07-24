@@ -5,18 +5,32 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" type="image/png" href="./favicon.png" />
-  <title>PDF BOX — Free Online PDF Tools</title>
+  <title>PDF BOX - Free, Private Online PDF Tools</title>
   <meta name="description"
-    content="PDF BOX — Free, fast, and secure online PDF tools. Merge, split, compress, rotate, convert PDFs, and more. No upload required — works entirely in your browser." />
+    content="Use free browser-based PDF tools to merge, split, rotate, convert, protect, and organize PDF files. Your files are processed locally on your device." />
+  <link rel="canonical" href="https://www.pdfbox.online/" />
+  <meta name="robots" content="index, follow" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "PDF BOX",
+    "url": "https://www.pdfbox.online/",
+    "applicationCategory": "UtilitiesApplication",
+    "operatingSystem": "Any",
+    "description": "Free browser-based PDF tools for merging, splitting, rotating, converting, and organizing PDF files.",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+  }
+  </script>
   <!-- Open Graph / Social Media Meta Tags -->
-  <meta property="og:title" content="PDF BOX — Free Online PDF Tools" />
-  <meta property="og:description" content="Free, fast, and secure online PDF tools. Merge, split, compress, rotate, convert PDFs, and more. No upload required — works entirely in your browser." />
+  <meta property="og:title" content="PDF BOX - Free Online PDF Tools" />
+  <meta property="og:description" content="Free browser-based PDF tools that process your documents locally on your device." />
   <meta property="og:image" content="https://www.pdfbox.online/hero_image.png" />
   <meta property="og:url" content="https://www.pdfbox.online/" />
   <meta property="og:type" content="website" />
   <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="PDF BOX — Free Online PDF Tools" />
-  <meta name="twitter:description" content="Free, fast, and secure online PDF tools. Merge, split, compress, rotate, convert PDFs, and more. No upload required — works entirely in your browser." />
+  <meta name="twitter:title" content="PDF BOX - Free Online PDF Tools" />
+  <meta name="twitter:description" content="Free browser-based PDF tools that process your documents locally on your device." />
   <meta name="twitter:image" content="https://www.pdfbox.online/hero_image.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
@@ -53,8 +67,8 @@
         <a href="#tools" class="nav-link">Tools</a>
         <a href="#features" class="nav-link">Features</a>
         <a href="#faq" class="nav-link">FAQ</a>
-        <a href="#" class="nav-link" onclick="openModal('aboutUs');return false;">About</a>
-        <a href="#" class="nav-link" onclick="openModal('contactPage');return false;">Contact</a>
+        <a href="./about.html" class="nav-link">About</a>
+        <a href="./contact.html" class="nav-link">Contact</a>
       </div>
       <div class="nav-cta">
         <a href="#tools" class="btn btn-outline-sm">Get Started</a>
@@ -70,9 +84,9 @@
     <a href="#tools" class="mobile-link" onclick="closeMobileMenu()">Tools</a>
     <a href="#features" class="mobile-link" onclick="closeMobileMenu()">Features</a>
     <a href="#faq" class="mobile-link" onclick="closeMobileMenu()">FAQ</a>
-    <a href="#" class="mobile-link" onclick="openModal('aboutUs');closeMobileMenu();return false;">About</a>
-    <a href="#" class="mobile-link" onclick="openModal('contactPage');closeMobileMenu();return false;">Contact</a>
-    <a href="#" class="mobile-link" onclick="openModal('privacyPolicy');closeMobileMenu();return false;">Privacy</a>
+    <a href="./about.html" class="mobile-link">About</a>
+    <a href="./contact.html" class="mobile-link">Contact</a>
+    <a href="./privacy.html" class="mobile-link">Privacy</a>
     <a href="#tools" class="btn btn-primary mobile-cta" onclick="closeMobileMenu()">Get Started</a>
   </div>
 
@@ -500,9 +514,11 @@
           </div>
           <div class="footer-links-col">
             <h4>Company</h4>
-            <a onclick="openModal('aboutUs')" style="cursor:pointer;">About Us</a>
-            <a onclick="openModal('contactPage')" style="cursor:pointer;">Contact</a>
-            <a onclick="openModal('privacyPolicy')" style="cursor:pointer;">Privacy Policy</a>
+            <a href="./about.html">About Us</a>
+            <a href="./contact.html">Contact</a>
+            <a href="./privacy.html">Privacy Policy</a>
+            <a href="./terms.html">Terms of Use</a>
+            <a href="./how-to-use-pdf-tools.html">How to use PDF tools</a>
           </div>
         </div>
       </div>
@@ -1633,7 +1649,7 @@
     </div>
     <div class="modal-body">
       <div class="page-content">
-        <p class="privacy-date">Last updated: July 2024</p>
+        <p class="privacy-date">Last updated: July 24, 2026</p>
 
         <h3>1. No Data Collection</h3>
         <p>PDF BOX does not collect, store, or transmit any personal information. We do not require registration,
@@ -1645,10 +1661,10 @@
             never uploaded to any server.</strong> No copies of your documents are made on our infrastructure at any
           point.</p>
 
-        <h3>3. No Cookies or Tracking</h3>
-        <p>PDF BOX does not use tracking cookies, analytics scripts, advertising pixels, or any form of session
-          tracking. We do not use Google Analytics, Facebook Pixel, or similar tools. There is no behavioral profiling
-          of any kind.</p>
+        <h3>3. Advertising and Cookies</h3>
+        <p>PDF BOX may use Google AdSense to display advertising. Google and its advertising partners may use cookies
+          or similar technologies to show and measure ads. Where required by law, we will present choices about
+          non-essential advertising cookies before they are used.</p>
 
         <h3>4. External Libraries</h3>
         <p>PDF BOX loads third-party JavaScript libraries (pdf-lib, PDF.js, docx.js, mammoth.js, html2canvas) from
