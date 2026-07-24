@@ -1637,10 +1637,8 @@ function sendContact() {
   const body = encodeURIComponent(
     `Name: ${name}\nEmail: ${email}\n\nMessage:\n${message}`,
   );
-  window.open(
-    `https://mail.google.com/mail/?view=cm&fs=1&to=hasan.saad898@gmail.com&su=${subjectLine}&body=${body}`,
-    "_blank",
-  );
+  window.location.href =
+    `https://mail.google.com/mail/?view=cm&fs=1&to=hasan.saad898@gmail.com&su=${subjectLine}&body=${body}`;
   showToast("Opening Gmail…");
   /* Clear form */ document.getElementById("contact-name").value = "";
   document.getElementById("contact-email").value = "";
