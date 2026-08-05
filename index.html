@@ -24,18 +24,38 @@
   </script>
   <!-- Open Graph / Social Media Meta Tags -->
   <meta property="og:title" content="PDF BOX - Free Online PDF Tools" />
-  <meta property="og:description" content="Free browser-based PDF tools that process your documents locally on your device." />
+  <meta property="og:description"
+    content="Free browser-based PDF tools that process your documents locally on your device." />
   <meta property="og:image" content="https://www.pdfbox.online/hero_image.png" />
   <meta property="og:url" content="https://www.pdfbox.online/" />
   <meta property="og:type" content="website" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="PDF BOX - Free Online PDF Tools" />
-  <meta name="twitter:description" content="Free browser-based PDF tools that process your documents locally on your device." />
+  <meta name="twitter:description"
+    content="Free browser-based PDF tools that process your documents locally on your device." />
   <meta name="twitter:image" content="https://www.pdfbox.online/hero_image.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
     rel="stylesheet" />
   <link rel="stylesheet" href="./style.css" />
+
+  <!-- Google AdSense Consent Mode (must be before AdSense script) -->
+  <script>
+    // Default to denied until user gives consent
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+
+    gtag('consent', 'default', {
+      'ad_storage': 'denied',
+      'analytics_storage': 'denied',
+      'ad_user_data': 'denied',
+      'ad_personalization': 'denied',
+      'wait_for_update': 500
+    });
+  </script>
+
+  <!-- Cookie Consent Banner -->
+  <script src="./cookie-consent.js"></script>
 </head>
 
 <body>
@@ -523,7 +543,7 @@
         </div>
       </div>
       <div class="footer-bottom">
-        <p>&copy; 2024 PDF BOX. All processing is done locally in your browser.</p>
+        <p>&copy; 2024-2026 PDF BOX. All processing is done locally in your browser.</p>
         <div class="footer-badge">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="currentColor" />
@@ -1649,7 +1669,7 @@
     </div>
     <div class="modal-body">
       <div class="page-content">
-        <p class="privacy-date">Last updated: July 24, 2026</p>
+        <p class="privacy-date">Last updated: August 5, 2026</p>
 
         <h3>1. No Data Collection</h3>
         <p>PDF BOX does not collect, store, or transmit any personal information. We do not require registration,
@@ -1780,7 +1800,7 @@
   </script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  
+
   <!-- docx-preview for Word to PDF (visual rendering) requires jszip -->
   <script src="https://unpkg.com/jszip/dist/jszip.min.js"></script>
   <script src="https://unpkg.com/docx-preview@0.3.3/dist/docx-preview.min.js"></script>
@@ -1788,10 +1808,10 @@
     window.docxPreview = window.docx;
     window.docx = undefined;
   </script>
-  
+
   <!-- docx.js for PDF to Word -->
   <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
-  
+
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
