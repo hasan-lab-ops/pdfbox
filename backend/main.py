@@ -81,38 +81,46 @@ async def convert_pdf(background_tasks: BackgroundTasks, file: UploadFile = File
         doc = docx.Document()
         
         for page in pdf:
-            blocks = page.get_text("blocks")
-            # Sort by Y position primarily, then X position
-            blocks.sort(key=lambda b: (b[1], b[0]))
+            words = page.get_text("words")
             
-            for b in blocks:
-                if b[6] != 0: # 0 means text block, 1 means image block
-                    continue
-                    
-                text = b[4].strip()
-                if not text:
-                    continue
-                    
-                # Step 5 - Fix Encoding Issues and weird symbols
-                text = text.replace('\uf0b7', '•')  # bullet fix
-                text = text.encode('utf-8', errors='ignore').decode('utf-8')
+            # Group words by block and line to preserve exact line structure
+            from itertools import groupby
+            # Sort by block_no, then line_no so groupby works correctly
+            words.sort(key=lambda w: (w[5], w[6]))
+            
+            for (block_no, line_no), line_words_iter in groupby(words, key=lambda w: (w[5], w[6])):
+                line_words = list(line_words_iter)
                 
-                # Step 1 - Rebuild Paragraph FIRST (stop processing per line)
-                lines = text.split('\n')
-                paragraph_text = " ".join(lines)
+                # Check if this line has Arabic
+                line_has_arabic = any(has_arabic(w[4]) for w in line_words)
                 
-                # Step 4 - Write ONE Clean Paragraph
+                # Step 2 - Rebuild Lines Correctly using Coordinates
+                if line_has_arabic:
+                    # Reverse X order for Arabic
+                    line_words.sort(key=lambda w: w[0], reverse=True)
+                else:
+                    # Normal X order for English
+                    line_words.sort(key=lambda w: w[0])
+                    
+                # Step 3 - Build Line Text Properly
+                line_text = " ".join(w[4] for w in line_words)
+                
+                # Fix Encoding Issues and weird symbols
+                line_text = line_text.replace('\uf0b7', '•')
+                line_text = line_text.encode('utf-8', errors='ignore').decode('utf-8')
+                
+                # Apply Arabic Fix ONLY ONCE
+                if line_has_arabic:
+                    line_text = fix_arabic(line_text)
+                
+                # Step 4 - Keep Each Line Separate
                 p = doc.add_paragraph()
-                
-                # Step 3 - Detect Arabic Before Fixing
-                if has_arabic(paragraph_text):
-                    # Step 2 - Apply Arabic Fix ONLY ONCE
-                    paragraph_text = fix_arabic(paragraph_text)
+                if line_has_arabic:
                     p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
                 else:
                     p.alignment = WD_ALIGN_PARAGRAPH.LEFT
                 
-                run = p.add_run(paragraph_text)
+                run = p.add_run(line_text)
                 run.font.name = 'Arial'
                     
             # Add page break after each page (except maybe the last)
