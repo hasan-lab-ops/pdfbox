@@ -67,6 +67,51 @@ async def convert_pdf(background_tasks: BackgroundTasks, file: UploadFile = File
         cv.convert(output_docx_path, start=0, end=None)
         cv.close()
         
+        # --- POST-PROCESSING FOR ARABIC AND RTL ---
+        try:
+            import docx
+            import arabic_reshaper
+            from bidi.algorithm import get_display
+            from docx.enum.text import WD_ALIGN_PARAGRAPH
+            
+            def is_arabic(text):
+                return any('\u0600' <= c <= '\u06FF' for c in text)
+            
+            print("Running Arabic/RTL post-processing on DOCX...")
+            doc = docx.Document(output_docx_path)
+            
+            for p in doc.paragraphs:
+                if not p.text:
+                    continue
+                if is_arabic(p.text):
+                    reshaped = arabic_reshaper.reshape(p.text)
+                    bidi_text = get_display(reshaped)
+                    p.clear()
+                    run = p.add_run(bidi_text)
+                    run.font.name = 'Arial'
+                    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            
+            for table in doc.tables:
+                for row in table.rows:
+                    for cell in row.cells:
+                        for p in cell.paragraphs:
+                            if not p.text:
+                                continue
+                            if is_arabic(p.text):
+                                reshaped = arabic_reshaper.reshape(p.text)
+                                bidi_text = get_display(reshaped)
+                                p.clear()
+                                run = p.add_run(bidi_text)
+                                run.font.name = 'Arial'
+                                p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+            
+            doc.save(output_docx_path)
+            print("Post-processing complete.")
+        except Exception as ex:
+            print(f"Error during Arabic post-processing: {ex}")
+            
+
+        
         background_tasks.add_task(cleanup_temp_dir, temp_dir)
         
         return FileResponse(
