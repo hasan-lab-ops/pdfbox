@@ -93,7 +93,8 @@ async def convert_pdf(background_tasks: BackgroundTasks, file: UploadFile = File
                 if not text:
                     continue
                     
-                # Step 5 - Fix Encoding Issues (square symbol problem)
+                # Step 5 - Fix Encoding Issues and weird symbols
+                text = text.replace('\uf0b7', '•')  # bullet fix
                 text = text.encode('utf-8', errors='ignore').decode('utf-8')
                 
                 # Step 1 - Rebuild Paragraph FIRST (stop processing per line)
@@ -108,6 +109,8 @@ async def convert_pdf(background_tasks: BackgroundTasks, file: UploadFile = File
                     # Step 2 - Apply Arabic Fix ONLY ONCE
                     paragraph_text = fix_arabic(paragraph_text)
                     p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                else:
+                    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
                 
                 run = p.add_run(paragraph_text)
                 run.font.name = 'Arial'
