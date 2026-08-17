@@ -6,7 +6,7 @@ with open('index.html', 'r', encoding='utf-8') as f:
     index_html = f.read()
 
 # Extract navbar
-nav_match = re.search(r'<!-- ===== NAVBAR ===== -->(.*?)<!-- Mobile Menu -->.*?</div>', index_html, re.DOTALL)
+nav_match = re.search(r'<!-- ===== NAVBAR ===== -->(.*?)<!-- ===== HERO ===== -->', index_html, re.DOTALL)
 if nav_match:
     navbar_content = nav_match.group(0)
 else:
