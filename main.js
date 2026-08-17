@@ -1231,20 +1231,12 @@ async function viewerZoomOut() {
    Step 4: Chronological Rendering & Proper Spacing
    ────────────────────────────────────────────────── */
 
-async function convertPDFToWord(arrayBuffer) {
+const A4_W_TWIPS = 11906;
+const A4_H_TWIPS = 16838;
+
+async function convertPDFToWord(arrayBuffer, qualityMode = "balanced") {
   if (typeof pdfjsLib === "undefined") throw new Error("PDF.js library is not loaded.");
   if (typeof docx === "undefined") throw new Error("docx.js library is not loaded.");
-
-  // Use a high scale for sharp, high-quality images in the Word document
-  const SCALE = 3.0;
-
-  const canvasToUint8 = (c) =>
-    new Promise((res, rej) =>
-      c.toBlob(
-        async (b) => (b ? res(new Uint8Array(await b.arrayBuffer())) : rej(new Error("toBlob failed"))),
-        "image/png"
-      )
-    );
 
   if (typeof setProgress === "function") setProgress("pdf2word", 10, "Loading PDF...");
 
@@ -1256,7 +1248,10 @@ async function convertPDFToWord(arrayBuffer) {
   }).promise;
 
   const numPages = pdfDoc.numPages;
-  const sections = [];
+  const docxChildren = [];
+  
+  let fullExtractedText = ""; // for preview
+  let previewOrigImg = null;
 
   for (let pageNum = 1; pageNum <= numPages; pageNum++) {
     if (typeof setProgress === "function") {
@@ -1264,70 +1259,129 @@ async function convertPDFToWord(arrayBuffer) {
     }
 
     const page = await pdfDoc.getPage(pageNum);
-    const viewport = page.getViewport({ scale: SCALE });
-    const pageW = viewport.width;
-    const pageH = viewport.height;
+    const viewport = page.getViewport({ scale: 1.5 });
+    
+    if (pageNum === 1) {
+       const previewCanvas = document.createElement("canvas");
+       previewCanvas.width = viewport.width;
+       previewCanvas.height = viewport.height;
+       const previewCtx = previewCanvas.getContext("2d");
+       previewCtx.fillStyle = "#ffffff";
+       previewCtx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
+       await page.render({ canvasContext: previewCtx, viewport }).promise;
+       previewOrigImg = previewCanvas.toDataURL("image/png");
+    }
 
-    // Render the entire page to a canvas (Takes a screenshot)
-    const canvas = document.createElement("canvas");
-    canvas.width = pageW;
-    canvas.height = pageH;
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, pageW, pageH);
-    await page.render({ canvasContext: ctx, viewport }).promise;
+    const textContent = await page.getTextContent();
+    let extractedLines = [];
 
-    // Convert the full page screenshot to a PNG ArrayBuffer
-    const imgU8 = await canvasToUint8(canvas);
+    if (textContent.items.length > 0 && qualityMode !== "high") {
+       const linesMap = new Map();
+       for (const item of textContent.items) {
+           const y = Math.round(item.transform[5]);
+           if (!linesMap.has(y)) linesMap.set(y, []);
+           linesMap.get(y).push(item);
+       }
+       
+       const sortedY = Array.from(linesMap.keys()).sort((a, b) => b - a);
+       for (const y of sortedY) {
+           let items = linesMap.get(y);
+           items.sort((a, b) => a.transform[4] - b.transform[4]);
+           
+           let lineText = "";
+           let lastX = null;
+           let lastWidth = null;
+           for (const item of items) {
+               if (lastX !== null && lastWidth !== null) {
+                   const gap = item.transform[4] - (lastX + lastWidth);
+                   if (gap > (item.transform[0] * 0.2)) {
+                       lineText += " ";
+                   }
+               }
+               lineText += item.str;
+               lastX = item.transform[4];
+               lastWidth = item.width || (item.transform[0] * item.str.length);
+           }
+           extractedLines.push(lineText.trim());
+       }
+    } else {
+       if (typeof Tesseract === "undefined") throw new Error("Tesseract.js is required for OCR.");
+       setProgress("pdf2word", 10 + Math.floor((pageNum / numPages) * 80), "Running OCR on page " + pageNum + "...");
+       
+       const ocrViewport = page.getViewport({ scale: 2.0 });
+       const ocrCanvas = document.createElement("canvas");
+       ocrCanvas.width = ocrViewport.width;
+       ocrCanvas.height = ocrViewport.height;
+       const ocrCtx = ocrCanvas.getContext("2d");
+       ocrCtx.fillStyle = "#ffffff";
+       ocrCtx.fillRect(0, 0, ocrCanvas.width, ocrCanvas.height);
+       await page.render({ canvasContext: ocrCtx, viewport: ocrViewport }).promise;
+       
+       const ocrResult = await Tesseract.recognize(ocrCanvas, 'eng+ara', {
+           logger: m => {
+             if(m.status === "recognizing text") {
+               setProgress("pdf2word", 10 + Math.floor((pageNum / numPages) * 80), "Running OCR: " + Math.round(m.progress * 100) + "%");
+             }
+           }
+       });
+       extractedLines = ocrResult.data.lines.map(line => line.text.trim());
+    }
 
-    // A4 dimensions in docx units:
-    //   twips (for page size & margins): 1 inch = 1440 twips
-    //   A4 = 210mm × 297mm = 8.268" × 11.693"
-    //   width  = 8.268 * 1440 = 11906 twips
-    //   height = 11.693 * 1440 = 16838 twips
-    //
-    // docx ImageRun transformation uses pixels at 96 DPI:
-    //   A4 body (0 margins) = 595.28pt wide
-    //   595.28pt * (96/72) = 793.7 ≈ 794px wide
-    //   841.89pt * (96/72) = 1122.5 ≈ 1123px tall
-    const A4_W_TWIPS = 11906;
-    const A4_H_TWIPS = 16838;
-    const A4_W_PX = 794;   // A4 width in pixels at 96dpi (no margins)
-    const A4_H_PX = 1123;  // A4 height in pixels at 96dpi (no margins)
+    for (const line of extractedLines) {
+        if (!line) continue;
+        fullExtractedText += line + "\n";
+        
+        // Detect RTL
+        const isRtl = /[\u0591-\u07FF\uFB1D-\uFDFD\uFE70-\uFEFC]/.test(line);
+        
+        docxChildren.push(new docx.Paragraph({
+            text: line,
+            bidirectional: isRtl,
+            alignment: isRtl ? docx.AlignmentType.RIGHT : docx.AlignmentType.LEFT,
+            spacing: { before: 120, after: 120 }
+        }));
+    }
+    
+    if (pageNum < numPages) {
+       docxChildren.push(new docx.Paragraph({
+           children: [new docx.PageBreak()]
+       }));
+    }
+  }
 
-    // Scale image to fill A4 exactly (stretch to fit)
-    // The PDF page is already rendered at high DPI; we just declare the output size.
-    const outW = A4_W_PX;
-    const outH = A4_H_PX;
-
-    sections.push({
-      properties: {
-        page: {
-          size: { width: A4_W_TWIPS, height: A4_H_TWIPS },
-          // Zero margins so the image fills the entire A4 page
-          margin: { top: 0, right: 0, bottom: 0, left: 0 }
-        }
-      },
-      children: [
-        new docx.Paragraph({
-          alignment: docx.AlignmentType.CENTER,
-          spacing: { before: 0, after: 0 },
-          children: [
-            new docx.ImageRun({
-              data: imgU8,
-              transformation: { width: outW, height: outH },
-              type: "png"
-            })
-          ]
-        })
-      ]
-    });
+  const previewOrigContainer = document.getElementById("preview-pdf2word-orig");
+  const previewTextContainer = document.getElementById("preview-pdf2word-text");
+  const previewWrap = document.getElementById("preview-pdf2word");
+  
+  if (previewOrigContainer && previewTextContainer && previewWrap) {
+      previewWrap.style.display = "block";
+      if (previewOrigImg) {
+          previewOrigContainer.innerHTML = `<img src="${previewOrigImg}" style="max-width: 100%; max-height: 100%; object-fit: contain; border: none;" />`;
+      }
+      previewTextContainer.innerText = fullExtractedText || "No text extracted.";
   }
 
   if (typeof setProgress === "function") setProgress("pdf2word", 93, "Building .docx file...");
 
   const doc = new docx.Document({
-    sections: sections.length ? sections : [{ children: [new docx.Paragraph("No content extracted")] }]
+    styles: {
+      default: {
+        document: {
+          run: {
+            font: "Arial"
+          }
+        }
+      }
+    },
+    sections: [{
+      properties: {
+        page: {
+          size: { width: A4_W_TWIPS, height: A4_H_TWIPS },
+          margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 }
+        }
+      },
+      children: docxChildren.length ? docxChildren : [new docx.Paragraph("No content extracted")]
+    }]
   });
 
   return docx.Packer.toBlob(doc);
@@ -1340,14 +1394,20 @@ async function pdfToWord() {
     return;
   }
   showResult("pdf2word", "");
+  
+  const previewWrap = document.getElementById("preview-pdf2word");
+  if (previewWrap) previewWrap.style.display = "none";
+
   setProgress("pdf2word", 10, "Loading PDF…");
   setButtonEnabled("btn-pdf2word", false);
   try {
     const arrayBuffer = await file.arrayBuffer();
+    const qualityModeElement = document.getElementById("pdf2word-quality");
+    const qualityMode = qualityModeElement ? qualityModeElement.value : "balanced";
     setProgress("pdf2word", 50, "Converting to Word format...");
-    const blob = await convertPDFToWord(arrayBuffer);
+    const blob = await convertPDFToWord(arrayBuffer, qualityMode);
     const name = file.name.replace(/\.pdf$/i, "") + ".docx";
-    /* proper Word format */ setProgress("pdf2word", 100, "Complete!");
+    setProgress("pdf2word", 100, "Complete!");
     showResult("pdf2word", successResult(name, blob, formatSize(blob.size)));
     showToast("PDF converted to Word successfully!");
   } catch (err) {
