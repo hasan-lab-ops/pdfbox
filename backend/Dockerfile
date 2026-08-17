@@ -1,12 +1,14 @@
 FROM python:3.11-slim
 
-# Install system dependencies including LibreOffice
+# Install LibreOffice + dependencies
 RUN apt-get update && apt-get install -y \
     libreoffice \
     libreoffice-writer \
-    fonts-liberation \
+    libreoffice-calc \
+    libreoffice-impress \
     fonts-dejavu \
-    && rm -rf /var/lib/apt/lists/*
+    fonts-freefont-ttf \
+    && apt-get clean
 
 # Set working directory
 WORKDIR /app

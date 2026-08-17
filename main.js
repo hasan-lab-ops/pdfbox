@@ -1238,7 +1238,7 @@ async function pdfToWord() {
     formData.append("file", file);
     
     // Start task
-    const response = await fetch("https://pdf-api-production.up.railway.app/api/convert/pdf-to-word", {
+    const response = await fetch("http://192.168.1.5:8000/api/convert/pdf-to-word", {
         method: "POST",
         body: formData
     });
@@ -1253,7 +1253,7 @@ async function pdfToWord() {
     let download_url = "";
     while (status === "pending" || status === "processing") {
         await new Promise(resolve => setTimeout(resolve, 1500));
-        const statusRes = await fetch(`https://pdf-api-production.up.railway.app/api/status/${task_id}`);
+        const statusRes = await fetch(`http://192.168.1.5:8000/api/status/${task_id}`);
         if (!statusRes.ok) throw new Error("Failed to check status");
         
         const data = await statusRes.json();
@@ -1271,7 +1271,7 @@ async function pdfToWord() {
     setProgress("pdf2word", 90, "Downloading converted document...");
     
     // Download
-    const dlRes = await fetch(`https://pdf-api-production.up.railway.app${download_url}`);
+    const dlRes = await fetch(`http://192.168.1.5:8000${download_url}`);
     if (!dlRes.ok) throw new Error("Failed to download file");
     
     const blob = await dlRes.blob();
