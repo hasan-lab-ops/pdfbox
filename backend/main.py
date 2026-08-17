@@ -49,54 +49,35 @@ def convert_pdf_to_word_task(task_id: str, input_pdf_path: str, output_docx_path
     tasks[task_id]["status"] = "processing"
     
     try:
-        doc = fitz.open(input_pdf_path)
-        word_doc = docx.Document()
-        
-        for page_num in range(len(doc)):
-            page = doc[page_num]
-            blocks = page.get_text("dict")["blocks"]
-            blocks.sort(key=lambda b: (b["bbox"][1], b["bbox"][0]))
+        # Assuming Windows default LibreOffice installation path
+        soffice_path = r"C:\Program Files\LibreOffice\program\soffice.exe"
+        if not os.path.exists(soffice_path):
+            raise Exception("LibreOffice is not installed or not found at default path.")
             
-            for block in blocks:
-                if block["type"] == 0:
-                    lines = block["lines"]
-                    lines.sort(key=lambda l: l["bbox"][1])
-                    
-                    for line in lines:
-                        # Extract logical Unicode directly
-                        words = []
-                        for span in line["spans"]:
-                            text = span["text"].strip()
-                            if text:
-                                words.append(text)
-                                
-                        if not words:
-                            continue
-                            
-                        # Join words cleanly. Logical Unicode requires NO reshaping for Office!
-                        line_text = " ".join(words)
-                        is_arabic_line = has_arabic(line_text)
-                        
-                        p = word_doc.add_paragraph()
-                        if is_arabic_line:
-                            p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-                        else:
-                            p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                            
-                        run = p.add_run(line_text)
-                        
-                        # Apply RTL XML flag natively
-                        if is_arabic_line:
-                            set_rtl_run(run)
-                            
-                        # Embed custom font for safety
-                        run.font.name = "Arial"
-                        
-            word_doc.add_page_break()
-            
-        word_doc.save(output_docx_path)
-        doc.close()
+        process = subprocess.run(
+            [
+                soffice_path, 
+                "--headless", 
+                "--infilter=writer_pdf_import", 
+                "--convert-to", "docx", 
+                input_pdf_path, 
+                "--outdir", temp_dir
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
         
+        if process.returncode != 0:
+            raise Exception(f"LibreOffice conversion failed: {process.stderr}")
+            
+        # LibreOffice creates a file with the same basename: input.docx
+        generated_docx = os.path.join(temp_dir, "input.docx")
+        if os.path.exists(generated_docx):
+            os.rename(generated_docx, output_docx_path)
+        else:
+            raise Exception("LibreOffice did not generate the output file.")
+            
         tasks[task_id]["status"] = "completed"
         tasks[task_id]["download_url"] = f"/api/download/{task_id}"
         
