@@ -49,13 +49,27 @@ def set_rtl_run(run):
     rtl.set(qn('w:val'), '1')
     rPr.append(rtl)
 
+def get_libreoffice_path() -> str:
+    soffice_path = shutil.which("soffice")
+    if soffice_path:
+        return soffice_path
+    if os.name == 'nt':
+        win_path = r"C:\Program Files\LibreOffice\program\soffice.exe"
+        if os.path.exists(win_path):
+            return win_path
+    raise Exception(
+        "LibreOffice (soffice) not found on PATH or default Windows install location — "
+        "install it and/or add it to PATH. Cross-platform Note: If running on Linux/Docker, "
+        "ensure the 'libreoffice' package is installed."
+    )
+
 def convert_pdf_to_word_task(task_id: str, input_pdf_path: str, output_docx_path: str, temp_dir: str):
     tasks[task_id]["status"] = "processing"
     
     try:
         process = subprocess.run(
             [
-                "soffice", 
+                get_libreoffice_path(), 
                 "--headless", 
                 "--infilter=writer_pdf_import", 
                 "--convert-to", "docx", 
@@ -227,7 +241,7 @@ def office_to_pdf_task(task_id: str, input_path: str, temp_dir: str):
     
     try:
         process = subprocess.run(
-            ["soffice", "--headless", "--convert-to", "pdf", input_path, "--outdir", temp_dir],
+            [get_libreoffice_path(), "--headless", "--convert-to", "pdf", input_path, "--outdir", temp_dir],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True
