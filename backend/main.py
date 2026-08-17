@@ -276,7 +276,7 @@ async def start_office_to_pdf(background_tasks: BackgroundTasks, file: UploadFil
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
 
 def convert_pdf_to_excel_task(task_id: str, input_pdf_path: str, output_xlsx_path: str, temp_dir: str):
     tasks[task_id]["status"] = "processing"
