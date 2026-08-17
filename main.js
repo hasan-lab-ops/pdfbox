@@ -14,6 +14,20 @@
   pdf2word: { file: null },
   word2pdf: { file: null },
 };
+
+const API_BASE_URL = "http://localhost:8000";
+
+// Check backend health on load
+(async function checkBackendHealth() {
+  try {
+    const res = await fetch(`${API_BASE_URL}/health`);
+    if (!res.ok) throw new Error("Backend returned error");
+    console.log("Backend is healthy");
+  } catch (e) {
+    console.error("Backend health check failed. The server might be down or CORS is blocking the request.");
+  }
+})();
+
 /* ──────────────────────────────────────────────────   NAVBAR SCROLL   ────────────────────────────────────────────────── */ window.addEventListener(
   "scroll",
   () => {
@@ -1238,12 +1252,20 @@ async function pdfToWord() {
     formData.append("file", file);
     
     // Start task
-    const response = await fetch("http://192.168.1.5:8000/api/convert/pdf-to-word", {
-        method: "POST",
-        body: formData
-    });
+    let response;
+    try {
+        response = await fetch(`${API_BASE_URL}/api/convert/pdf-to-word`, {
+            method: "POST",
+            body: formData
+        });
+    } catch (e) {
+        if (e.message && e.message.includes("Failed to fetch")) {
+            throw new Error("Server Unreachable or CORS Blocked. Please check if the backend is running and reachable on " + API_BASE_URL);
+        }
+        throw e;
+    }
     
-    if (!response.ok) throw new Error("Upload failed");
+    if (!response.ok) throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
     const { task_id } = await response.json();
     
     setProgress("pdf2word", 30, "Server is processing document (applying Arabic RTL layout)...");
@@ -1253,7 +1275,7 @@ async function pdfToWord() {
     let download_url = "";
     while (status === "pending" || status === "processing") {
         await new Promise(resolve => setTimeout(resolve, 1500));
-        const statusRes = await fetch(`http://192.168.1.5:8000/api/status/${task_id}`);
+        const statusRes = await fetch(`${API_BASE_URL}/api/status/${task_id}`);
         if (!statusRes.ok) throw new Error("Failed to check status");
         
         const data = await statusRes.json();
@@ -1271,7 +1293,7 @@ async function pdfToWord() {
     setProgress("pdf2word", 90, "Downloading converted document...");
     
     // Download
-    const dlRes = await fetch(`http://192.168.1.5:8000${download_url}`);
+    const dlRes = await fetch(`${API_BASE_URL}${download_url}`);
     if (!dlRes.ok) throw new Error("Failed to download file");
     
     const blob = await dlRes.blob();
