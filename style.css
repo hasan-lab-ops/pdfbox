@@ -1573,3 +1573,207 @@ input[name="rotate-pages"]:checked[value="specific"] ~ #rotate-specific,
   .form-row { flex-direction: column; gap: 0; }
   .modal-page .modal-body { padding: 24px 20px 32px; }
 }
+
+/* ===== NAVIGATION SEARCH ===== */
+.nav-search-wrap {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+}
+.nav-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.nav-search input {
+  background: rgba(10, 15, 46, 0.5);
+  border: 1px solid var(--navy-border);
+  border-radius: 20px;
+  padding: 6px 36px 6px 14px;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  width: 180px;
+  transition: all var(--transition);
+}
+.nav-search input:focus {
+  outline: none;
+  border-color: var(--aqua-bright);
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.2);
+  width: 220px;
+}
+.nav-search button {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--transition);
+}
+.nav-search button:hover {
+  color: var(--aqua-bright);
+}
+.mobile-search {
+  padding: 0 16px 16px;
+  border-bottom: 1px solid var(--navy-border);
+  margin-bottom: 8px;
+}
+.mobile-search .nav-search input {
+  width: 100%;
+}
+
+/* ===== BLOG STYLES ===== */
+.blog-header {
+  padding: 140px 24px 60px;
+  text-align: center;
+  background: radial-gradient(ellipse at top, rgba(0, 229, 255, 0.1) 0%, var(--navy-deep) 70%);
+}
+.blog-title {
+  font-size: clamp(2.5rem, 5vw, 4rem);
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+}
+.blog-subtitle {
+  font-size: 1.1rem;
+  color: var(--text-secondary);
+  max-width: 600px;
+  margin: 0 auto;
+}
+.blog-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px 100px;
+}
+.blog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 30px;
+}
+.blog-card {
+  background: var(--navy-card);
+  border: 1px solid var(--navy-border);
+  border-radius: var(--radius-lg);
+  padding: 30px;
+  transition: all var(--transition);
+  display: flex;
+  flex-direction: column;
+}
+.blog-card:hover {
+  border-color: rgba(0, 229, 255, 0.3);
+  transform: translateY(-5px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+}
+.blog-date {
+  font-size: 0.8rem;
+  color: var(--aqua-mid);
+  margin-bottom: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.blog-card h3 {
+  font-size: 1.3rem;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+  line-height: 1.4;
+}
+.blog-card p {
+  color: var(--text-secondary);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  margin-bottom: 24px;
+  flex-grow: 1;
+}
+.blog-read-more {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--aqua-bright);
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-decoration: none;
+  transition: gap var(--transition);
+}
+.blog-read-more:hover {
+  gap: 12px;
+}
+
+/* ===== ARTICLE STYLES ===== */
+.article-header {
+  padding: 140px 24px 60px;
+  max-width: 800px;
+  margin: 0 auto;
+  text-align: center;
+}
+.article-title {
+  font-size: clamp(2rem, 4vw, 3.5rem);
+  font-weight: 800;
+  color: var(--text-primary);
+  margin-bottom: 24px;
+  line-height: 1.2;
+}
+.article-meta {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+.article-content {
+  max-width: 740px;
+  margin: 0 auto;
+  padding: 0 24px 100px;
+  font-size: 1.1rem;
+  line-height: 1.8;
+  color: var(--text-secondary);
+}
+.article-content h2 {
+  color: var(--text-primary);
+  font-size: 1.8rem;
+  margin: 40px 0 20px;
+}
+.article-content h3 {
+  color: var(--text-primary);
+  font-size: 1.4rem;
+  margin: 30px 0 16px;
+}
+.article-content p {
+  margin-bottom: 24px;
+}
+.article-content ul, .article-content ol {
+  margin: 0 0 24px 24px;
+  padding: 0;
+}
+.article-content li {
+  margin-bottom: 12px;
+}
+.article-content a {
+  color: var(--aqua-bright);
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  transition: all var(--transition);
+}
+.article-content a:hover {
+  text-decoration-color: var(--aqua-bright);
+}
+.article-content strong {
+  color: var(--text-primary);
+}
+.article-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--aqua-mid);
+  margin-bottom: 40px;
+  text-decoration: none;
+  font-weight: 500;
+  transition: color var(--transition);
+}
+.article-back:hover {
+  color: var(--aqua-bright);
+}

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="icon" type="image/png" href="../favicon.png" />
+  <title>Understanding PDF Encryption and Security - PDF BOX</title>
+  <meta name="description" content="A deep dive into how PDF encryption works and the difference between user passwords and owner passwords." />
+  <link rel="stylesheet" href="../style.css" />
+</head>
+<body>
+  <!-- ===== NAVBAR ===== -->
+  <nav class="navbar" id="navbar">
+    <div class="nav-container">
+      <a href=".../index.html" class="nav-logo">
+        <div class="logo-icon">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+            <rect x="3" y="2" width="16" height="20" rx="2" fill="url(#logoGrad)" />
+            <rect x="9" y="6" width="14" height="20" rx="2" fill="url(#logoGrad2)" opacity="0.8" />
+            <path d="M7 9h8M7 12h8M7 15h5" stroke="#0A0F2E" stroke-width="1.5" stroke-linecap="round" />
+            <defs>
+              <linearGradient id="logoGrad" x1="3" y1="2" x2="19" y2="22" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#00E5FF" />
+                <stop offset="1" stop-color="#00BCD4" />
+              </linearGradient>
+              <linearGradient id="logoGrad2" x1="9" y1="6" x2="23" y2="26" gradientUnits="userSpaceOnUse">
+                <stop stop-color="#00BCD4" />
+                <stop offset="1" stop-color="#0288D1" />
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <span class="logo-text">PDF <span class="logo-accent">BOX</span></span>
+      </a>
+      <div class="nav-links">
+        <a href="../index.html#tools" class="nav-link">Tools</a>
+        <a href="../index.html#features" class="nav-link">Features</a>
+        <a href=".../blog.html" class="nav-link">Blog</a>
+        <a href="../index.html#faq" class="nav-link">FAQ</a>
+        <a href=".../about.html" class="nav-link">About</a>
+        <a href=".../contact.html" class="nav-link">Contact</a>
+      </div>
+      <div class="nav-search-wrap">
+        <form class="nav-search" onsubmit="event.preventDefault(); window.location.href='../blog.html?q=' + this.search.value;">
+          <input type="text" name="search" placeholder="Search blog..." required />
+          <button type="submit" aria-label="Search">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+          </button>
+        </form>
+      </div>
+      <div class="nav-cta">
+        <a href="../index.html#tools" class="btn btn-outline-sm">Get Started</a>
+      </div>
+      <button class="hamburger" id="hamburger" aria-label="Menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Mobile Menu -->
+  <div class="mobile-menu" id="mobileMenu">
+    <div class="mobile-search">
+      <form class="nav-search" onsubmit="event.preventDefault(); window.location.href='../blog.html?q=' + this.search.value;">
+        <input type="text" name="search" placeholder="Search blog..." required />
+        <button type="submit" aria-label="Search">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="11" cy="11" r="8"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+        </button>
+      </form>
+    </div>
+
+  <header class="article-header">
+    <a href="../blog.html" class="article-back">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="19" y1="12" x2="5" y2="12"></line>
+        <polyline points="12 19 5 12 12 5"></polyline>
+      </svg>
+      Back to Blog
+    </a>
+    <h1 class="article-title">Understanding PDF Encryption and Security</h1>
+    <div class="article-meta">
+      <span>Published on Jun 20, 2026</span>
+      <span>•</span>
+      <span>PDF BOX Guides</span>
+    </div>
+  </header>
+
+  <main class="article-content">
+    
+            <p>When you secure a PDF, you are typically using one of two types of passwords.</p>
+            <h2>User vs. Owner Passwords</h2>
+            <p>The <strong>User Password</strong> (or Document Open Password) encrypts the file. You cannot even open the document without it. The <strong>Owner Password</strong> (or Permissions Password) allows the document to be opened, but restricts actions like printing, copying text, or editing.</p>
+            <p>Always use a User Password if the contents are truly confidential.</p>
+        
+  </main>
+
+  <!-- ===== FOOTER ===== -->
+  <footer class="footer">
+    <div class="container">
+      <div class="footer-top">
+        <div class="footer-brand">
+          <div class="nav-logo">
+            <div class="logo-icon">
+              <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                <rect x="3" y="2" width="16" height="20" rx="2" fill="url(#footerLogoGrad)" />
+                <rect x="9" y="6" width="14" height="20" rx="2" fill="url(#footerLogoGrad2)" opacity="0.8" />
+                <path d="M7 9h8M7 12h8M7 15h5" stroke="#0A0F2E" stroke-width="1.5" stroke-linecap="round" />
+                <defs>
+                  <linearGradient id="footerLogoGrad" x1="3" y1="2" x2="19" y2="22" gradientUnits="userSpaceOnUse">
+                    <stop stop-color="#00E5FF" />
+                    <stop offset="1" stop-color="#00BCD4" />
+                  </linearGradient>
+                  <linearGradient id="footerLogoGrad2" x1="9" y1="6" x2="23" y2="26" gradientUnits="userSpaceOnUse">
+                    <stop stop-color="#00BCD4" />
+                    <stop offset="1" stop-color="#0288D1" />
+                  </linearGradient>
+                </defs>
+              </svg>
+            </div>
+            <span class="logo-text">PDF <span class="logo-accent">BOX</span></span>
+          </div>
+          <p class="footer-tagline">Free, fast, and private PDF tools for everyone.</p>
+        </div>
+        <div class="footer-links-wrap">
+          <div class="footer-links-col">
+            <h4>Tools</h4>
+            <a onclick="window.location.href='../index.html'"mergePDF')">Merge PDF</a>
+            <a onclick="window.location.href='../index.html'"splitPDF')">Split PDF</a>
+            <a onclick="window.location.href='../index.html'"compressPDF')">Compress PDF</a>
+            <a onclick="window.location.href='../index.html'"rotatePDF')">Rotate PDF</a>
+            <a onclick="window.location.href='../index.html'"pdf2img')">PDF to Images</a>
+            <a onclick="window.location.href='../index.html'"pdf2word')">PDF to Word</a>
+          </div>
+          <div class="footer-links-col">
+            <h4>More Tools</h4>
+            <a onclick="window.location.href='../index.html'"img2pdf')">Images to PDF</a>
+            <a onclick="window.location.href='../index.html'"watermark')">Add Watermark</a>
+            <a onclick="window.location.href='../index.html'"protectPDF')">Protect PDF</a>
+            <a onclick="window.location.href='../index.html'"extractPages')">Extract Pages</a>
+            <a onclick="window.location.href='../index.html'"pdfViewer')">PDF Viewer</a>
+            <a onclick="window.location.href='../index.html'"word2pdf')">Word to PDF</a>
+          </div>
+          <div class="footer-links-col">
+            <h4>Company</h4>
+            <a href="../about.html">About Us</a>
+            <a href="../contact.html">Contact</a>
+            <a href="../privacy.html">Privacy Policy</a>
+            <a href="../terms.html">Terms of Use</a>
+            <a href="../how-to-use-pdf-tools.html">How to use PDF tools</a>
+          </div>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2024-2026 PDF BOX. All processing is done locally in your browser.</p>
+        <div class="footer-badge">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" fill="currentColor" />
+          </svg>
+          Files never leave your device
+        </div>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>
