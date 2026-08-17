@@ -133,13 +133,12 @@ def process_pdf(pdf_path: str, docx_path: str, temp_dir: str):
                             p = word_doc.add_paragraph()
                             
                             if has_arabic(line_text):
-                                reshaped = arabic_reshaper.reshape(line_text)
-                                run = p.add_run(reshaped)
-                                set_rtl_run(run)
-                                set_bidi_paragraph(p)
+                                line_text = arabic_reshaper.reshape(line_text)
                                 p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
                             else:
-                                p.add_run(line_text)
+                                p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                            
+                            p.add_run(line_text)
                     except Exception as e:
                         print(f"OCR Failed for block: {e}. Degrading to image insertion.")
                         try:
@@ -152,45 +151,55 @@ def process_pdf(pdf_path: str, docx_path: str, temp_dir: str):
                     continue
                 
                 # --- RELIABLE PATH: Normal Extraction ---
-                p = word_doc.add_paragraph()
-                paragraph_has_arabic = False
-                
-                # We sort lines top-to-bottom
+                # Group into real lines (PyMuPDF already groups by line)
                 lines = block["lines"]
                 lines.sort(key=lambda l: l["bbox"][1])
                 
                 for line in lines:
-                    # Sort spans horizontally (L-to-R). 
-                    # If it's heavily RTL, Word will reorder it visually if we apply tags properly.
-                    spans = line["spans"]
-                    spans.sort(key=lambda s: s["bbox"][0])
-                    
-                    for span in spans:
+                    words = []
+                    for span in line["spans"]:
                         text = span["text"].strip()
-                        if not text:
-                            continue
-                            
-                        is_arabic_span = has_arabic(text)
-                        if is_arabic_span:
-                            text = arabic_reshaper.reshape(text)
-                            paragraph_has_arabic = True
-                            
-                        run = p.add_run(text + " ") # Add trailing space to prevent run merging issues
+                        if text:
+                            words.append({
+                                'text': text,
+                                'x0': span["bbox"][0],
+                                'font': span["font"],
+                                'size': span["size"]
+                            })
+                    
+                    if not words:
+                        continue
+                    
+                    raw_text = " ".join(w['text'] for w in words)
+                    is_arabic_line = has_arabic(raw_text)
+                    
+                    # Sort words INSIDE each line
+                    if is_arabic_line:
+                        words.sort(key=lambda w: w['x0'], reverse=True)
+                    else:
+                        words.sort(key=lambda w: w['x0'])
                         
-                        # Apply font styles
-                        font_name = span["font"]
-                        if font_name and not font_name.startswith("CID"):
-                            run.font.name = font_name
-                        run.font.size = Pt(span["size"])
+                    # Build the line text
+                    line_text = " ".join(w['text'] for w in words)
+                    
+                    # NOW (and only now) fix Arabic
+                    if is_arabic_line:
+                        line_text = arabic_reshaper.reshape(line_text)
                         
-                        # Apply OOXML tags for Arabic runs
-                        if is_arabic_span:
-                            set_rtl_run(run)
-                            
-                # Apply Paragraph-level RTL if any Arabic exists
-                if paragraph_has_arabic:
-                    set_bidi_paragraph(p)
-                    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                    # Write to Word CLEANLY per line
+                    p = word_doc.add_paragraph()
+                    
+                    if is_arabic_line:
+                        p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                    else:
+                        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                        
+                    run = p.add_run(line_text)
+                    
+                    font_name = words[0]["font"]
+                    if font_name and not font_name.startswith("CID"):
+                        run.font.name = font_name
+                    run.font.size = Pt(words[0]["size"])
 
         word_doc.add_page_break()
         
