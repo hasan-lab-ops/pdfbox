@@ -14,6 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from PIL import Image
 import pytesseract
 import arabic_reshaper
+from bidi.algorithm import get_display
 
 app = FastAPI(title="PDF BOX Backend API")
 
@@ -134,6 +135,7 @@ def process_pdf(pdf_path: str, docx_path: str, temp_dir: str):
                             
                             if has_arabic(line_text):
                                 line_text = arabic_reshaper.reshape(line_text)
+                                line_text = get_display(line_text)
                                 p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
                             else:
                                 p.alignment = WD_ALIGN_PARAGRAPH.LEFT
@@ -185,6 +187,7 @@ def process_pdf(pdf_path: str, docx_path: str, temp_dir: str):
                     # NOW (and only now) fix Arabic
                     if is_arabic_line:
                         line_text = arabic_reshaper.reshape(line_text)
+                        line_text = get_display(line_text)
                         
                     # Write to Word CLEANLY per line
                     p = word_doc.add_paragraph()
