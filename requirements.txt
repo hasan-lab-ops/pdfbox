@@ -1,0 +1,6 @@
+fastapi
+uvicorn
+pdfplumber
+python-docx
+arabic-reshaper
+python-bidi
