@@ -80,49 +80,68 @@ async def convert_pdf(background_tasks: BackgroundTasks, file: UploadFile = File
         pdf = fitz.open(input_pdf_path)
         doc = docx.Document()
         
+        import io
+        from docx.oxml.shared import OxmlElement
+        from docx.oxml.ns import qn
+        
+        def set_rtl(paragraph):
+            pPr = paragraph._p.get_or_add_pPr()
+            bidi = OxmlElement('w:bidi')
+            bidi.set(qn('w:val'), '1')
+            pPr.append(bidi)
+            
         for page in pdf:
-            words = page.get_text("words")
+            # get_text("dict") extracts both text and images with coordinates
+            blocks = page.get_text("dict")["blocks"]
             
-            # Group words by block and line to preserve exact line structure
-            from itertools import groupby
-            # Sort by block_no, then line_no so groupby works correctly
-            words.sort(key=lambda w: (w[5], w[6]))
+            # Sort blocks by Y position to preserve document flow
+            blocks.sort(key=lambda b: (b['bbox'][1], b['bbox'][0]))
             
-            for (block_no, line_no), line_words_iter in groupby(words, key=lambda w: (w[5], w[6])):
-                line_words = list(line_words_iter)
-                
-                # Check if this line has Arabic
-                line_has_arabic = any(has_arabic(w[4]) for w in line_words)
-                
-                # Step 2 - Rebuild Lines Correctly using Coordinates
-                if line_has_arabic:
-                    # Reverse X order for Arabic
-                    line_words.sort(key=lambda w: w[0], reverse=True)
-                else:
-                    # Normal X order for English
-                    line_words.sort(key=lambda w: w[0])
+            for block in blocks:
+                # IMAGE BLOCK
+                if block['type'] == 1:
+                    try:
+                        image_bytes = block['image']
+                        image_stream = io.BytesIO(image_bytes)
+                        doc.add_picture(image_stream)
+                    except Exception as e:
+                        print(f"Skipped image: {e}")
+                    continue
                     
-                # Step 3 - Build Line Text Properly
-                line_text = " ".join(w[4] for w in line_words)
-                
-                # Fix Encoding Issues and weird symbols
-                line_text = line_text.replace('\uf0b7', '•')
-                line_text = line_text.encode('utf-8', errors='ignore').decode('utf-8')
-                
-                # Apply Arabic Fix ONLY ONCE
-                if line_has_arabic:
-                    line_text = fix_arabic(line_text)
-                
-                # Step 4 - Keep Each Line Separate
-                p = doc.add_paragraph()
-                if line_has_arabic:
-                    p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-                else:
-                    p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                
-                run = p.add_run(line_text)
-                run.font.name = 'Arial'
-                    
+                # TEXT BLOCK
+                if block['type'] == 0:
+                    for line in block['lines']:
+                        spans = line['spans']
+                        
+                        # Check if the line has Arabic to determine X-sort direction
+                        line_has_arabic = any(has_arabic(span['text']) for span in spans)
+                        
+                        # Rebuild Line Correctly using Coordinates (X-axis)
+                        if line_has_arabic:
+                            spans.sort(key=lambda s: s['bbox'][0], reverse=True)
+                        else:
+                            spans.sort(key=lambda s: s['bbox'][0])
+                        
+                        line_text = " ".join(span['text'].strip() for span in spans if span['text'].strip())
+                        if not line_text:
+                            continue
+                            
+                        # Fix Encodings & Symbols
+                        line_text = line_text.replace('\uf0b7', '•')
+                        line_text = line_text.encode('utf-8', errors='ignore').decode('utf-8')
+                        
+                        p = doc.add_paragraph()
+                        
+                        if line_has_arabic:
+                            line_text = fix_arabic(line_text)
+                            p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                            set_rtl(p) # <--- CRITICAL OOXML INJECTION FOR WORD
+                        else:
+                            p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                        
+                        run = p.add_run(line_text)
+                        run.font.name = 'Arial'
+                        
             # Add page break after each page (except maybe the last)
             doc.add_page_break()
             
