@@ -68,8 +68,12 @@ async def convert_pdf(background_tasks: BackgroundTasks, file: UploadFile = File
         from bidi.algorithm import get_display
         from docx.enum.text import WD_ALIGN_PARAGRAPH
         
-        def is_arabic(text):
+        def has_arabic(text):
             return any('\u0600' <= c <= '\u06FF' for c in text)
+            
+        def fix_arabic(text):
+            reshaped = arabic_reshaper.reshape(text)
+            return get_display(reshaped)
 
         print(f"Converting {input_pdf_path} to DOCX using block extraction...")
         
@@ -89,22 +93,24 @@ async def convert_pdf(background_tasks: BackgroundTasks, file: UploadFile = File
                 if not text:
                     continue
                     
-                # Clean up PDF manual line breaks to allow Word to flow text naturally
-                text = text.replace('\n', ' ')
+                # Step 5 - Fix Encoding Issues (square symbol problem)
+                text = text.encode('utf-8', errors='ignore').decode('utf-8')
                 
+                # Step 1 - Rebuild Paragraph FIRST (stop processing per line)
+                lines = text.split('\n')
+                paragraph_text = " ".join(lines)
+                
+                # Step 4 - Write ONE Clean Paragraph
                 p = doc.add_paragraph()
                 
-                if is_arabic(text):
-                    # Shape and Bidi the ENTIRE block (paragraph)
-                    reshaped = arabic_reshaper.reshape(text)
-                    bidi_text = get_display(reshaped)
-                    
-                    run = p.add_run(bidi_text)
-                    run.font.name = 'Arial'
+                # Step 3 - Detect Arabic Before Fixing
+                if has_arabic(paragraph_text):
+                    # Step 2 - Apply Arabic Fix ONLY ONCE
+                    paragraph_text = fix_arabic(paragraph_text)
                     p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-                else:
-                    run = p.add_run(text)
-                    run.font.name = 'Arial'
+                
+                run = p.add_run(paragraph_text)
+                run.font.name = 'Arial'
                     
             # Add page break after each page (except maybe the last)
             doc.add_page_break()

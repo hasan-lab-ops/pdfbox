@@ -43,7 +43,7 @@
   <script>
     // Default to denied until user gives consent
     window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
+    function gtag() { dataLayer.push(arguments); }
 
     gtag('consent', 'default', {
       'ad_storage': 'denied',
@@ -92,7 +92,8 @@
         <a href="./contact.html" class="nav-link">Contact</a>
       </div>
       <div class="nav-search-wrap">
-        <form class="nav-search" onsubmit="event.preventDefault(); window.location.href='./blog.html?q=' + this.search.value;">
+        <form class="nav-search"
+          onsubmit="event.preventDefault(); window.location.href='./blog.html?q=' + this.search.value;">
           <input type="text" name="search" placeholder="Search blog..." required />
           <button type="submit" aria-label="Search">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -114,7 +115,8 @@
   <!-- Mobile Menu -->
   <div class="mobile-menu" id="mobileMenu">
     <div class="mobile-search">
-      <form class="nav-search" onsubmit="event.preventDefault(); window.location.href='./blog.html?q=' + this.search.value;">
+      <form class="nav-search"
+        onsubmit="event.preventDefault(); window.location.href='./blog.html?q=' + this.search.value;">
         <input type="text" name="search" placeholder="Search blog..." required />
         <button type="submit" aria-label="Search">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1474,25 +1476,36 @@
         <p class="dz-hint">Select a PDF file to convert</p>
       </div>
       <div class="file-list" id="files-pdf2word"></div>
-      
+
       <div class="options-group" style="margin-bottom: 20px;">
-        <label for="pdf2word-quality" class="options-label" style="display: block; font-size: 14px; font-weight: 500; margin-bottom: 8px;">Conversion Quality Mode</label>
-        <select id="pdf2word-quality" class="options-select" style="width: 100%; padding: 10px 14px; border-radius: var(--radius-md); background: var(--navy-surface); border: 1px solid var(--navy-border); color: #fff; font-size: 14px;">
+        <label for="pdf2word-quality" class="options-label"
+          style="display: block; font-size: 14px; font-weight: 500; margin-bottom: 8px;">Conversion Quality Mode</label>
+        <select id="pdf2word-quality" class="options-select"
+          style="width: 100%; padding: 10px 14px; border-radius: var(--radius-md); background: var(--navy-surface); border: 1px solid var(--navy-border); color: #fff; font-size: 14px;">
           <option value="fast">Fast (Text Extraction Only)</option>
           <option value="balanced">Balanced (Text + Layout)</option>
           <option value="high">High Accuracy (OCR Scanned Images + Arabic)</option>
         </select>
-        <p class="options-hint" style="font-size: 12px; color: var(--text-secondary); margin-top: 6px;">High Accuracy mode will download language models and use Tesseract OCR for scanned text.</p>
+        <p class="options-hint" style="font-size: 12px; color: var(--text-secondary); margin-top: 6px;">High Accuracy
+          mode will download language models and use Tesseract OCR for scanned text.</p>
       </div>
 
-      <div class="preview-wrap" id="preview-pdf2word" style="display:none; margin-bottom: 20px; border: 1px solid var(--navy-border); border-radius: var(--radius-md); overflow: hidden;">
+      <div class="preview-wrap" id="preview-pdf2word"
+        style="display:none; margin-bottom: 20px; border: 1px solid var(--navy-border); border-radius: var(--radius-md); overflow: hidden;">
         <div style="display: flex; background: var(--navy-surface); border-bottom: 1px solid var(--navy-border);">
-          <div style="flex:1; padding: 8px 12px; font-weight: 600; font-size: 13px; color: var(--text-secondary); border-right: 1px solid var(--navy-border);">Original PDF</div>
-          <div style="flex:1; padding: 8px 12px; font-weight: 600; font-size: 13px; color: var(--text-secondary);">Extracted Text Preview</div>
+          <div
+            style="flex:1; padding: 8px 12px; font-weight: 600; font-size: 13px; color: var(--text-secondary); border-right: 1px solid var(--navy-border);">
+            Original PDF</div>
+          <div style="flex:1; padding: 8px 12px; font-weight: 600; font-size: 13px; color: var(--text-secondary);">
+            Extracted Text Preview</div>
         </div>
         <div style="display: flex;">
-          <div id="preview-pdf2word-orig" style="flex:1; padding: 12px; background: #fff; border-right: 1px solid var(--navy-border); height: 250px; overflow: hidden; display: flex; align-items: center; justify-content: center;"></div>
-          <div id="preview-pdf2word-text" dir="auto" style="flex:1; padding: 12px; background: #fff; color: #000; font-size: 12px; height: 250px; overflow-y: auto; text-align: left; white-space: pre-wrap;"></div>
+          <div id="preview-pdf2word-orig"
+            style="flex:1; padding: 12px; background: #fff; border-right: 1px solid var(--navy-border); height: 250px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+          </div>
+          <div id="preview-pdf2word-text" dir="auto"
+            style="flex:1; padding: 12px; background: #fff; color: #000; font-size: 12px; height: 250px; overflow-y: auto; text-align: left; white-space: pre-wrap;">
+          </div>
         </div>
       </div>
 
@@ -1512,11 +1525,26 @@
       <div class="result-box" id="result-pdf2word"></div>
       <div class="tool-description">
         <h4>About PDF to Word</h4>
-        <p>The PDF to Word converter is one of the most sought-after document tools available, and PDF BOX delivers a highly accurate, fully-featured conversion engine with robust support for all languages — including Arabic, Hebrew, Persian, and other right-to-left scripts. The output is a real .docx file that opens natively in Microsoft Word, LibreOffice Writer, Google Docs, and any other word processor that supports the modern Office Open XML format.</p>
-        <p><strong>Secure Cloud Processing:</strong> To provide the highest quality layout preservation, table reconstruction, and Optical Character Recognition (OCR), this tool securely processes your file on our specialized backend servers. Your files are encrypted during transit, processed in memory, and immediately deleted from the server. <em>No files are stored or kept permanently.</em></p>
-        <p><strong>Arabic and RTL language support:</strong> The tool uses advanced layout-aware parsing (`pdf2docx`) and OCR engines (Tesseract with Arabic language packs) to seamlessly rebuild Arabic documents. This ensures Arabic text flows correctly from right to left in the Word document with proper letter shaping, just as it did in the original PDF.</p>
-        <p><strong>How to use:</strong> Upload your PDF, select your preferred conversion quality mode (Fast, Balanced, or High Accuracy OCR), click Convert to Word, and wait for the conversion to complete. Download the .docx file and open it in your word processor. The document is organized page-by-page, with page breaks between each original PDF page and font sizes that match the original as closely as possible.</p>
-        <p><strong>Common use cases:</strong> Editing contract text that was received as a PDF, extracting and reformatting academic papers, converting Arabic or multilingual PDFs into editable documents, recovering text from old PDF reports for reuse, or making a scanned PDF's text accessible for editing.</p>
+        <p>The PDF to Word converter is one of the most sought-after document tools available, and PDF BOX delivers a
+          highly accurate, fully-featured conversion engine with robust support for all languages — including Arabic,
+          Hebrew, Persian, and other right-to-left scripts. The output is a real .docx file that opens natively in
+          Microsoft Word, LibreOffice Writer, Google Docs, and any other word processor that supports the modern Office
+          Open XML format.</p>
+        <p><strong>Secure Cloud Processing:</strong> To provide the highest quality layout preservation, table
+          reconstruction, and Optical Character Recognition (OCR), this tool securely processes your file on our
+          specialized backend servers. Your files are encrypted during transit, processed in memory, and immediately
+          deleted from the server. <em>No files are stored or kept permanently.</em></p>
+        <p><strong>Arabic and RTL language support:</strong> The tool uses advanced layout-aware parsing (`pdf2docx`)
+          and OCR engines (Tesseract with Arabic language packs) to seamlessly rebuild Arabic documents. This ensures
+          Arabic text flows correctly from right to left in the Word document with proper letter shaping, just as it did
+          in the original PDF.</p>
+        <p><strong>How to use:</strong> Upload your PDF, select your preferred conversion quality mode (Fast, Balanced,
+          or High Accuracy OCR), click Convert to Word, and wait for the conversion to complete. Download the .docx file
+          and open it in your word processor. The document is organized page-by-page, with page breaks between each
+          original PDF page and font sizes that match the original as closely as possible.</p>
+        <p><strong>Common use cases:</strong> Editing contract text that was received as a PDF, extracting and
+          reformatting academic papers, converting Arabic or multilingual PDFs into editable documents, recovering text
+          from old PDF reports for reuse, or making a scanned PDF's text accessible for editing.</p>
       </div>
     </div>
   </div>
@@ -1702,9 +1730,13 @@
 
         <h3>2. File Processing — 100% Local (With One Exception)</h3>
         <p>Almost all file processing — including PDF merging, splitting, compression, rotation, encryption, and
-          watermarking — occurs exclusively in your web browser using client-side JavaScript. For these tools, <strong>your files are
+          watermarking — occurs exclusively in your web browser using client-side JavaScript. For these tools,
+          <strong>your files are
             never uploaded to any server.</strong></p>
-        <p><strong>Exception (PDF to Word):</strong> To provide highly accurate document layout reconstruction and OCR for Arabic/scanned documents, the <em>PDF to Word</em> tool securely uploads your file to our specialized conversion server. The file is encrypted during transit, processed entirely in memory, and immediately deleted upon completion. No files are stored or kept permanently.</p>
+        <p><strong>Exception (PDF to Word):</strong> To provide highly accurate document layout reconstruction and OCR
+          for Arabic/scanned documents, the <em>PDF to Word</em> tool securely uploads your file to our specialized
+          conversion server. The file is encrypted during transit, processed entirely in memory, and immediately deleted
+          upon completion. No files are stored or kept permanently.</p>
 
         <h3>3. Advertising and Cookies</h3>
         <p>PDF BOX may use Google AdSense to display advertising. Google and its advertising partners may use cookies
