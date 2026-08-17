@@ -224,6 +224,18 @@ async def convert_pdf(background_tasks: BackgroundTasks, file: UploadFile = File
         print(f"Error during conversion: {e}")
         return {"error": str(e)}
 
+def check_tesseract_arabic():
+    print("Checking Tesseract OCR installation...")
+    try:
+        langs = pytesseract.get_languages(config='')
+        if "ara" not in langs:
+            print("WARNING: Tesseract is installed but 'tesseract-ocr-ara' (Arabic language pack) is missing! OCR fallback for Arabic will fail.")
+        else:
+            print("Tesseract OCR and Arabic language pack are correctly installed.")
+    except Exception as e:
+        print("WARNING: Tesseract OCR is not installed or not in PATH! Graceful degradation (image insertion) will be used for all missing fonts.")
+
 if __name__ == "__main__":
+    check_tesseract_arabic()
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000)

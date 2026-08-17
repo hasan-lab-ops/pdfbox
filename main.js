@@ -1245,12 +1245,8 @@ async function pdfToWord() {
   setProgress("pdf2word", 10, "Uploading to secure conversion server...");
   setButtonEnabled("btn-pdf2word", false);
   try {
-    const qualityModeElement = document.getElementById("pdf2word-quality");
-    const qualityMode = qualityModeElement ? qualityModeElement.value : "balanced";
-    
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("quality", qualityMode);
     
     setProgress("pdf2word", 50, "Server is processing document (this may take a minute for large files)...");
     
