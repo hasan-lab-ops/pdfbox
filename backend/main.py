@@ -1,18 +1,15 @@
 import os
-import io
-import base64
+import shutil
 import tempfile
-import fitz  # PyMuPDF
-from fastapi import FastAPI, UploadFile, Form, File, HTTPException
+import io
+from fastapi import FastAPI, File, UploadFile, Form, BackgroundTasks
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from pdf2docx import Converter
-import pytesseract
-from pdf2image import convert_from_path
-import docx
 
-app = FastAPI()
+app = FastAPI(title="PDF BOX Backend API")
 
+# Allow CORS for the frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -21,106 +18,150 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-def has_text(pdf_path: str) -> bool:
+def cleanup_temp_dir(temp_dir: str):
+    """Remove the temporary directory after sending the response."""
     try:
-        doc = fitz.open(pdf_path)
-        for page in doc:
-            if page.get_text().strip():
-                return True
-        return False
+        shutil.rmtree(temp_dir)
     except Exception as e:
-        print(f"Error checking text in PDF: {e}")
-        return False
+        print(f"Error cleaning up {temp_dir}: {e}")
 
-def ocr_pdf_to_docx(pdf_path: str, docx_path: str, lang='ara+eng'):
-    # Convert PDF to images
-    images = convert_from_path(pdf_path, dpi=300)
+@app.post("/api/convert-pdf")
+async def convert_pdf(background_tasks: BackgroundTasks, file: UploadFile = File(...), quality: str = Form("balanced")):
+    temp_dir = tempfile.mkdtemp()
+    input_pdf_path = os.path.join(temp_dir, "input.pdf")
+    output_docx_path = os.path.join(temp_dir, "output.docx")
     
-    # Create a new Word document
-    doc = docx.Document()
-    
-    for i, image in enumerate(images):
-        # Extract text using Tesseract
-        text = pytesseract.image_to_string(image, lang=lang)
+    try:
+        with open(input_pdf_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        # If High Accuracy is chosen, process with OCR first
+        if quality == "high":
+            try:
+                from pdf2image import convert_from_path
+                import pytesseract
+                import PyPDF2
+                
+                print("Running OCR on PDF...")
+                images = convert_from_path(input_pdf_path)
+                ocr_pdf_path = os.path.join(temp_dir, "ocr_input.pdf")
+                
+                pdf_writer = PyPDF2.PdfWriter()
+                for img in images:
+                    # Output a searchable PDF page
+                    pdf_bytes = pytesseract.image_to_pdf_or_hocr(img, extension='pdf', lang='ara+eng')
+                    pdf_reader = PyPDF2.PdfReader(io.BytesIO(pdf_bytes))
+                    pdf_writer.add_page(pdf_reader.pages[0])
+                
+                with open(ocr_pdf_path, "wb") as f:
+                    pdf_writer.write(f)
+                    
+                input_pdf_path = ocr_pdf_path
+                print("OCR Complete. Proceeding to DOCX conversion.")
+            except Exception as e:
+                print(f"OCR Pipeline failed: {e}. Falling back to standard conversion.")
+                
+        # --- CONVERT TO DOCX ---
+        import docx
+        import pymupdf as fitz
+        import arabic_reshaper
+        from bidi.algorithm import get_display
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
         
-        # Add to docx
-        doc.add_paragraph(text)
-        if i < len(images) - 1:
+        def has_arabic(text):
+            return any('\u0600' <= c <= '\u06FF' for c in text)
+            
+        def fix_arabic(text):
+            reshaped = arabic_reshaper.reshape(text)
+            return get_display(reshaped)
+
+        print(f"Converting {input_pdf_path} to DOCX using block extraction...")
+        
+        pdf = fitz.open(input_pdf_path)
+        doc = docx.Document()
+        
+        import io
+        from docx.oxml.shared import OxmlElement
+        from docx.oxml.ns import qn
+        
+        def set_rtl(paragraph):
+            pPr = paragraph._p.get_or_add_pPr()
+            bidi = OxmlElement('w:bidi')
+            bidi.set(qn('w:val'), '1')
+            pPr.append(bidi)
+            
+        for page in pdf:
+            # get_text("dict") extracts both text and images with coordinates
+            blocks = page.get_text("dict")["blocks"]
+            
+            # Sort blocks by Y position to preserve document flow
+            blocks.sort(key=lambda b: (b['bbox'][1], b['bbox'][0]))
+            
+            for block in blocks:
+                # IMAGE BLOCK
+                if block['type'] == 1:
+                    try:
+                        image_bytes = block['image']
+                        image_stream = io.BytesIO(image_bytes)
+                        doc.add_picture(image_stream)
+                    except Exception as e:
+                        print(f"Skipped image: {e}")
+                    continue
+                    
+                # TEXT BLOCK
+                if block['type'] == 0:
+                    for line in block['lines']:
+                        spans = line['spans']
+                        
+                        # Check if the line has Arabic to determine X-sort direction
+                        line_has_arabic = any(has_arabic(span['text']) for span in spans)
+                        
+                        # Rebuild Line Correctly using Coordinates (X-axis)
+                        if line_has_arabic:
+                            spans.sort(key=lambda s: s['bbox'][0], reverse=True)
+                        else:
+                            spans.sort(key=lambda s: s['bbox'][0])
+                        
+                        line_text = " ".join(span['text'].strip() for span in spans if span['text'].strip())
+                        if not line_text:
+                            continue
+                            
+                        # Fix Encodings & Symbols
+                        line_text = line_text.replace('\uf0b7', '•')
+                        line_text = line_text.encode('utf-8', errors='ignore').decode('utf-8')
+                        
+                        p = doc.add_paragraph()
+                        
+                        if line_has_arabic:
+                            line_text = fix_arabic(line_text)
+                            p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                            set_rtl(p) # <--- CRITICAL OOXML INJECTION FOR WORD
+                        else:
+                            p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                        
+                        run = p.add_run(line_text)
+                        run.font.name = 'Arial'
+                        
+            # Add page break after each page (except maybe the last)
             doc.add_page_break()
             
-    doc.save(docx_path)
-
-@app.post("/api/convert/pdf-to-word")
-async def convert_pdf_to_word(
-    file: UploadFile = File(...),
-    quality: str = Form("balanced")
-):
-    if not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="Only PDF files are allowed")
-
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_pdf:
-        content = await file.read()
-        tmp_pdf.write(content)
-        tmp_pdf_path = tmp_pdf.name
-        
-    tmp_docx_path = tmp_pdf_path + ".docx"
-    
-    try:
-        is_text_pdf = has_text(tmp_pdf_path)
-        
-        # Decide conversion method based on quality mode and text presence
-        # quality modes: 'fast', 'balanced', 'high'
-        
-        if quality == 'high' or not is_text_pdf:
-            # Force OCR or OCR fallback
-            # 'ara+eng' to support Arabic and English
-            try:
-                ocr_pdf_to_docx(tmp_pdf_path, tmp_docx_path, lang='ara+eng')
-            except Exception as e:
-                print(f"OCR failed, falling back to basic conversion: {e}")
-                cv = Converter(tmp_pdf_path)
-                cv.convert(tmp_docx_path)
-                cv.close()
-        else:
-            # 'fast' or 'balanced' on a text PDF
-            cv = Converter(tmp_pdf_path)
-            cv.convert(tmp_docx_path)
-            cv.close()
-
-        # Read the resulting docx
-        with open(tmp_docx_path, "rb") as f:
-            docx_bytes = f.read()
+        doc.save(output_docx_path)
+        print("Conversion complete.")
             
-        # Extract preview text
-        preview_text = ""
-        try:
-            doc = docx.Document(tmp_docx_path)
-            for para in doc.paragraphs:
-                if para.text.strip():
-                    preview_text += para.text + "\n"
-                if len(preview_text) > 500:
-                    break
-        except:
-            preview_text = "Preview not available."
-                
-        preview_text = preview_text[:500] + ("..." if len(preview_text) >= 500 else "")
 
-        # Return as JSON
-        return JSONResponse({
-            "filename": file.filename.replace(".pdf", ".docx"),
-            "docx_base64": base64.b64encode(docx_bytes).decode('utf-8'),
-            "preview_text": preview_text
-        })
-
+        
+        background_tasks.add_task(cleanup_temp_dir, temp_dir)
+        
+        return FileResponse(
+            output_docx_path,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            filename=file.filename.replace(".pdf", ".docx")
+        )
+        
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        # Cleanup
-        if os.path.exists(tmp_pdf_path):
-            os.remove(tmp_pdf_path)
-        if os.path.exists(tmp_docx_path):
-            os.remove(tmp_docx_path)
+        cleanup_temp_dir(temp_dir)
+        return {"error": str(e)}
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="127.0.0.1", port=8000)
