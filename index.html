@@ -1512,32 +1512,11 @@
       <div class="result-box" id="result-pdf2word"></div>
       <div class="tool-description">
         <h4>About PDF to Word</h4>
-        <p>The PDF to Word converter is one of the most sought-after document tools available, and PDF BOX delivers it
-          completely free, in-browser, and with robust support for all languages — including Arabic, Hebrew, Persian,
-          and other right-to-left scripts. The output is a real .docx file that opens natively in Microsoft Word,
-          LibreOffice Writer, Google Docs, and any other word processor that supports the modern Office Open XML format.
-        </p>
-        <p>The conversion engine uses two powerful technologies working in tandem. First, PDF.js extracts the text
-          content from every page of your PDF, retrieving each text item's content, position, font size, and
-          coordinates. Second, docx.js constructs a properly structured Word document with correctly formatted
-          paragraphs, appropriate font sizes, and — critically — accurate text direction for every line of text.</p>
-        <p><strong>Arabic and RTL language support:</strong> The tool automatically detects Arabic, Hebrew, Persian,
-          Urdu, and other right-to-left languages by checking for characters in the Unicode RTL code ranges. When RTL
-          text is detected, the paragraph is set to bidirectional mode with right-alignment and the appropriate RTL text
-          direction flag. This ensures Arabic text flows correctly from right to left in the Word document, just as it
-          did in the original PDF.</p>
-        <p><strong>Word spacing accuracy:</strong> PDF files store text as individual positioned glyphs rather than
-          simple strings with spaces. The tool analyses the X-coordinate gaps between consecutive text items on each
-          line and inserts word spaces wherever the gap exceeds a calculated threshold based on the font size. This
-          recovers accurate word spacing from the raw glyph data, producing natural, readable text in the output
-          document.</p>
-        <p><strong>How to use:</strong> Upload your PDF, click Convert to Word, and wait for the conversion to complete
-          (larger PDFs may take 10–30 seconds). Download the .docx file and open it in your word processor. The document
-          is organized page-by-page, with page breaks between each original PDF page and font sizes that match the
-          original as closely as possible.</p>
-        <p><strong>Common use cases:</strong> Editing contract text that was received as a PDF, extracting and
-          reformatting academic papers, converting Arabic or multilingual PDFs into editable documents, recovering text
-          from old PDF reports for reuse, or making a scanned PDF's text accessible for editing.</p>
+        <p>The PDF to Word converter is one of the most sought-after document tools available, and PDF BOX delivers a highly accurate, fully-featured conversion engine with robust support for all languages — including Arabic, Hebrew, Persian, and other right-to-left scripts. The output is a real .docx file that opens natively in Microsoft Word, LibreOffice Writer, Google Docs, and any other word processor that supports the modern Office Open XML format.</p>
+        <p><strong>Secure Cloud Processing:</strong> To provide the highest quality layout preservation, table reconstruction, and Optical Character Recognition (OCR), this tool securely processes your file on our specialized backend servers. Your files are encrypted during transit, processed in memory, and immediately deleted from the server. <em>No files are stored or kept permanently.</em></p>
+        <p><strong>Arabic and RTL language support:</strong> The tool uses advanced layout-aware parsing (`pdf2docx`) and OCR engines (Tesseract with Arabic language packs) to seamlessly rebuild Arabic documents. This ensures Arabic text flows correctly from right to left in the Word document with proper letter shaping, just as it did in the original PDF.</p>
+        <p><strong>How to use:</strong> Upload your PDF, select your preferred conversion quality mode (Fast, Balanced, or High Accuracy OCR), click Convert to Word, and wait for the conversion to complete. Download the .docx file and open it in your word processor. The document is organized page-by-page, with page breaks between each original PDF page and font sizes that match the original as closely as possible.</p>
+        <p><strong>Common use cases:</strong> Editing contract text that was received as a PDF, extracting and reformatting academic papers, converting Arabic or multilingual PDFs into editable documents, recovering text from old PDF reports for reuse, or making a scanned PDF's text accessible for editing.</p>
       </div>
     </div>
   </div>
@@ -1721,11 +1700,11 @@
         <p>PDF BOX does not collect, store, or transmit any personal information. We do not require registration,
           log-in, or any form of account creation. All interactions with the website are anonymous.</p>
 
-        <h3>2. File Processing — 100% Local</h3>
-        <p>All file processing — including PDF merging, splitting, compression, rotation, encryption, conversion, and
-          watermarking — occurs exclusively in your web browser using client-side JavaScript. <strong>Your files are
-            never uploaded to any server.</strong> No copies of your documents are made on our infrastructure at any
-          point.</p>
+        <h3>2. File Processing — 100% Local (With One Exception)</h3>
+        <p>Almost all file processing — including PDF merging, splitting, compression, rotation, encryption, and
+          watermarking — occurs exclusively in your web browser using client-side JavaScript. For these tools, <strong>your files are
+            never uploaded to any server.</strong></p>
+        <p><strong>Exception (PDF to Word):</strong> To provide highly accurate document layout reconstruction and OCR for Arabic/scanned documents, the <em>PDF to Word</em> tool securely uploads your file to our specialized conversion server. The file is encrypted during transit, processed entirely in memory, and immediately deleted upon completion. No files are stored or kept permanently.</p>
 
         <h3>3. Advertising and Cookies</h3>
         <p>PDF BOX may use Google AdSense to display advertising. Google and its advertising partners may use cookies

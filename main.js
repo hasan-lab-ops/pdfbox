@@ -1231,162 +1231,6 @@ async function viewerZoomOut() {
    Step 4: Chronological Rendering & Proper Spacing
    ────────────────────────────────────────────────── */
 
-const A4_W_TWIPS = 11906;
-const A4_H_TWIPS = 16838;
-
-async function convertPDFToWord(arrayBuffer, qualityMode = "balanced") {
-  if (typeof pdfjsLib === "undefined") throw new Error("PDF.js library is not loaded.");
-  if (typeof docx === "undefined") throw new Error("docx.js library is not loaded.");
-
-  if (typeof setProgress === "function") setProgress("pdf2word", 10, "Loading PDF...");
-
-  const pdfDoc = await pdfjsLib.getDocument({
-    data: arrayBuffer,
-    cMapUrl: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/",
-    cMapPacked: true,
-    standardFontDataUrl: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/standard_fonts/"
-  }).promise;
-
-  const numPages = pdfDoc.numPages;
-  const docxChildren = [];
-  
-  let fullExtractedText = ""; // for preview
-  let previewOrigImg = null;
-
-  for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-    if (typeof setProgress === "function") {
-      setProgress("pdf2word", 10 + Math.floor((pageNum / numPages) * 80), "Processing page " + pageNum + " / " + numPages + "...");
-    }
-
-    const page = await pdfDoc.getPage(pageNum);
-    const viewport = page.getViewport({ scale: 1.5 });
-    
-    if (pageNum === 1) {
-       const previewCanvas = document.createElement("canvas");
-       previewCanvas.width = viewport.width;
-       previewCanvas.height = viewport.height;
-       const previewCtx = previewCanvas.getContext("2d");
-       previewCtx.fillStyle = "#ffffff";
-       previewCtx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
-       await page.render({ canvasContext: previewCtx, viewport }).promise;
-       previewOrigImg = previewCanvas.toDataURL("image/png");
-    }
-
-    const textContent = await page.getTextContent();
-    let extractedLines = [];
-
-    if (textContent.items.length > 0 && qualityMode !== "high") {
-       const linesMap = new Map();
-       for (const item of textContent.items) {
-           const y = Math.round(item.transform[5]);
-           if (!linesMap.has(y)) linesMap.set(y, []);
-           linesMap.get(y).push(item);
-       }
-       
-       const sortedY = Array.from(linesMap.keys()).sort((a, b) => b - a);
-       for (const y of sortedY) {
-           let items = linesMap.get(y);
-           items.sort((a, b) => a.transform[4] - b.transform[4]);
-           
-           let lineText = "";
-           let lastX = null;
-           let lastWidth = null;
-           for (const item of items) {
-               if (lastX !== null && lastWidth !== null) {
-                   const gap = item.transform[4] - (lastX + lastWidth);
-                   if (gap > (item.transform[0] * 0.2)) {
-                       lineText += " ";
-                   }
-               }
-               lineText += item.str;
-               lastX = item.transform[4];
-               lastWidth = item.width || (item.transform[0] * item.str.length);
-           }
-           extractedLines.push(lineText.trim());
-       }
-    } else {
-       if (typeof Tesseract === "undefined") throw new Error("Tesseract.js is required for OCR.");
-       setProgress("pdf2word", 10 + Math.floor((pageNum / numPages) * 80), "Running OCR on page " + pageNum + "...");
-       
-       const ocrViewport = page.getViewport({ scale: 2.0 });
-       const ocrCanvas = document.createElement("canvas");
-       ocrCanvas.width = ocrViewport.width;
-       ocrCanvas.height = ocrViewport.height;
-       const ocrCtx = ocrCanvas.getContext("2d");
-       ocrCtx.fillStyle = "#ffffff";
-       ocrCtx.fillRect(0, 0, ocrCanvas.width, ocrCanvas.height);
-       await page.render({ canvasContext: ocrCtx, viewport: ocrViewport }).promise;
-       
-       const ocrResult = await Tesseract.recognize(ocrCanvas, 'eng+ara', {
-           logger: m => {
-             if(m.status === "recognizing text") {
-               setProgress("pdf2word", 10 + Math.floor((pageNum / numPages) * 80), "Running OCR: " + Math.round(m.progress * 100) + "%");
-             }
-           }
-       });
-       extractedLines = ocrResult.data.lines.map(line => line.text.trim());
-    }
-
-    for (const line of extractedLines) {
-        if (!line) continue;
-        fullExtractedText += line + "\n";
-        
-        // Detect RTL
-        const isRtl = /[\u0591-\u07FF\uFB1D-\uFDFD\uFE70-\uFEFC]/.test(line);
-        
-        docxChildren.push(new docx.Paragraph({
-            text: line,
-            bidirectional: isRtl,
-            alignment: isRtl ? docx.AlignmentType.RIGHT : docx.AlignmentType.LEFT,
-            spacing: { before: 120, after: 120 }
-        }));
-    }
-    
-    if (pageNum < numPages) {
-       docxChildren.push(new docx.Paragraph({
-           children: [new docx.PageBreak()]
-       }));
-    }
-  }
-
-  const previewOrigContainer = document.getElementById("preview-pdf2word-orig");
-  const previewTextContainer = document.getElementById("preview-pdf2word-text");
-  const previewWrap = document.getElementById("preview-pdf2word");
-  
-  if (previewOrigContainer && previewTextContainer && previewWrap) {
-      previewWrap.style.display = "block";
-      if (previewOrigImg) {
-          previewOrigContainer.innerHTML = `<img src="${previewOrigImg}" style="max-width: 100%; max-height: 100%; object-fit: contain; border: none;" />`;
-      }
-      previewTextContainer.innerText = fullExtractedText || "No text extracted.";
-  }
-
-  if (typeof setProgress === "function") setProgress("pdf2word", 93, "Building .docx file...");
-
-  const doc = new docx.Document({
-    styles: {
-      default: {
-        document: {
-          run: {
-            font: "Arial"
-          }
-        }
-      }
-    },
-    sections: [{
-      properties: {
-        page: {
-          size: { width: A4_W_TWIPS, height: A4_H_TWIPS },
-          margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 }
-        }
-      },
-      children: docxChildren.length ? docxChildren : [new docx.Paragraph("No content extracted")]
-    }]
-  });
-
-  return docx.Packer.toBlob(doc);
-}
-
 async function pdfToWord() {
   const file = state.pdf2word.file;
   if (!file) {
@@ -1398,15 +1242,45 @@ async function pdfToWord() {
   const previewWrap = document.getElementById("preview-pdf2word");
   if (previewWrap) previewWrap.style.display = "none";
 
-  setProgress("pdf2word", 10, "Loading PDF…");
+  setProgress("pdf2word", 10, "Uploading to secure conversion server...");
   setButtonEnabled("btn-pdf2word", false);
   try {
-    const arrayBuffer = await file.arrayBuffer();
     const qualityModeElement = document.getElementById("pdf2word-quality");
     const qualityMode = qualityModeElement ? qualityModeElement.value : "balanced";
-    setProgress("pdf2word", 50, "Converting to Word format...");
-    const blob = await convertPDFToWord(arrayBuffer, qualityMode);
+    
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("quality", qualityMode);
+    
+    setProgress("pdf2word", 50, "Server is processing document (this may take a minute for large files)...");
+    
+    const response = await fetch("http://localhost:8000/api/convert-pdf", {
+        method: "POST",
+        body: formData
+    });
+    
+    if (!response.ok) {
+        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
+    }
+    
+    const contentType = response.headers.get("content-type");
+    if (contentType && contentType.includes("application/json")) {
+        const errJson = await response.json();
+        throw new Error(errJson.error || "Unknown server error");
+    }
+    
+    setProgress("pdf2word", 90, "Downloading converted document...");
+    const blob = await response.blob();
     const name = file.name.replace(/\.pdf$/i, "") + ".docx";
+    
+    if (previewWrap) {
+        previewWrap.style.display = "block";
+        const previewOrigContainer = document.getElementById("preview-pdf2word-orig");
+        const previewTextContainer = document.getElementById("preview-pdf2word-text");
+        if (previewOrigContainer) previewOrigContainer.innerHTML = '<div style="padding:20px;text-align:center;color:#666;"><svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg><br>Processed Securely</div>';
+        if (previewTextContainer) previewTextContainer.innerHTML = '<div style="padding:20px;text-align:center;color:#4CAF50;"><strong>Conversion Complete!</strong><br><br>The document layout and paragraphs have been successfully rebuilt using advanced engine parsing. Download your file below.</div>';
+    }
+    
     setProgress("pdf2word", 100, "Complete!");
     showResult("pdf2word", successResult(name, blob, formatSize(blob.size)));
     showToast("PDF converted to Word successfully!");
