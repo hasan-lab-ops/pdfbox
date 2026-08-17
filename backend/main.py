@@ -49,10 +49,16 @@ def convert_pdf_to_word_task(task_id: str, input_pdf_path: str, output_docx_path
     tasks[task_id]["status"] = "processing"
     
     try:
-        # Assuming Windows default LibreOffice installation path
-        soffice_path = r"C:\Program Files\LibreOffice\program\soffice.exe"
+        # Find LibreOffice executable cross-platform
+        soffice_path = shutil.which("soffice")
+        if not soffice_path:
+            if os.name == 'nt':
+                soffice_path = r"C:\Program Files\LibreOffice\program\soffice.exe"
+            else:
+                soffice_path = "/usr/bin/soffice"
+                
         if not os.path.exists(soffice_path):
-            raise Exception("LibreOffice is not installed or not found at default path.")
+            raise Exception(f"LibreOffice is not installed or not found at {soffice_path}.")
             
         process = subprocess.run(
             [
@@ -227,10 +233,16 @@ def office_to_pdf_task(task_id: str, input_path: str, temp_dir: str):
     tasks[task_id]["status"] = "processing"
     
     try:
-        # Assuming Windows default LibreOffice installation path
-        soffice_path = r"C:\Program Files\LibreOffice\program\soffice.exe"
+        # Find LibreOffice executable cross-platform
+        soffice_path = shutil.which("soffice")
+        if not soffice_path:
+            if os.name == 'nt':
+                soffice_path = r"C:\Program Files\LibreOffice\program\soffice.exe"
+            else:
+                soffice_path = "/usr/bin/soffice"
+                
         if not os.path.exists(soffice_path):
-            raise Exception("LibreOffice is not installed or not found at default path.")
+            raise Exception(f"LibreOffice is not installed or not found at {soffice_path}.")
             
         process = subprocess.run(
             [soffice_path, "--headless", "--convert-to", "pdf", input_path, "--outdir", temp_dir],
