@@ -61,54 +61,56 @@ async def convert_pdf(background_tasks: BackgroundTasks, file: UploadFile = File
             except Exception as e:
                 print(f"OCR Pipeline failed: {e}. Falling back to standard conversion.")
                 
-        # Convert to DOCX using pdf2docx
-        print(f"Converting {input_pdf_path} to DOCX...")
-        cv = Converter(input_pdf_path)
-        cv.convert(output_docx_path, start=0, end=None)
-        cv.close()
+        # --- CONVERT TO DOCX ---
+        import docx
+        import pymupdf as fitz
+        import arabic_reshaper
+        from bidi.algorithm import get_display
+        from docx.enum.text import WD_ALIGN_PARAGRAPH
         
-        # --- POST-PROCESSING FOR ARABIC AND RTL ---
-        try:
-            import docx
-            import arabic_reshaper
-            from bidi.algorithm import get_display
-            from docx.enum.text import WD_ALIGN_PARAGRAPH
+        def is_arabic(text):
+            return any('\u0600' <= c <= '\u06FF' for c in text)
+
+        print(f"Converting {input_pdf_path} to DOCX using block extraction...")
+        
+        pdf = fitz.open(input_pdf_path)
+        doc = docx.Document()
+        
+        for page in pdf:
+            blocks = page.get_text("blocks")
+            # Sort by Y position primarily, then X position
+            blocks.sort(key=lambda b: (b[1], b[0]))
             
-            def is_arabic(text):
-                return any('\u0600' <= c <= '\u06FF' for c in text)
-            
-            print("Running Arabic/RTL post-processing on DOCX...")
-            doc = docx.Document(output_docx_path)
-            
-            for p in doc.paragraphs:
-                if not p.text:
+            for b in blocks:
+                if b[6] != 0: # 0 means text block, 1 means image block
                     continue
-                if is_arabic(p.text):
-                    reshaped = arabic_reshaper.reshape(p.text)
+                    
+                text = b[4].strip()
+                if not text:
+                    continue
+                    
+                # Clean up PDF manual line breaks to allow Word to flow text naturally
+                text = text.replace('\n', ' ')
+                
+                p = doc.add_paragraph()
+                
+                if is_arabic(text):
+                    # Shape and Bidi the ENTIRE block (paragraph)
+                    reshaped = arabic_reshaper.reshape(text)
                     bidi_text = get_display(reshaped)
-                    p.clear()
+                    
                     run = p.add_run(bidi_text)
                     run.font.name = 'Arial'
                     p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                else:
+                    run = p.add_run(text)
+                    run.font.name = 'Arial'
+                    
+            # Add page break after each page (except maybe the last)
+            doc.add_page_break()
             
-            for table in doc.tables:
-                for row in table.rows:
-                    for cell in row.cells:
-                        for p in cell.paragraphs:
-                            if not p.text:
-                                continue
-                            if is_arabic(p.text):
-                                reshaped = arabic_reshaper.reshape(p.text)
-                                bidi_text = get_display(reshaped)
-                                p.clear()
-                                run = p.add_run(bidi_text)
-                                run.font.name = 'Arial'
-                                p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-            
-            doc.save(output_docx_path)
-            print("Post-processing complete.")
-        except Exception as ex:
-            print(f"Error during Arabic post-processing: {ex}")
+        doc.save(output_docx_path)
+        print("Conversion complete.")
             
 
         
