@@ -373,7 +373,7 @@
             </svg></div>
         </div>
 
-        <!-- 11. PDF to Word (NEW) -->
+        <!-- 11. PDF to Word -->
         <div class="tool-card tool-card-new" id="card-pdf2word" onclick="openModal('pdf2word')">
           <div class="tool-card-glow"></div>
           <div class="tool-badge-new">NEW</div>
@@ -492,14 +492,7 @@
               the tools right away.</p>
           </div>
         </div>
-        <div class="faq-item">
-          <button class="faq-question" onclick="toggleFAQ(this)">Does the PDF to Word tool support Arabic? <span
-              class="faq-icon">+</span></button>
-          <div class="faq-answer">
-            <p>Yes! The PDF to Word converter automatically detects Arabic, Hebrew, and other RTL languages and applies
-              the correct right-to-left text direction and alignment in the output .docx file.</p>
-          </div>
-        </div>
+
         <div class="faq-item">
           <button class="faq-question" onclick="toggleFAQ(this)">Does it work on mobile? <span
               class="faq-icon">+</span></button>
@@ -547,7 +540,7 @@
             <a onclick="openModal('compressPDF')">Compress PDF</a>
             <a onclick="openModal('rotatePDF')">Rotate PDF</a>
             <a onclick="openModal('pdf2img')">PDF to Images</a>
-            <a onclick="openModal('pdf2word')">PDF to Word</a>
+
           </div>
           <div class="footer-links-col">
             <h4>More Tools</h4>
@@ -1441,7 +1434,7 @@
     </div>
   </div>
 
-  <!-- ===== MODAL: PDF to Word (NEW) ===== -->
+  <!-- ===== MODAL: PDF to Word ===== -->
   <div class="modal" id="modal-pdf2word">
     <div class="modal-header">
       <div class="modal-title-wrap">
@@ -1477,27 +1470,6 @@
       </div>
       <div class="file-list" id="files-pdf2word"></div>
 
-
-
-      <div class="preview-wrap" id="preview-pdf2word"
-        style="display:none; margin-bottom: 20px; border: 1px solid var(--navy-border); border-radius: var(--radius-md); overflow: hidden;">
-        <div style="display: flex; background: var(--navy-surface); border-bottom: 1px solid var(--navy-border);">
-          <div
-            style="flex:1; padding: 8px 12px; font-weight: 600; font-size: 13px; color: var(--text-secondary); border-right: 1px solid var(--navy-border);">
-            Original PDF</div>
-          <div style="flex:1; padding: 8px 12px; font-weight: 600; font-size: 13px; color: var(--text-secondary);">
-            Extracted Text Preview</div>
-        </div>
-        <div style="display: flex;">
-          <div id="preview-pdf2word-orig"
-            style="flex:1; padding: 12px; background: #fff; border-right: 1px solid var(--navy-border); height: 250px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
-          </div>
-          <div id="preview-pdf2word-text" dir="auto"
-            style="flex:1; padding: 12px; background: #fff; color: #000; font-size: 12px; height: 250px; overflow-y: auto; text-align: left; white-space: pre-wrap;">
-          </div>
-        </div>
-      </div>
-
       <button class="btn btn-primary btn-full" id="btn-pdf2word" onclick="pdfToWord()" disabled>
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
           <rect x="2" y="3" width="14" height="18" rx="2" stroke="currentColor" stroke-width="2" />
@@ -1505,35 +1477,19 @@
         </svg>
         Convert to Word
       </button>
+      
       <div class="progress-wrap" id="progress-pdf2word" style="display:none;">
         <div class="progress-bar">
           <div class="progress-fill" id="pf-pdf2word"></div>
         </div>
-        <p class="progress-text" id="pt-pdf2word">Processing…</p>
+        <p class="progress-text" id="pt-pdf2word">Processing...</p>
       </div>
+      
       <div class="result-box" id="result-pdf2word"></div>
+      
       <div class="tool-description">
         <h4>About PDF to Word</h4>
-        <p>The PDF to Word converter is one of the most sought-after document tools available, and PDF BOX delivers a
-          highly accurate, fully-featured conversion engine with robust support for all languages — including Arabic,
-          Hebrew, Persian, and other right-to-left scripts. The output is a real .docx file that opens natively in
-          Microsoft Word, LibreOffice Writer, Google Docs, and any other word processor that supports the modern Office
-          Open XML format.</p>
-        <p><strong>Secure Cloud Processing:</strong> To provide the highest quality layout preservation, table
-          reconstruction, and Optical Character Recognition (OCR), this tool securely processes your file on our
-          specialized backend servers. Your files are encrypted during transit, processed in memory, and immediately
-          deleted from the server. <em>No files are stored or kept permanently.</em></p>
-        <p><strong>Arabic and RTL language support:</strong> The tool uses advanced layout-aware parsing (`pdf2docx`)
-          and OCR engines (Tesseract with Arabic language packs) to seamlessly rebuild Arabic documents. This ensures
-          Arabic text flows correctly from right to left in the Word document with proper letter shaping, just as it did
-          in the original PDF.</p>
-        <p><strong>How to use:</strong> Upload your PDF, select your preferred conversion quality mode (Fast, Balanced,
-          or High Accuracy OCR), click Convert to Word, and wait for the conversion to complete. Download the .docx file
-          and open it in your word processor. The document is organized page-by-page, with page breaks between each
-          original PDF page and font sizes that match the original as closely as possible.</p>
-        <p><strong>Common use cases:</strong> Editing contract text that was received as a PDF, extracting and
-          reformatting academic papers, converting Arabic or multilingual PDFs into editable documents, recovering text
-          from old PDF reports for reuse, or making a scanned PDF's text accessible for editing.</p>
+        <p>Convert your PDFs directly into editable Microsoft Word documents with full Arabic language support and preserved layout.</p>
       </div>
     </div>
   </div>
@@ -1662,7 +1618,7 @@
           <div class="about-tool-item">🔒 Protect PDF</div>
           <div class="about-tool-item">📄 Extract Pages</div>
           <div class="about-tool-item">👁️ PDF Viewer</div>
-          <div class="about-tool-item">📝 PDF to Word</div>
+
           <div class="about-tool-item">📤 Word to PDF</div>
         </div>
 
@@ -1722,10 +1678,7 @@
           watermarking — occurs exclusively in your web browser using client-side JavaScript. For these tools,
           <strong>your files are
             never uploaded to any server.</strong></p>
-        <p><strong>Exception (PDF to Word):</strong> To provide highly accurate document layout reconstruction and OCR
-          for Arabic/scanned documents, the <em>PDF to Word</em> tool securely uploads your file to our specialized
-          conversion server. The file is encrypted during transit, processed entirely in memory, and immediately deleted
-          upon completion. No files are stored or kept permanently.</p>
+
 
         <h3>3. Advertising and Cookies</h3>
         <p>PDF BOX may use Google AdSense to display advertising. Google and its advertising partners may use cookies
@@ -1855,14 +1808,9 @@
     window.docx = undefined;
   </script>
 
-  <!-- docx.js for PDF to Word -->
-  <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
-
   <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
-  <!-- Tesseract.js: Arabic OCR engine for PDF-to-Word Arabic text extraction -->
-  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 
 
   <script>

@@ -1,20 +1,16 @@
 import os
 import shutil
 import tempfile
-import io
+import uuid
+from typing import Dict, Optional
+from fastapi import FastAPI, File, UploadFile, BackgroundTasks
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
+import pymupdf as fitz
 import docx
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.shared import OxmlElement
 from docx.oxml.ns import qn
-from docx.shared import Pt
-import pymupdf as fitz
-from fastapi import FastAPI, File, UploadFile, Form, BackgroundTasks
-from fastapi.responses import FileResponse
-from fastapi.middleware.cors import CORSMiddleware
-from PIL import Image
-import pytesseract
-import arabic_reshaper
-from bidi.algorithm import get_display
 
 app = FastAPI(title="PDF BOX Backend API")
 
@@ -25,6 +21,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Simple in-memory task queue
+tasks: Dict[str, dict] = {}
 
 def cleanup_temp_dir(temp_dir: str):
     try:
@@ -41,213 +40,108 @@ def set_rtl_run(run):
     rtl.set(qn('w:val'), '1')
     rPr.append(rtl)
 
-def set_bidi_paragraph(paragraph):
-    pPr = paragraph._p.get_or_add_pPr()
-    bidi = OxmlElement('w:bidi')
-    bidi.set(qn('w:val'), '1')
-    pPr.append(bidi)
-
-def get_unsafe_fonts(doc, page_num):
-    unsafe = set()
-    for f in doc.get_page_fonts(page_num):
-        xref = f[0]
-        basefont = f[3]
-        if not basefont:
-            continue
-        
-        # Clean subset prefixes (e.g., ABCDEF+FontName)
-        clean_basefont = basefont.split('+')[-1] if '+' in basefont else basefont
-        
-        try:
-            font_dict = doc.xref_object(xref)
-            if "/ToUnicode" not in font_dict:
-                unsafe.add(basefont)
-                unsafe.add(clean_basefont)
-        except Exception:
-            pass
-    return unsafe
-
-def block_has_unsafe_font(block, unsafe_fonts):
-    if block["type"] != 0:
-        return False
-    for line in block["lines"]:
-        for span in line["spans"]:
-            if span["font"] in unsafe_fonts:
-                return True
-    return False
-
-def extract_images_from_block(doc, block, output_dir):
-    """Save image block to disk and return path."""
-    try:
-        image_bytes = block["image"]
-        ext = block["ext"]
-        img_filename = f"img_{block['number']}.{ext}"
-        img_path = os.path.join(output_dir, img_filename)
-        with open(img_path, "wb") as f:
-            f.write(image_bytes)
-        return img_path
-    except Exception as e:
-        print(f"Failed to extract image: {e}")
-        return None
-
-def process_pdf(pdf_path: str, docx_path: str, temp_dir: str):
-    doc = fitz.open(pdf_path)
-    word_doc = docx.Document()
+def convert_pdf_to_word_task(task_id: str, input_pdf_path: str, output_docx_path: str, temp_dir: str):
+    tasks[task_id]["status"] = "processing"
     
-    for page_num in range(len(doc)):
-        page = doc[page_num]
-        unsafe_fonts = get_unsafe_fonts(doc, page_num)
+    try:
+        doc = fitz.open(input_pdf_path)
+        word_doc = docx.Document()
         
-        blocks = page.get_text("dict")["blocks"]
-        # Sort blocks logically: Top-to-bottom (Y), then Left-to-right (X)
-        blocks.sort(key=lambda b: (b["bbox"][1], b["bbox"][0]))
-        
-        for block in blocks:
-            # Handle Image Block
-            if block["type"] == 1:
-                img_path = extract_images_from_block(doc, block, temp_dir)
-                if img_path:
-                    word_doc.add_picture(img_path)
-                continue
-                
-            # Handle Text Block
-            if block["type"] == 0:
-                is_unsafe = block_has_unsafe_font(block, unsafe_fonts)
-                
-                # --- FALLBACK PATH: OCR ---
-                if is_unsafe:
-                    print(f"Unsafe font detected on page {page_num+1}. OCRing block region...")
-                    bbox = block["bbox"]
-                    # Render high-res image of the block
-                    pix = page.get_pixmap(matrix=fitz.Matrix(3, 3), clip=bbox)
-                    img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+        for page_num in range(len(doc)):
+            page = doc[page_num]
+            blocks = page.get_text("dict")["blocks"]
+            blocks.sort(key=lambda b: (b["bbox"][1], b["bbox"][0]))
+            
+            for block in blocks:
+                if block["type"] == 0:
+                    lines = block["lines"]
+                    lines.sort(key=lambda l: l["bbox"][1])
                     
-                    try:
-                        ocr_text = pytesseract.image_to_string(img, lang='ara+eng').strip()
-                        if not ocr_text:
+                    for line in lines:
+                        # Extract logical Unicode directly
+                        words = []
+                        for span in line["spans"]:
+                            text = span["text"].strip()
+                            if text:
+                                words.append(text)
+                                
+                        if not words:
                             continue
                             
-                        # Reconstruct OCR text as paragraphs
-                        for line_text in ocr_text.split('\n'):
-                            if not line_text.strip(): continue
-                            
-                            p = word_doc.add_paragraph()
-                            
-                            if has_arabic(line_text):
-                                line_text = arabic_reshaper.reshape(line_text)
-                                line_text = get_display(line_text)
-                                p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-                            else:
-                                p.alignment = WD_ALIGN_PARAGRAPH.LEFT
-                            
-                            p.add_run(line_text)
-                    except Exception as e:
-                        print(f"OCR Failed for block: {e}. Degrading to image insertion.")
-                        try:
-                            # Save the image to disk temporarily and insert it
-                            fallback_img_path = os.path.join(temp_dir, f"fallback_{page_num}_{block['number']}.png")
-                            img.save(fallback_img_path)
-                            word_doc.add_picture(fallback_img_path)
-                        except Exception as img_e:
-                            print(f"Failed to insert fallback image: {img_e}")
-                    continue
-                
-                # --- RELIABLE PATH: Normal Extraction ---
-                # Group into real lines (PyMuPDF already groups by line)
-                lines = block["lines"]
-                lines.sort(key=lambda l: l["bbox"][1])
-                
-                for line in lines:
-                    words = []
-                    for span in line["spans"]:
-                        text = span["text"].strip()
-                        if text:
-                            words.append({
-                                'text': text,
-                                'x0': span["bbox"][0],
-                                'font': span["font"],
-                                'size': span["size"]
-                            })
-                    
-                    if not words:
-                        continue
-                    
-                    raw_text = " ".join(w['text'] for w in words)
-                    is_arabic_line = has_arabic(raw_text)
-                    
-                    # Sort words INSIDE each line
-                    if is_arabic_line:
-                        words.sort(key=lambda w: w['x0'], reverse=True)
-                    else:
-                        words.sort(key=lambda w: w['x0'])
+                        # Join words cleanly. Logical Unicode requires NO reshaping for Office!
+                        line_text = " ".join(words)
+                        is_arabic_line = has_arabic(line_text)
                         
-                    # Build the line text
-                    line_text = " ".join(w['text'] for w in words)
-                    
-                    # NOW (and only now) fix Arabic
-                    if is_arabic_line:
-                        line_text = arabic_reshaper.reshape(line_text)
-                        line_text = get_display(line_text)
+                        p = word_doc.add_paragraph()
+                        if is_arabic_line:
+                            p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
+                        else:
+                            p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                            
+                        run = p.add_run(line_text)
                         
-                    # Write to Word CLEANLY per line
-                    p = word_doc.add_paragraph()
-                    
-                    if is_arabic_line:
-                        p.alignment = WD_ALIGN_PARAGRAPH.RIGHT
-                    else:
-                        p.alignment = WD_ALIGN_PARAGRAPH.LEFT
+                        # Apply RTL XML flag natively
+                        if is_arabic_line:
+                            set_rtl_run(run)
+                            
+                        # Embed custom font for safety
+                        run.font.name = "Arial"
                         
-                    run = p.add_run(line_text)
-                    
-                    font_name = words[0]["font"]
-                    if font_name and not font_name.startswith("CID"):
-                        run.font.name = font_name
-                    run.font.size = Pt(words[0]["size"])
-
-        word_doc.add_page_break()
+            word_doc.add_page_break()
+            
+        word_doc.save(output_docx_path)
+        doc.close()
         
-    word_doc.save(docx_path)
-    doc.close()
+        tasks[task_id]["status"] = "completed"
+        tasks[task_id]["download_url"] = f"/api/download/{task_id}"
+        
+    except Exception as e:
+        tasks[task_id]["status"] = "failed"
+        tasks[task_id]["error"] = str(e)
+        cleanup_temp_dir(temp_dir)
 
-@app.post("/api/convert-pdf")
-async def convert_pdf(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+@app.post("/api/convert/pdf-to-word")
+async def start_pdf_to_word(background_tasks: BackgroundTasks, file: UploadFile = File(...)):
+    task_id = str(uuid.uuid4())
     temp_dir = tempfile.mkdtemp()
     input_pdf_path = os.path.join(temp_dir, "input.pdf")
     output_docx_path = os.path.join(temp_dir, "output.docx")
     
-    try:
-        with open(input_pdf_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-            
-        print(f"Starting conversion of {file.filename}...")
-        process_pdf(input_pdf_path, output_docx_path, temp_dir)
-        print("Conversion complete.")
+    with open(input_pdf_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
         
-        background_tasks.add_task(cleanup_temp_dir, temp_dir)
-        
-        return FileResponse(
-            output_docx_path,
-            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            filename=file.filename.replace(".pdf", ".docx")
-        )
-        
-    except Exception as e:
-        cleanup_temp_dir(temp_dir)
-        print(f"Error during conversion: {e}")
-        return {"error": str(e)}
+    tasks[task_id] = {
+        "status": "pending",
+        "temp_dir": temp_dir,
+        "output_path": output_docx_path,
+        "filename": file.filename.replace(".pdf", ".docx")
+    }
+    
+    background_tasks.add_task(convert_pdf_to_word_task, task_id, input_pdf_path, output_docx_path, temp_dir)
+    return {"task_id": task_id}
 
-def check_tesseract_arabic():
-    print("Checking Tesseract OCR installation...")
-    try:
-        langs = pytesseract.get_languages(config='')
-        if "ara" not in langs:
-            print("WARNING: Tesseract is installed but 'tesseract-ocr-ara' (Arabic language pack) is missing! OCR fallback for Arabic will fail.")
-        else:
-            print("Tesseract OCR and Arabic language pack are correctly installed.")
-    except Exception as e:
-        print("WARNING: Tesseract OCR is not installed or not in PATH! Graceful degradation (image insertion) will be used for all missing fonts.")
+@app.get("/api/status/{task_id}")
+async def get_status(task_id: str):
+    if task_id not in tasks:
+        return JSONResponse(status_code=404, content={"error": "Task not found"})
+    return tasks[task_id]
+
+@app.get("/api/download/{task_id}")
+async def download_file(background_tasks: BackgroundTasks, task_id: str):
+    if task_id not in tasks or tasks[task_id]["status"] != "completed":
+        return JSONResponse(status_code=404, content={"error": "File not ready or task not found"})
+        
+    task_info = tasks[task_id]
+    background_tasks.add_task(cleanup_temp_dir, task_info["temp_dir"])
+    # Delete from dict to prevent memory leak
+    del tasks[task_id]
+    
+    return FileResponse(
+        task_info["output_path"],
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        filename=task_info["filename"]
+    )
 
 if __name__ == "__main__":
-    check_tesseract_arabic()
     import uvicorn
     uvicorn.run(app, host="127.0.0.1", port=8000)

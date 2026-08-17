@@ -105,8 +105,7 @@ function handleDrop(e, inputId) {
     "protect",
     "extract",
     "viewer",
-    "pdf2word",
-  ];
+    "pdf2word",  ];
   if (pdfOnlyTools.includes(tool)) {
     if (!arr[0].name.toLowerCase().endsWith(".pdf")) {
       showToast("Please select a valid PDF file.", "error");
@@ -198,8 +197,7 @@ function handleDrop(e, inputId) {
       state.pdf2word.file = arr[0];
       renderFileList("pdf2word", [arr[0]], false);
       setButtonEnabled("btn-pdf2word", true);
-      break;
-    case "word2pdf":
+      break;    case "word2pdf":
       state.word2pdf.file = arr[0];
       renderFileList("word2pdf", [arr[0]], false);
       setButtonEnabled("btn-word2pdf", true);
@@ -1222,15 +1220,9 @@ async function viewerZoomOut() {
   await renderViewerPage(state.viewer.page);
 }
 
-/* ──────────────────────────────────────────────────
-   11. PDF TO WORD
-   Production 4-step pipeline:
-   Step 1: Advanced Layout & Line Grouping
-   Step 2: Robust BiDi & Arabic Handling
-   Step 3: Image Extraction via Operator List
-   Step 4: Chronological Rendering & Proper Spacing
+/* ──────────────────────────────────────────────────   11. PDF TO WORD
+   Sends PDF to FastAPI backend, polls for task completion, and downloads DOCX.
    ────────────────────────────────────────────────── */
-
 async function pdfToWord() {
   const file = state.pdf2word.file;
   if (!file) {
@@ -1239,43 +1231,51 @@ async function pdfToWord() {
   }
   showResult("pdf2word", "");
   
-  const previewWrap = document.getElementById("preview-pdf2word");
-  if (previewWrap) previewWrap.style.display = "none";
-
   setProgress("pdf2word", 10, "Uploading to secure conversion server...");
   setButtonEnabled("btn-pdf2word", false);
   try {
     const formData = new FormData();
     formData.append("file", file);
     
-    setProgress("pdf2word", 50, "Server is processing document (this may take a minute for large files)...");
-    
-    const response = await fetch("http://localhost:8000/api/convert-pdf", {
+    // Start task
+    const response = await fetch("http://127.0.0.1:8000/api/convert/pdf-to-word", {
         method: "POST",
         body: formData
     });
     
-    if (!response.ok) {
-        throw new Error(`Server returned ${response.status}: ${response.statusText}`);
-    }
+    if (!response.ok) throw new Error("Upload failed");
+    const { task_id } = await response.json();
     
-    const contentType = response.headers.get("content-type");
-    if (contentType && contentType.includes("application/json")) {
-        const errJson = await response.json();
-        throw new Error(errJson.error || "Unknown server error");
+    setProgress("pdf2word", 30, "Server is processing document (applying Arabic RTL layout)...");
+    
+    // Poll status
+    let status = "pending";
+    let download_url = "";
+    while (status === "pending" || status === "processing") {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        const statusRes = await fetch(`http://127.0.0.1:8000/api/status/${task_id}`);
+        if (!statusRes.ok) throw new Error("Failed to check status");
+        
+        const data = await statusRes.json();
+        status = data.status;
+        
+        if (status === "failed") {
+            throw new Error(data.error || "Server processing failed");
+        }
+        if (status === "completed") {
+            download_url = data.download_url;
+            break;
+        }
     }
     
     setProgress("pdf2word", 90, "Downloading converted document...");
-    const blob = await response.blob();
-    const name = file.name.replace(/\.pdf$/i, "") + ".docx";
     
-    if (previewWrap) {
-        previewWrap.style.display = "block";
-        const previewOrigContainer = document.getElementById("preview-pdf2word-orig");
-        const previewTextContainer = document.getElementById("preview-pdf2word-text");
-        if (previewOrigContainer) previewOrigContainer.innerHTML = '<div style="padding:20px;text-align:center;color:#666;"><svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg><br>Processed Securely</div>';
-        if (previewTextContainer) previewTextContainer.innerHTML = '<div style="padding:20px;text-align:center;color:#4CAF50;"><strong>Conversion Complete!</strong><br><br>The document layout and paragraphs have been successfully rebuilt using advanced engine parsing. Download your file below.</div>';
-    }
+    // Download
+    const dlRes = await fetch(`http://127.0.0.1:8000${download_url}`);
+    if (!dlRes.ok) throw new Error("Failed to download file");
+    
+    const blob = await dlRes.blob();
+    const name = file.name.replace(/\.pdf$/i, "") + ".docx";
     
     setProgress("pdf2word", 100, "Complete!");
     showResult("pdf2word", successResult(name, blob, formatSize(blob.size)));
@@ -1289,6 +1289,8 @@ async function pdfToWord() {
     setTimeout(() => setProgress("pdf2word", null), 1500);
   }
 }
+
+
 /* ──────────────────────────────────────────────────   12. WORD TO PDF
    Uses docx-preview to render the Word document visually with exact layout.
    Includes a custom JSZip fallback to manually extract page borders and 

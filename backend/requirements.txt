@@ -1,6 +1,8 @@
 fastapi
 uvicorn
-pdf2docx
-pytesseract
-pdf2image
 python-multipart
+pymupdf
+python-docx
+openpyxl
+python-pptx
+pytesseract
