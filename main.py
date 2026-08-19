@@ -28,31 +28,7 @@ def get_python_path() -> str:
             return win_path
     return "python3"
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    global uno_process
-    print("[UNOSERVER] Starting LibreOffice listener...")
-    try:
-        executable = get_libreoffice_path()
-        python_exe = get_python_path()
-        
-        uno_process = subprocess.Popen(
-            [python_exe, "-m", "unoserver.server", "--executable", executable],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
-        )
-        print("[UNOSERVER] Started successfully.")
-    except Exception as e:
-        print(f"[UNOSERVER] Failed to start: {e}")
-        
-    yield
-    
-    print("[UNOSERVER] Shutting down LibreOffice listener...")
-    if uno_process:
-        uno_process.terminate()
-        uno_process.wait()
-
-app = FastAPI(title="PDF BOX Backend API", lifespan=lifespan)
+app = FastAPI(title="PDF BOX Backend API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -106,31 +82,16 @@ def convert_pdf_to_word_task(task_id: str, input_pdf_path: str, output_docx_path
     
     try:
         lo_start = time.time()
-        print(f"[TIMING] Invoking LibreOffice at {lo_start} (elapsed: {lo_start - start_time:.2f}s)")
         
-        process = subprocess.run(
-            [
-                get_python_path(), 
-                "-c", "import sys; from unoserver.client import converter_main; sys.argv.pop(0); converter_main()",
-                "unoconvert",
-                "--input-filter", "writer_pdf_import",
-                "--convert-to", "docx",
-                input_pdf_path, 
-                output_docx_path
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True
-        )
+        # Using custom local conversion instead of server
+        from pdf_to_word import convert_pdf_to_word_local
+        convert_pdf_to_word_local(input_pdf_path, output_docx_path)
         
         lo_end = time.time()
-        print(f"[TIMING] LibreOffice finished at {lo_end} (duration: {lo_end - lo_start:.2f}s)")
-        
-        if process.returncode != 0:
-            raise Exception(f"LibreOffice conversion failed: {process.stderr}")
+        print(f"[TIMING] Custom conversion finished at {lo_end} (duration: {lo_end - lo_start:.2f}s)")
             
         if not os.path.exists(output_docx_path):
-            raise Exception("LibreOffice did not generate the output file.")
+            raise Exception("Custom converter did not generate the output file.")
             
         tasks[task_id]["status"] = "completed"
         tasks[task_id]["download_url"] = f"/api/download/{task_id}"
@@ -286,11 +247,11 @@ def office_to_pdf_task(task_id: str, input_path: str, temp_dir: str):
         output_pdf_path = os.path.join(temp_dir, "input.pdf")
         process = subprocess.run(
             [
-                get_python_path(), 
-                "-c", "import sys; from unoserver.client import converter_main; sys.argv.pop(0); converter_main()",
+                get_python_path(),
+                "-m", "unoserver.client",
                 "unoconvert",
-                "--convert-to", "pdf", 
-                input_path, 
+                "--convert-to", "pdf",
+                input_path,
                 output_pdf_path
             ],
             stdout=subprocess.PIPE,
@@ -299,7 +260,7 @@ def office_to_pdf_task(task_id: str, input_path: str, temp_dir: str):
         )
         
         if process.returncode != 0:
-            raise Exception(f"LibreOffice conversion failed: {process.stderr}")
+            raise Exception(f"LibreOffice conversion failed (code {process.returncode}): {process.stderr.strip()}")
             
         tasks[task_id]["status"] = "completed"
         tasks[task_id]["download_url"] = f"/api/download/{task_id}"
