@@ -1235,7 +1235,7 @@ async function viewerZoomOut() {
 }
 
 /* ──────────────────────────────────────────────────   11. PDF TO WORD
-   High-Quality Browser-Only Conversion with PDF.js & DOCX.js
+   High-Quality Browser-Only Conversion with PDF.js & DOCX.js (Snapshot Method)
    ────────────────────────────────────────────────── */
 async function pdfToWord() {
   const file = state.pdf2word.file;
@@ -1260,21 +1260,38 @@ async function pdfToWord() {
       
       const page = await pdf.getPage(i);
       
-      // 1. EXTRACT TEXT & IMAGES WITH Y-COORDINATES
-      const elements = await extractElementsFromPage(page);
+      // 1. EXTRACT TEXT
+      const items = await extractTextFromPage(page);
       
       // 2. GROUP INTO LINES (Math.abs(y1 - y2) < 5)
-      const lines = groupElementsByY(elements);
+      const lines = groupItemsIntoLines(items);
       
       // 3. DETECT PARAGRAPHS
       const paragraphs = detectParagraphs(lines);
 
-      // 4. BUILD DOCX PARAGRAPHS (incorporating Sentence-level Arabic Fix, Images, Headings, Lists)
-      const pageSections = buildDocxParagraphs(paragraphs, bidiFactory);
+      // 4. BUILD DOCX TEXT PARAGRAPHS (incorporating Sentence-level Arabic Fix)
+      const pageTextSections = buildDocxParagraphs(paragraphs, bidiFactory);
+      docxSections.push(...pageTextSections);
       
-      docxSections.push(...pageSections);
+      // 5. EXTRACT PAGE SNAPSHOT
+      const imgBase64 = await extractPageSnapshot(page);
       
-      if (i < totalPages && docxSections.length > 0) {
+      // 6. APPEND PAGE SNAPSHOT TO DOCX
+      const viewport = page.getViewport({ scale: 1 });
+      const aspect = viewport.height / viewport.width;
+      
+      docxSections.push(new docx.Paragraph({
+          children: [
+             new docx.ImageRun({
+                data: Uint8Array.from(atob(imgBase64.split(",")[1]), c => c.charCodeAt(0)),
+                transformation: { width: 600, height: Math.round(600 * aspect) }
+             })
+          ],
+          alignment: docx.AlignmentType.CENTER,
+          spacing: { before: 400, after: 400 }
+      }));
+      
+      if (i < totalPages) {
         docxSections[docxSections.length - 1].root.push(new docx.PageBreak());
       }
     }
@@ -1298,95 +1315,37 @@ async function pdfToWord() {
   }
 }
 
-async function extractElementsFromPage(page) {
-  const elements = [];
-  
-  // 1. Extract Text
+async function extractTextFromPage(page) {
   const textContent = await page.getTextContent();
-  textContent.items.forEach(item => {
-    if (item.str.trim() === "" && item.width === 0) return;
-    elements.push({
-      type: 'text',
-      str: item.str,
-      x: item.transform[4],
-      y: item.transform[5],
-      width: item.width,
-      size: Math.abs(item.transform[3]) || 12,
-      fontName: item.fontName
-    });
-  });
-  
-  // 2. Extract Images using Operator List
-  try {
-    const ops = await page.getOperatorList();
-    let currentMatrix = [1, 0, 0, 1, 0, 0];
-    const transformStack = [];
-    
-    for (let i = 0; i < ops.fnArray.length; i++) {
-      const fn = ops.fnArray[i];
-      const args = ops.argsArray[i];
-      
-      if (fn === pdfjsLib.OPS.save) {
-         transformStack.push([...currentMatrix]);
-      } else if (fn === pdfjsLib.OPS.restore) {
-         currentMatrix = transformStack.pop() || [1, 0, 0, 1, 0, 0];
-      } else if (fn === pdfjsLib.OPS.transform) {
-         const [a,b,c,d,e,f] = args;
-         const [m0,m1,m2,m3,m4,m5] = currentMatrix;
-         currentMatrix = [
-            m0*a + m2*b, m1*a + m3*b,
-            m0*c + m2*d, m1*c + m3*d,
-            m0*e + m2*f + m4, m1*e + m3*f + m5
-         ];
-      } else if (fn === pdfjsLib.OPS.paintImageXObject || fn === pdfjsLib.OPS.paintJpegXObject || fn === pdfjsLib.OPS.paintInlineImageXObject) {
-         let img = null;
-         if (fn === pdfjsLib.OPS.paintInlineImageXObject) {
-             img = args[0];
-         } else {
-             try { img = await page.objs.get(args[0]); } catch(e) {}
-         }
-         
-         if (img && img.width && img.height && img.data) {
-             const canvas = document.createElement("canvas");
-             canvas.width = img.width;
-             canvas.height = img.height;
-             const ctx = canvas.getContext("2d");
-             const imageData = ctx.createImageData(img.width, img.height);
-             const d = imageData.data;
-             let j = 0, k = 0;
-             if (img.data.length === img.width * img.height * 3) { // RGB
-                 while(j < img.data.length) {
-                     d[k++] = img.data[j++]; d[k++] = img.data[j++]; d[k++] = img.data[j++]; d[k++] = 255;
-                 }
-             } else if (img.data.length === img.width * img.height * 4) { // RGBA
-                 imageData.data.set(img.data);
-             } else { // Grayscale
-                 while(j < img.data.length) {
-                     d[k++] = img.data[j]; d[k++] = img.data[j]; d[k++] = img.data[j++]; d[k++] = 255;
-                 }
-             }
-             ctx.putImageData(imageData, 0, 0);
-             elements.push({
-               type: 'image',
-               base64: canvas.toDataURL("image/jpeg", 0.9).split(",")[1],
-               x: currentMatrix[4],
-               y: currentMatrix[5], // Y position for inline placement
-               width: Math.abs(currentMatrix[0]),
-               height: Math.abs(currentMatrix[3])
-             });
-         }
-      }
-    }
-  } catch(e) {
-    console.warn("Operator list extraction failed", e);
-  }
-  
-  return elements;
+  return textContent.items.map(item => ({
+    str: item.str,
+    x: item.transform[4],
+    y: item.transform[5],
+    width: item.width,
+    size: Math.abs(item.transform[3]) || 12,
+    fontName: item.fontName,
+    hasEOL: item.hasEOL
+  }));
 }
 
-function groupElementsByY(elements) {
+async function extractPageSnapshot(page) {
+  const viewport = page.getViewport({ scale: 2 });
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+
+  await page.render({ canvasContext: ctx, viewport }).promise;
+
+  return canvas.toDataURL("image/jpeg", 0.85); // JPEG to keep docx size smaller
+}
+
+function groupItemsIntoLines(items) {
   const linesMap = [];
-  elements.forEach(item => {
+  items.forEach(item => {
+    if (item.str.trim() === "" && item.width === 0) return;
+    
     // Group by Y with threshold Math.abs(y1 - y2) < 5
     let line = linesMap.find(l => Math.abs(l.y - item.y) < 5);
     if (!line) {
@@ -1394,22 +1353,21 @@ function groupElementsByY(elements) {
       linesMap.push(line);
     }
     line.items.push(item);
-    if (item.type === 'text' && item.size > line.maxSize) line.maxSize = item.size;
+    if (item.size > line.maxSize) line.maxSize = item.size;
   });
 
-  // Sort lines top to bottom
+  // Sort lines top to bottom (Y usually bottom-up in PDF)
   linesMap.sort((a, b) => b.y - a.y);
   
   linesMap.forEach(line => {
-    const textItems = line.items.filter(i => i.type === 'text');
-    const lineStr = textItems.map(i => i.str).join("");
+    const lineStr = line.items.map(i => i.str).join("");
     line.isArabic = /[\u0600-\u06FF]/.test(lineStr);
     
-    // Sort words inside line properly
     if (line.isArabic) {
-        // Arabic detected -> sort X in reverse (right -> left)
+        // RTL
         line.items.sort((a, b) => b.x - a.x);
     } else {
+        // LTR
         line.items.sort((a, b) => a.x - b.x);
     }
   });
@@ -1424,15 +1382,13 @@ function detectParagraphs(lines) {
   let lastLineX = null;
 
   lines.forEach(line => {
-    const hasImage = line.items.some(i => i.type === 'image');
+    if (line.items.length === 0) return;
+    
     let isNewParagraph = false;
     
-    if (hasImage) {
-        isNewParagraph = true;
-    } else if (lastLineY !== null) {
+    if (lastLineY !== null) {
       const gap = lastLineY - line.y;
-      const firstTextItem = line.items.find(i => i.type === 'text');
-      const firstItemX = firstTextItem ? firstTextItem.x : null;
+      const firstItemX = line.items[0].x;
 
       // Vertical spacing & empty lines
       if (gap > line.maxSize * 1.8) {
@@ -1452,56 +1408,26 @@ function detectParagraphs(lines) {
     
     currentParagraph.lines.push(line);
     lastLineY = line.y;
-    const fItem = line.items.find(i => i.type === 'text');
-    lastLineX = fItem ? fItem.x : null;
-    
-    if (hasImage) {
-        paragraphs.push(currentParagraph);
-        currentParagraph = { lines: [] };
-        lastLineY = null;
-        lastLineX = null;
-    }
+    lastLineX = line.items[0].x;
   });
 
   if (currentParagraph.lines.length > 0) {
     paragraphs.push(currentParagraph);
   }
   
-  return paragraphs.filter(p => p.lines.length > 0);
+  return paragraphs;
 }
 
 function buildDocxParagraphs(paragraphs, bidiFactory) {
   const docxSections = [];
   
   paragraphs.forEach(para => {
-    if (para.lines.length === 1 && para.lines[0].items.length === 1 && para.lines[0].items[0].type === 'image') {
-        const img = para.lines[0].items[0];
-        let w = img.width || 500;
-        let h = img.height || 300;
-        if (w > 500) {
-            h = h * (500 / w);
-            w = 500;
-        }
-        docxSections.push(new docx.Paragraph({
-            children: [
-                new docx.ImageRun({
-                    data: Uint8Array.from(atob(img.base64), c => c.charCodeAt(0)),
-                    transformation: { width: w, height: h }
-                })
-            ],
-            alignment: docx.AlignmentType.CENTER,
-            spacing: { after: 200 }
-        }));
-        return;
-    }
-
     let fullText = "";
     let maxSize = 0;
     
     para.lines.forEach((line, lineIdx) => {
       let lastX = null;
       line.items.forEach(item => {
-        if (item.type !== 'text') return;
         if (item.size > maxSize) maxSize = item.size;
         
         if (lastX !== null) {
