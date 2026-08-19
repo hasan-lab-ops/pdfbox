@@ -1235,7 +1235,7 @@ async function viewerZoomOut() {
 }
 
 /* ──────────────────────────────────────────────────   11. PDF TO WORD
-   Sends PDF to FastAPI backend, polls for task completion, and downloads DOCX.
+   Advanced Browser-Only Conversion with PDF.js & DOCX.js
    ────────────────────────────────────────────────── */
 async function pdfToWord() {
   const file = state.pdf2word.file;
@@ -1253,64 +1253,36 @@ async function pdfToWord() {
     const docxSections = [];
     const totalPages = pdf.numPages;
 
+    const bidiFactory = typeof bidi !== "undefined" ? bidi() : null;
+
     for (let i = 1; i <= totalPages; i++) {
       setProgress("pdf2word", Math.round((i / totalPages) * 80), `Extracting Page ${i} of ${totalPages}...`);
       
       const page = await pdf.getPage(i);
-      const textContent = await page.getTextContent();
-      const items = textContent.items;
-
-      // Group into lines based on Y coordinate (with small tolerance)
-      const linesMap = [];
-      items.forEach(item => {
-        const x = item.transform[4];
-        const y = item.transform[5];
-        const size = Math.abs(item.transform[3]) || 12;
-        
-        let line = linesMap.find(l => Math.abs(l.y - y) < 5);
-        if (!line) {
-          line = { y: y, items: [] };
-          linesMap.push(line);
-        }
-        line.items.push({ str: item.str, x: x, width: item.width, size: size });
-      });
-
-      // Sort lines top to bottom
-      linesMap.sort((a, b) => b.y - a.y);
-
-      // Combine into paragraphs
-      const paragraphs = [];
-      let currentParagraphLines = [];
-      let lastLineY = null;
-
-      linesMap.forEach(line => {
-         line.items.sort((a, b) => a.x - b.x);
-         if (lastLineY !== null) {
-             const gap = lastLineY - line.y;
-             const maxLineHeight = Math.max(...line.items.map(i => i.size)) || 12;
-             if (gap > maxLineHeight * 1.8) {
-                 if (currentParagraphLines.length > 0) {
-                     paragraphs.push(buildDocxParagraph(currentParagraphLines));
-                     currentParagraphLines = [];
-                 }
-             }
-         }
-         currentParagraphLines.push(line);
-         lastLineY = line.y;
-      });
-
-      if (currentParagraphLines.length > 0) {
-          paragraphs.push(buildDocxParagraph(currentParagraphLines));
-      }
       
-      if (i < totalPages) {
-         if (paragraphs.length > 0) {
-             paragraphs[paragraphs.length - 1].root.push(new docx.PageBreak());
-         } else {
-             paragraphs.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
-         }
+      // 1. EXTRACT TEXT & IMAGES
+      const items = await extractTextFromPage(page);
+      const images = await extractImagesFromPage(page);
+      
+      // 2. GROUP INTO LINES
+      const lines = groupItemsIntoLines(items);
+      
+      // 3. DETECT PARAGRAPHS
+      const paragraphs = detectParagraphs(lines);
+
+      // 4. BUILD DOCX PARAGRAPHS (incorporating Arabic Fix, Headings, Lists)
+      const docxParagraphs = buildDocxParagraphs(paragraphs, bidiFactory);
+      
+      // Add extracted images at the start of the page (best effort)
+      const docxImages = buildDocxImages(images);
+      
+      docxSections.push(...docxImages);
+      docxSections.push(...docxParagraphs);
+      
+      if (i < totalPages && docxSections.length > 0) {
+        // Page break at the end of each page, except the last one
+        docxSections[docxSections.length - 1].root.push(new docx.PageBreak());
       }
-      docxSections.push(...paragraphs);
     }
 
     setProgress("pdf2word", 90, "Generating Word Document...");
@@ -1322,6 +1294,7 @@ async function pdfToWord() {
     showResult("pdf2word", successResult(name, blob, formatSize(blob.size)));
     showToast("PDF converted to Word successfully!");
   } catch (err) {
+    console.error(err);
     setProgress("pdf2word", null);
     showResult("pdf2word", errorResult("Conversion failed: " + err.message));
     showToast("Conversion failed: " + err.message, "error");
@@ -1331,100 +1304,326 @@ async function pdfToWord() {
   }
 }
 
-function buildDocxParagraph(lines) {
-  const runs = [];
-  let paragraphIsArabic = false;
-  let isHeading = false;
-  let maxSize = 12;
+async function extractTextFromPage(page) {
+  const textContent = await page.getTextContent();
+  return textContent.items.map(item => ({
+    str: item.str,
+    x: item.transform[4],
+    y: item.transform[5],
+    width: item.width,
+    size: Math.abs(item.transform[3]) || 12,
+    fontName: item.fontName,
+    hasEOL: item.hasEOL
+  }));
+}
 
-  lines.forEach((line, lineIdx) => {
-     const fullLineStr = line.items.map(i => i.str).join("");
-     if (/[\u0600-\u06FF]/.test(fullLineStr)) paragraphIsArabic = true;
-     
-     line.items.forEach(i => { if (i.size > maxSize) maxSize = i.size; });
-     
-     const visualItems = [];
-     let lastEdge = null;
-     
-     line.items.forEach(item => {
-        if (lastEdge !== null) {
-            const gap = item.x - lastEdge;
-            if (gap > item.size * 0.25) {
-                const numSpaces = Math.max(1, Math.round(gap / (item.size * 0.25)));
-                visualItems.push({ str: " ".repeat(numSpaces), isSpace: true, size: item.size });
+async function extractImagesFromPage(page) {
+  const images = [];
+  try {
+    const ops = await page.getOperatorList();
+    for (let i = 0; i < ops.fnArray.length; i++) {
+      if (ops.fnArray[i] === pdfjsLib.OPS.paintImageXObject || ops.fnArray[i] === pdfjsLib.OPS.paintJpegXObject) {
+        const objId = ops.argsArray[i][0];
+        try {
+          const img = await page.objs.get(objId);
+          if (img && img.data && img.width && img.height) {
+            const canvas = document.createElement("canvas");
+            canvas.width = img.width;
+            canvas.height = img.height;
+            const ctx = canvas.getContext("2d");
+            const imageData = ctx.createImageData(img.width, img.height);
+            // Handle different image formats
+            if (img.kind === 1) { // RGB
+              imageData.data.set(img.data);
+            } else if (img.kind === 2) { // RGBA
+              imageData.data.set(img.data);
+            } else { // Gray or other
+              const d = imageData.data;
+              let k = 0;
+              for(let j=0; j<img.data.length; j++) {
+                d[k++] = img.data[j]; d[k++] = img.data[j]; d[k++] = img.data[j]; d[k++] = 255;
+              }
+            }
+            ctx.putImageData(imageData, 0, 0);
+            images.push({
+              base64: canvas.toDataURL("image/jpeg", 0.9).split(",")[1],
+              width: img.width,
+              height: img.height
+            });
+          }
+        } catch(e) { console.warn("Failed to extract image", e); }
+      }
+    }
+  } catch (e) {
+    console.warn("Operator list extraction failed", e);
+  }
+  return images;
+}
+
+function groupItemsIntoLines(items) {
+  const linesMap = [];
+  items.forEach(item => {
+    if (item.str.trim() === "" && item.width === 0) return;
+    
+    // Y threshold to group items into the same line
+    let line = linesMap.find(l => Math.abs(l.y - item.y) < item.size * 0.4);
+    if (!line) {
+      line = { y: item.y, items: [], maxSize: item.size };
+      linesMap.push(line);
+    }
+    line.items.push(item);
+    if (item.size > line.maxSize) line.maxSize = item.size;
+  });
+
+  // Sort lines top to bottom (Y coordinates in PDF are usually bottom-up, so sort descending)
+  linesMap.sort((a, b) => b.y - a.y);
+  
+  linesMap.forEach(line => {
+    // Determine if line is mostly Arabic
+    const lineStr = line.items.map(i => i.str).join("");
+    const isArabic = /[\u0600-\u06FF]/.test(lineStr);
+    
+    // Sort items left to right
+    line.items.sort((a, b) => a.x - b.x);
+    
+    if (isArabic) {
+        // If Arabic, sorting left to right means visual order.
+        // We will reverse the items so they are in logical order for processing
+        line.items.reverse();
+    }
+  });
+  
+  return linesMap;
+}
+
+function detectParagraphs(lines) {
+  const paragraphs = [];
+  let currentParagraph = { lines: [] };
+  let lastLineY = null;
+  let lastLineX = null;
+
+  lines.forEach(line => {
+    if (line.items.length === 0) return;
+    
+    // Sort x left to right just to get the actual first visual item for indentation check
+    const sortedVisually = [...line.items].sort((a, b) => a.x - b.x);
+    const firstItemX = sortedVisually[0].x;
+    const lastItemX = sortedVisually[sortedVisually.length - 1].x + sortedVisually[sortedVisually.length - 1].width;
+    
+    let isNewParagraph = false;
+    
+    if (lastLineY !== null) {
+      const gap = lastLineY - line.y;
+      // 1. Vertical spacing detection
+      if (gap > line.maxSize * 1.8) {
+        isNewParagraph = true;
+      }
+      
+      // 2. Indentation detection (if this line is indented noticeably more than the last)
+      if (lastLineX !== null && Math.abs(firstItemX - lastLineX) > line.maxSize * 1.5) {
+         isNewParagraph = true;
+      }
+      
+      // 3. Line length detection 
+      const prevLine = currentParagraph.lines[currentParagraph.lines.length - 1];
+      if (prevLine) {
+         const prevSorted = [...prevLine.items].sort((a, b) => a.x - b.x);
+         const prevLastX = prevSorted[prevSorted.length - 1].x + prevSorted[prevSorted.length - 1].width;
+         // If previous line ends early, it might be the end of a paragraph
+         // Assuming roughly standard A4 width ~ 600px, if ends before 400px it's short
+         // This is a basic heuristic
+         if (prevLastX < 400 && gap > prevLine.maxSize * 1.2) {
+             isNewParagraph = true;
+         }
+      }
+    }
+
+    if (isNewParagraph && currentParagraph.lines.length > 0) {
+      paragraphs.push(currentParagraph);
+      currentParagraph = { lines: [] };
+    }
+    
+    currentParagraph.lines.push(line);
+    lastLineY = line.y;
+    lastLineX = firstItemX;
+  });
+
+  if (currentParagraph.lines.length > 0) {
+    paragraphs.push(currentParagraph);
+  }
+  
+  return paragraphs;
+}
+
+function buildDocxParagraphs(paragraphs, bidiFactory) {
+  const docxParagraphs = [];
+  
+  paragraphs.forEach(para => {
+    let fullText = "";
+    let maxSize = 0;
+    
+    const runsData = [];
+    para.lines.forEach((line, lineIdx) => {
+      let lastX = null;
+      // line.items are in logical order (reversed if Arabic)
+      const isLineArabic = /[\u0600-\u06FF]/.test(line.items.map(i=>i.str).join(""));
+      
+      line.items.forEach(item => {
+        if (item.size > maxSize) maxSize = item.size;
+        
+        if (lastX !== null && !isLineArabic) {
+          const gap = item.x - lastX;
+          if (gap > item.size * 0.25) {
+             const numSpaces = Math.max(1, Math.round(gap / (item.size * 0.25)));
+             runsData.push({ str: " ".repeat(numSpaces), size: item.size });
+             fullText += " ".repeat(numSpaces);
+          }
+        }
+        
+        runsData.push({ str: item.str, size: item.size });
+        fullText += item.str;
+        
+        if (!isLineArabic) {
+            lastX = item.x + item.width;
+        }
+      });
+      
+      if (lineIdx < para.lines.length - 1) {
+         runsData.push({ str: " ", size: maxSize });
+         fullText += " ";
+      }
+    });
+
+    const isArabic = /[\u0600-\u06FF]/.test(fullText);
+    let alignment = isArabic ? docx.AlignmentType.RIGHT : docx.AlignmentType.LEFT;
+    
+    // Heading Detection (bold or larger font)
+    let isHeading1 = maxSize > 18;
+    let isHeading2 = maxSize > 14 && maxSize <= 18;
+    let isHeading3 = maxSize > 12 && maxSize <= 14;
+    
+    // List Detection
+    const trimmedText = fullText.trim();
+    let isBullet = false;
+    let isNumberList = false;
+    let textToRender = runsData;
+    
+    if (/^[•\-\u2022]\s+/.test(trimmedText)) {
+       isBullet = true;
+       let found = false;
+       textToRender = runsData.map(r => {
+          if (!found && /[•\-\u2022]/.test(r.str)) {
+             found = true;
+             return { ...r, str: r.str.replace(/^[•\-\u2022]\s*/, '') };
+          }
+          return r;
+       });
+    }
+
+    const finalRuns = [];
+    if (isArabic) {
+        // Apply arabic reshaper
+        let combinedText = textToRender.map(r => r.str).join("");
+        let reshapedText = window.ArabicReshaper ? window.ArabicReshaper.convertArabic(combinedText) : combinedText;
+        
+        // Ensure proper RTL bidi handling
+        let bidiText = reshapedText;
+        if (bidiFactory) {
+            try {
+                const levels = bidiFactory.getEmbeddingLevels(reshapedText, 'rtl');
+                // Use docx's logical rightToLeft rendering for Arabic
+                // No need to manually reverse if we set rightToLeft: true for Arabic characters
+            } catch(e) {}
+        }
+
+        // We will split the text into LTR and RTL runs
+        let currentRun = "";
+        let currentIsAr = true;
+        
+        for (let i = 0; i < reshapedText.length; i++) {
+            const char = reshapedText[i];
+            const charIsAr = /[\u0600-\u06FF\uFE70-\uFEFF]/.test(char) || /[؟،؛]/.test(char);
+            
+            // Treat spaces/numbers as part of the current run
+            if (char === " " || /[0-9]/.test(char)) {
+                currentRun += char;
+            } else if (charIsAr === currentIsAr) {
+                currentRun += char;
+            } else {
+                if (currentRun) {
+                    finalRuns.push(new docx.TextRun({
+                        text: currentRun,
+                        size: Math.round(maxSize * 2) || 24,
+                        rightToLeft: currentIsAr,
+                        bold: maxSize > 12
+                    }));
+                }
+                currentIsAr = charIsAr;
+                currentRun = char;
             }
         }
-        visualItems.push({...item, isSpace: false});
-        lastEdge = item.x + item.width;
-     });
+        if (currentRun) {
+            finalRuns.push(new docx.TextRun({
+                text: currentRun,
+                size: Math.round(maxSize * 2) || 24,
+                rightToLeft: currentIsAr,
+                bold: maxSize > 12
+            }));
+        }
+    } else {
+        textToRender.forEach(r => {
+           if (!r.str) return;
+           finalRuns.push(new docx.TextRun({
+              text: r.str,
+              size: Math.round(r.size * 2) || 24,
+              bold: maxSize > 12
+           }));
+        });
+    }
 
-     const bidiBlocks = [];
-     let currentBlock = [];
-     let currentType = paragraphIsArabic ? 'RTL' : 'LTR';
-
-     visualItems.forEach(v => {
-         if (!v.str.trim() && currentBlock.length > 0) {
-             currentBlock.push(v);
-             return;
-         }
-         const hasAr = /[\u0600-\u06FF]/.test(v.str);
-         const hasEn = /[a-zA-Z]/.test(v.str);
-         let type = currentType;
-         if (hasAr) type = 'RTL';
-         else if (hasEn) type = 'LTR';
-         
-         if (type === currentType) {
-             currentBlock.push(v);
-         } else {
-             if (currentBlock.length > 0) bidiBlocks.push({type: currentType, items: currentBlock});
-             currentType = type;
-             currentBlock = [v];
-         }
-     });
-     if (currentBlock.length > 0) bidiBlocks.push({type: currentType, items: currentBlock});
-
-     if (paragraphIsArabic) bidiBlocks.reverse();
-
-     const logicalItems = [];
-     bidiBlocks.forEach(b => {
-         if (b.type === 'RTL') {
-             const rev = [...b.items].reverse();
-             rev.forEach(item => {
-                 if (!item.isSpace) {
-                     let shaped = window.ArabicReshaper ? window.ArabicReshaper.convertArabic(item.str) : item.str;
-                     item.str = shaped.split('').reverse().join('');
-                 }
-             });
-             logicalItems.push(...rev);
-         } else {
-             logicalItems.push(...b.items);
-         }
-     });
-
-     logicalItems.forEach(item => {
-         if (!item.str) return;
-         const isAr = /[\u0600-\u06FF]/.test(item.str) || paragraphIsArabic;
-         runs.push(new docx.TextRun({
-             text: item.str,
-             size: Math.round(item.size * 2) || 24,
-             rightToLeft: isAr
-         }));
-     });
-     
-     if (lineIdx < lines.length - 1) {
-         runs.push(new docx.TextRun({ break: 1 }));
-     }
-  });
-
-  if (maxSize >= 18) isHeading = true;
-
-  return new docx.Paragraph({
-      children: runs,
-      alignment: paragraphIsArabic ? docx.AlignmentType.RIGHT : docx.AlignmentType.LEFT,
-      bidi: paragraphIsArabic,
-      heading: isHeading ? docx.HeadingLevel.HEADING_1 : undefined,
+    const paraOptions = {
+      children: finalRuns,
+      alignment: alignment,
+      bidi: isArabic,
       spacing: { after: 200 }
+    };
+    
+    if (isHeading1) paraOptions.heading = docx.HeadingLevel.HEADING_1;
+    else if (isHeading2) paraOptions.heading = docx.HeadingLevel.HEADING_2;
+    else if (isHeading3) paraOptions.heading = docx.HeadingLevel.HEADING_3;
+    
+    if (isBullet) paraOptions.bullet = { level: 0 };
+
+    docxParagraphs.push(new docx.Paragraph(paraOptions));
   });
+  
+  return docxParagraphs;
+}
+
+function buildDocxImages(images) {
+  const docxImages = [];
+  images.forEach(img => {
+     try {
+       let w = img.width;
+       let h = img.height;
+       if (w > 500) {
+          const ratio = 500 / w;
+          w = 500;
+          h = h * ratio;
+       }
+       docxImages.push(new docx.Paragraph({
+          children: [
+             new docx.ImageRun({
+                data: Uint8Array.from(atob(img.base64), c => c.charCodeAt(0)),
+                transformation: { width: w, height: h }
+             })
+          ],
+          alignment: docx.AlignmentType.CENTER,
+          spacing: { after: 200 }
+       }));
+     } catch (e) { console.warn("Failed to build image run", e); }
+  });
+  return docxImages;
 }
 
 
