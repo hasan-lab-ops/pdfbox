@@ -1234,9 +1234,8 @@ async function viewerZoomOut() {
   await renderViewerPage(state.viewer.page);
 }
 
-/* ──────────────────────────────────────────────────   11. PDF TO WORD (100% Client-Side)
-   Extracts text, colors, underlines, Arabic strings, and images
-   locally in browser without a server.
+/* ──────────────────────────────────────────────────   11. PDF TO WORD
+   Sends PDF to FastAPI backend, polls for task completion, and downloads DOCX.
    ────────────────────────────────────────────────── */
 async function pdfToWord() {
   const file = state.pdf2word.file;
@@ -1244,235 +1243,65 @@ async function pdfToWord() {
     showToast("Please select a PDF file.", "error");
     return;
   }
-  if (typeof docx === "undefined") {
-    showToast("docx library not loaded.", "error");
-    return;
-  }
-  
   showResult("pdf2word", "");
-  setProgress("pdf2word", 10, "Loading PDF locally...");
-  setButtonEnabled("btn-pdf2word", false);
   
+  setProgress("pdf2word", 10, "Uploading to conversion server...");
+  setButtonEnabled("btn-pdf2word", false);
   try {
-    const bytes = await readFileBytes(file);
-    const pdfDoc = await pdfjsLib.getDocument({ data: bytes }).promise;
-    const numPages = pdfDoc.numPages;
+    const formData = new FormData();
+    formData.append("file", file);
     
-    let docElements = [];
-    
-    for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-      setProgress("pdf2word", 10 + Math.round(pageNum / numPages * 80), `Processing page ${pageNum} of ${numPages}...`);
-      
-      const page = await pdfDoc.getPage(pageNum);
-      const textContent = await page.getTextContent();
-      const opList = await page.getOperatorList();
-      
-      let items = [];
-      
-      // Extract text
-      textContent.items.forEach(textItem => {
-        const tx = textItem.transform;
-        items.push({
-          type: "text",
-          str: textItem.str,
-          dir: textItem.dir,
-          width: textItem.width,
-          height: textItem.height,
-          x: tx[4],
-          y: tx[5],
-          fontName: textItem.fontName,
-          color: textItem.color
+    // Start task
+    let response;
+    try {
+        response = await fetch(`${API_BASE_URL}/api/convert/pdf-to-word`, {
+            method: "POST",
+            body: formData
         });
-      });
-      
-      // Extract Images
-      for (let i = 0; i < opList.fnArray.length; i++) {
-        if (opList.fnArray[i] === pdfjsLib.OPS.paintImageXObject) {
-          const imgId = opList.argsArray[i][0];
-          try {
-            const imgObj = await page.objs.get(imgId);
-            let imgTx = [1,0,0,1,0,0];
-            for(let j=i-1; j>=0; j--){
-               if(opList.fnArray[j] === pdfjsLib.OPS.transform) {
-                  imgTx = opList.argsArray[j];
-                  break;
-               }
-            }
-            if(imgObj && imgObj.data) {
-                const canvas = document.createElement("canvas");
-                canvas.width = imgObj.width;
-                canvas.height = imgObj.height;
-                const ctx = canvas.getContext("2d");
-                
-                let imgData;
-                if (imgObj.kind === 1) { // RGB
-                    imgData = ctx.createImageData(imgObj.width, imgObj.height);
-                    imgData.data.set(imgObj.data);
-                } else if (imgObj.kind === 2) { // RGBA
-                    imgData = new ImageData(new Uint8ClampedArray(imgObj.data), imgObj.width, imgObj.height);
-                }
-                
-                if (imgData) {
-                    ctx.putImageData(imgData, 0, 0);
-                    const dataUrl = canvas.toDataURL("image/png");
-                    const base64Data = dataUrl.split(',')[1];
-                    items.push({
-                        type: "image",
-                        data: base64Data,
-                        width: imgObj.width,
-                        height: imgObj.height,
-                        x: imgTx[4],
-                        y: imgTx[5],
-                    });
-                }
-            }
-          } catch(e) {
-            console.warn("Could not extract image", e);
-          }
+    } catch (e) {
+        if (e.message && e.message.includes("Failed to fetch")) {
+            throw new Error("Server Unreachable or CORS Blocked. Please check if the backend is running and reachable on " + API_BASE_URL);
         }
-      }
-      
-      // Extract underlines
-      let underlines = [];
-      let currentPath = null;
-      for (let i=0; i<opList.fnArray.length; i++){
-          let fn = opList.fnArray[i];
-          let args = opList.argsArray[i];
-          if(fn === pdfjsLib.OPS.moveTo){
-              currentPath = {x0: args[0], y0: args[1], lines: []};
-          } else if(fn === pdfjsLib.OPS.lineTo && currentPath){
-              currentPath.lines.push({x: args[0], y: args[1]});
-          } else if(fn === pdfjsLib.OPS.stroke && currentPath){
-              for(let pt of currentPath.lines){
-                  if(Math.abs(pt.y - currentPath.y0) < 2){ // Horizontal line
-                      underlines.push({
-                          y: currentPath.y0,
-                          x0: Math.min(currentPath.x0, pt.x),
-                          x1: Math.max(currentPath.x0, pt.x)
-                      });
-                  }
-              }
-              currentPath = null;
-          }
-      }
-      
-      // Sort vertically (Y descending in PDF.js means top to bottom if origin is bottom-left, wait, PDF.js y is bottom-up)
-      items.sort((a, b) => b.y - a.y);
-      
-      let lines = [];
-      let currentLine = [];
-      let lastY = null;
-      
-      for (let item of items) {
-        if (item.type === "image") {
-           if(currentLine.length) {
-               lines.push({type: "text", items: currentLine});
-               currentLine = [];
-           }
-           lines.push({type: "image", item: item});
-           continue;
-        }
-        
-        if (lastY === null) lastY = item.y;
-        
-        if (Math.abs(item.y - lastY) > 5) {
-          lines.push({type: "text", items: currentLine});
-          currentLine = [item];
-          lastY = item.y;
-        } else {
-          currentLine.push(item);
-        }
-      }
-      if (currentLine.length) lines.push({type: "text", items: currentLine});
-      
-      for (let lineObj of lines) {
-        if (lineObj.type === "image") {
-            const imgItem = lineObj.item;
-            try {
-                const imgRun = new docx.ImageRun({
-                    data: Uint8Array.from(atob(imgItem.data), c => c.charCodeAt(0)),
-                    transformation: {
-                        width: Math.min(600, imgItem.width),
-                        height: Math.min(800, imgItem.height)
-                    }
-                });
-                docElements.push(new docx.Paragraph({ children: [imgRun] }));
-            } catch(e) {
-                console.warn("Failed embedding image in docx");
-            }
-            continue;
-        }
-        
-        let textItems = lineObj.items;
-        textItems.sort((a, b) => a.x - b.x); // sort left to right
-        
-        let lineStr = textItems.map(t => t.str).join("");
-        let isArabic = /[\u0600-\u06FF]/.test(lineStr);
-        
-        let runs = [];
-        for (let t of textItems) {
-            let isBold = false;
-            let isItalic = false;
-            if(t.fontName){
-                let lowerFont = t.fontName.toLowerCase();
-                if(lowerFont.includes("bold")) isBold = true;
-                if(lowerFont.includes("italic") || lowerFont.includes("oblique")) isItalic = true;
-            }
-            
-            let colorHex = undefined;
-            if (t.color && Array.isArray(t.color) && t.color.length === 3) {
-                colorHex = ((t.color[0] << 16) | (t.color[1] << 8) | t.color[2]).toString(16).padStart(6, '0');
-            }
-            
-            let hasUnderline = false;
-            for(let ul of underlines){
-                if(Math.abs(t.y - ul.y) < 5 && t.x >= ul.x0 - 5 && t.x + t.width <= ul.x1 + 5){
-                    hasUnderline = true;
-                    break;
-                }
-            }
-            
-            let runOpts = {
-                text: t.str,
-                size: (t.height || 12) * 2,
-                bold: isBold,
-                italics: isItalic,
-                underline: hasUnderline ? { type: "single" } : undefined
-            };
-            if(colorHex && colorHex !== "000000") {
-                runOpts.color = colorHex;
-            }
-            if(isArabic) {
-                runOpts.rightToLeft = true;
-            }
-            runs.push(new docx.TextRun(runOpts));
-        }
-        
-        docElements.push(new docx.Paragraph({
-            children: runs,
-            alignment: isArabic ? docx.AlignmentType.RIGHT : docx.AlignmentType.LEFT,
-            bidi: isArabic
-        }));
-      }
-      
-      if (pageNum < numPages) {
-         docElements.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
-      }
+        throw e;
     }
     
-    setProgress("pdf2word", 95, "Generating Word document locally...");
+    if (!response.ok) throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+    const { task_id } = await response.json();
     
-    const wordDoc = new docx.Document({
-        sections: [{ properties: {}, children: docElements }]
-    });
+    setProgress("pdf2word", 30, "Server is processing document (applying LibreOffice formatting and Arabic Fix)...");
     
-    const blob = await docx.Packer.toBlob(wordDoc);
+    // Poll status
+    let status = "pending";
+    let download_url = "";
+    while (status === "pending" || status === "processing") {
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        const statusRes = await fetch(`${API_BASE_URL}/api/status/${task_id}`);
+        if (!statusRes.ok) throw new Error("Failed to check status");
+        
+        const data = await statusRes.json();
+        status = data.status;
+        
+        if (status === "failed") {
+            throw new Error(data.error || "Server processing failed");
+        }
+        if (status === "completed") {
+            download_url = data.download_url;
+            break;
+        }
+    }
+    
+    setProgress("pdf2word", 90, "Downloading converted document...");
+    
+    // Download
+    const dlRes = await fetch(`${API_BASE_URL}${download_url}`);
+    if (!dlRes.ok) throw new Error("Failed to download file");
+    
+    const blob = await dlRes.blob();
     const name = file.name.replace(/\.pdf$/i, "") + ".docx";
     
     setProgress("pdf2word", 100, "Complete!");
     showResult("pdf2word", successResult(name, blob, formatSize(blob.size)));
     showToast("PDF converted to Word successfully!");
-    
   } catch (err) {
     setProgress("pdf2word", null);
     showResult("pdf2word", errorResult("Conversion failed: " + err.message));

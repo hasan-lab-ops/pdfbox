@@ -76,6 +76,13 @@ def get_libreoffice_path() -> str:
 
 def convert_pdf_to_word_task(task_id: str, input_pdf_path: str, output_docx_path: str, temp_dir: str):
     import time
+    import subprocess
+    import arabic_reshaper
+    from bidi.algorithm import get_display
+    from docx import Document
+    from docx.oxml import OxmlElement
+    from docx.oxml.ns import qn
+    
     start_time = time.time()
     print(f"[TIMING] Task {task_id} started at {start_time}")
     tasks[task_id]["status"] = "processing"
@@ -83,15 +90,66 @@ def convert_pdf_to_word_task(task_id: str, input_pdf_path: str, output_docx_path
     try:
         lo_start = time.time()
         
-        # Using custom local conversion instead of server
-        from pdf_to_word import convert_pdf_to_word_local
-        convert_pdf_to_word_local(input_pdf_path, output_docx_path)
+        soffice_path = get_libreoffice_path()
+        
+        # Step 1: PDF to ODT (LibreOffice preserves layout better this way)
+        subprocess.run([
+            soffice_path,
+            "--headless",
+            "--infilter=writer_pdf_import",
+            "--convert-to", "odt",
+            input_pdf_path,
+            "--outdir", temp_dir
+        ], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        
+        odt_path = os.path.join(temp_dir, "input.odt")
+        
+        # Step 2: ODT to DOCX
+        subprocess.run([
+            soffice_path,
+            "--headless",
+            "--convert-to", "docx:MS Word 2007 XML",
+            odt_path,
+            "--outdir", temp_dir
+        ], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        
+        raw_docx_path = os.path.join(temp_dir, "input.docx")
+        
+        # Step 3: Arabic Post-processing
+        doc = Document(raw_docx_path)
+        
+        def process_paragraph(p):
+            if any('\u0600' <= c <= '\u06FF' for c in p.text):
+                # Process each run to preserve formatting (colors, underlines, etc.)
+                for run in p.runs:
+                    if any('\u0600' <= c <= '\u06FF' for c in run.text):
+                        reshaped = arabic_reshaper.reshape(run.text)
+                        bidi_text = get_display(reshaped)
+                        run.text = bidi_text
+                
+                p.paragraph_format.alignment = 2  # RIGHT
+                
+                pPr = p._element.get_or_add_pPr()
+                bidi = OxmlElement('w:bidi')
+                bidi.set(qn('w:val'), '1')
+                pPr.append(bidi)
+                
+        for p in doc.paragraphs:
+            process_paragraph(p)
+            
+        for table in doc.tables:
+            for row in table.rows:
+                for cell in row.cells:
+                    for p in cell.paragraphs:
+                        process_paragraph(p)
+                        
+        doc.save(output_docx_path)
         
         lo_end = time.time()
-        print(f"[TIMING] Custom conversion finished at {lo_end} (duration: {lo_end - lo_start:.2f}s)")
+        print(f"[TIMING] LibreOffice + Reshaper conversion finished at {lo_end} (duration: {lo_end - lo_start:.2f}s)")
             
         if not os.path.exists(output_docx_path):
-            raise Exception("Custom converter did not generate the output file.")
+            raise Exception("Converter did not generate the output file.")
             
         tasks[task_id]["status"] = "completed"
         tasks[task_id]["download_url"] = f"/api/download/{task_id}"
@@ -99,6 +157,8 @@ def convert_pdf_to_word_task(task_id: str, input_pdf_path: str, output_docx_path
         print(f"[TIMING] Task {task_id} fully completed at {end_time} (total duration: {end_time - start_time:.2f}s)")
         
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         tasks[task_id]["status"] = "failed"
         tasks[task_id]["error"] = str(e)
         cleanup_temp_dir(temp_dir)
