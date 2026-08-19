@@ -1245,58 +1245,77 @@ async function pdfToWord() {
   }
   showResult("pdf2word", "");
   
-  setProgress("pdf2word", 10, "Uploading to conversion server...");
+  setProgress("pdf2word", 5, "Initializing local conversion...");
   setButtonEnabled("btn-pdf2word", false);
   try {
-    const formData = new FormData();
-    formData.append("file", file);
-    
-    // Start task
-    let response;
-    try {
-        response = await fetch(`${API_BASE_URL}/api/convert/pdf-to-word`, {
-            method: "POST",
-            body: formData
-        });
-    } catch (e) {
-        if (e.message && e.message.includes("Failed to fetch")) {
-            throw new Error("Server Unreachable or CORS Blocked. Please check if the backend is running and reachable on " + API_BASE_URL);
-        }
-        throw e;
-    }
-    
-    if (!response.ok) throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
-    const { task_id } = await response.json();
-    
-    setProgress("pdf2word", 30, "Server is processing document (applying LibreOffice formatting and Arabic Fix)...");
-    
-    // Poll status
-    let status = "pending";
-    let download_url = "";
-    while (status === "pending" || status === "processing") {
-        await new Promise(resolve => setTimeout(resolve, 1500));
-        const statusRes = await fetch(`${API_BASE_URL}/api/status/${task_id}`);
-        if (!statusRes.ok) throw new Error("Failed to check status");
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const docxSections = [];
+    const totalPages = pdf.numPages;
+
+    for (let i = 1; i <= totalPages; i++) {
+      setProgress("pdf2word", Math.round((i / totalPages) * 80), `Extracting Page ${i} of ${totalPages}...`);
+      
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      const items = textContent.items;
+
+      // Group into lines based on Y coordinate (with small tolerance)
+      const linesMap = [];
+      items.forEach(item => {
+        const x = item.transform[4];
+        const y = item.transform[5];
+        const size = Math.abs(item.transform[3]) || 12;
         
-        const data = await statusRes.json();
-        status = data.status;
-        
-        if (status === "failed") {
-            throw new Error(data.error || "Server processing failed");
+        let line = linesMap.find(l => Math.abs(l.y - y) < 5);
+        if (!line) {
+          line = { y: y, items: [] };
+          linesMap.push(line);
         }
-        if (status === "completed") {
-            download_url = data.download_url;
-            break;
-        }
+        line.items.push({ str: item.str, x: x, width: item.width, size: size });
+      });
+
+      // Sort lines top to bottom
+      linesMap.sort((a, b) => b.y - a.y);
+
+      // Combine into paragraphs
+      const paragraphs = [];
+      let currentParagraphLines = [];
+      let lastLineY = null;
+
+      linesMap.forEach(line => {
+         line.items.sort((a, b) => a.x - b.x);
+         if (lastLineY !== null) {
+             const gap = lastLineY - line.y;
+             const maxLineHeight = Math.max(...line.items.map(i => i.size)) || 12;
+             if (gap > maxLineHeight * 1.8) {
+                 if (currentParagraphLines.length > 0) {
+                     paragraphs.push(buildDocxParagraph(currentParagraphLines));
+                     currentParagraphLines = [];
+                 }
+             }
+         }
+         currentParagraphLines.push(line);
+         lastLineY = line.y;
+      });
+
+      if (currentParagraphLines.length > 0) {
+          paragraphs.push(buildDocxParagraph(currentParagraphLines));
+      }
+      
+      if (i < totalPages) {
+         if (paragraphs.length > 0) {
+             paragraphs[paragraphs.length - 1].root.push(new docx.PageBreak());
+         } else {
+             paragraphs.push(new docx.Paragraph({ children: [new docx.PageBreak()] }));
+         }
+      }
+      docxSections.push(...paragraphs);
     }
-    
-    setProgress("pdf2word", 90, "Downloading converted document...");
-    
-    // Download
-    const dlRes = await fetch(`${API_BASE_URL}${download_url}`);
-    if (!dlRes.ok) throw new Error("Failed to download file");
-    
-    const blob = await dlRes.blob();
+
+    setProgress("pdf2word", 90, "Generating Word Document...");
+    const doc = new docx.Document({ sections: [{ properties: {}, children: docxSections }] });
+    const blob = await docx.Packer.toBlob(doc);
     const name = file.name.replace(/\.pdf$/i, "") + ".docx";
     
     setProgress("pdf2word", 100, "Complete!");
@@ -1310,6 +1329,102 @@ async function pdfToWord() {
     setButtonEnabled("btn-pdf2word", !!state.pdf2word.file);
     setTimeout(() => setProgress("pdf2word", null), 1500);
   }
+}
+
+function buildDocxParagraph(lines) {
+  const runs = [];
+  let paragraphIsArabic = false;
+  let isHeading = false;
+  let maxSize = 12;
+
+  lines.forEach((line, lineIdx) => {
+     const fullLineStr = line.items.map(i => i.str).join("");
+     if (/[\u0600-\u06FF]/.test(fullLineStr)) paragraphIsArabic = true;
+     
+     line.items.forEach(i => { if (i.size > maxSize) maxSize = i.size; });
+     
+     const visualItems = [];
+     let lastEdge = null;
+     
+     line.items.forEach(item => {
+        if (lastEdge !== null) {
+            const gap = item.x - lastEdge;
+            if (gap > item.size * 0.25) {
+                const numSpaces = Math.max(1, Math.round(gap / (item.size * 0.25)));
+                visualItems.push({ str: " ".repeat(numSpaces), isSpace: true, size: item.size });
+            }
+        }
+        visualItems.push({...item, isSpace: false});
+        lastEdge = item.x + item.width;
+     });
+
+     const bidiBlocks = [];
+     let currentBlock = [];
+     let currentType = paragraphIsArabic ? 'RTL' : 'LTR';
+
+     visualItems.forEach(v => {
+         if (!v.str.trim() && currentBlock.length > 0) {
+             currentBlock.push(v);
+             return;
+         }
+         const hasAr = /[\u0600-\u06FF]/.test(v.str);
+         const hasEn = /[a-zA-Z]/.test(v.str);
+         let type = currentType;
+         if (hasAr) type = 'RTL';
+         else if (hasEn) type = 'LTR';
+         
+         if (type === currentType) {
+             currentBlock.push(v);
+         } else {
+             if (currentBlock.length > 0) bidiBlocks.push({type: currentType, items: currentBlock});
+             currentType = type;
+             currentBlock = [v];
+         }
+     });
+     if (currentBlock.length > 0) bidiBlocks.push({type: currentType, items: currentBlock});
+
+     if (paragraphIsArabic) bidiBlocks.reverse();
+
+     const logicalItems = [];
+     bidiBlocks.forEach(b => {
+         if (b.type === 'RTL') {
+             const rev = [...b.items].reverse();
+             rev.forEach(item => {
+                 if (!item.isSpace) {
+                     let shaped = window.ArabicReshaper ? window.ArabicReshaper.convertArabic(item.str) : item.str;
+                     item.str = shaped.split('').reverse().join('');
+                 }
+             });
+             logicalItems.push(...rev);
+         } else {
+             logicalItems.push(...b.items);
+         }
+     });
+
+     logicalItems.forEach(item => {
+         if (!item.str) return;
+         const isAr = /[\u0600-\u06FF]/.test(item.str) || paragraphIsArabic;
+         runs.push(new docx.TextRun({
+             text: item.str,
+             size: Math.round(item.size * 2) || 24,
+             rightToLeft: isAr
+         }));
+     });
+     
+     if (lineIdx < lines.length - 1) {
+         runs.push(new docx.TextRun({ break: 1 }));
+     }
+  });
+
+  if (maxSize >= 18) isHeading = true;
+
+  return new docx.Paragraph({
+      children: runs,
+      alignment: paragraphIsArabic ? docx.AlignmentType.RIGHT : docx.AlignmentType.LEFT,
+      bidi: paragraphIsArabic,
+      heading: isHeading ? docx.HeadingLevel.HEADING_1 : undefined,
+      spacing: { after: 200 }
+  });
 }
 
 
