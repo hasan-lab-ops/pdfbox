@@ -1,26 +1,133 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>About Us - PDF BOX</title>
-  <style>
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; padding: 40px; max-width: 800px; margin: 0 auto; color: #333; }
-    h1 { color: #1a73e8; }
-    a { color: #1a73e8; text-decoration: none; }
-    a:hover { text-decoration: underline; }
-  </style>
+  <meta name="description" content="Discover PDF BOX (pdfbox.online) - our mission, document conversion technology, and privacy-first architecture." />
+  <link rel="canonical" href="https://www.pdfbox.online/about.html" />
+  <link rel="icon" type="image/png" href="./favicon.png" />
+  <link rel="stylesheet" href="./site-pages.css" />
 </head>
 <body>
-  <h1>About PDF BOX</h1>
-  <p>PDF BOX is a comprehensive suite of powerful, easy-to-use PDF tools designed to help individuals and businesses manage their documents.</p>
-  
-  <h2>Our Mission</h2>
-  <p>Our mission is to provide high-quality document conversion and manipulation tools completely free of charge. We strongly believe in privacy, speed, and accuracy.</p>
-  
-  <h2>Specialized Features</h2>
-  <p>Unlike many online converters, PDF BOX is built from the ground up with <strong>first-class Arabic and RTL language support</strong>. We mathematically reconstruct your document layouts so that complex scripts are preserved perfectly in Word, Excel, and PowerPoint output formats.</p>
-  
-  <br>
-  <a href="index.html">&larr; Back to PDF BOX</a>
+
+  <!-- Site Header -->
+  <header class="site-header">
+    <div class="nav">
+      <a href="index.html" class="brand">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" stroke="#00E5FF"/>
+          <polyline points="14 2 14 8 20 8" stroke="#00E5FF"/>
+        </svg>
+        PDF <span>BOX</span>
+      </a>
+      <div class="nav-links">
+        <a href="index.html">Tools</a>
+        <a href="about.html">About</a>
+        <a href="contact.html">Contact</a>
+        <a href="index.html" class="nav-cta">Open Converter</a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main>
+    <div class="page-header">
+      <span class="eyebrow">Our Story & Mission</span>
+      <h1>About PDF BOX</h1>
+      <p class="last-updated">Built for speed, accuracy, and absolute user privacy.</p>
+    </div>
+
+    <p class="lead">
+      <strong>PDF BOX</strong> (<a href="https://www.pdfbox.online/">pdfbox.online</a>) was founded with a straightforward mission: to provide individuals, students, educators, and businesses worldwide with a modern, high-precision suite of PDF tools that respect your time and digital privacy.
+    </p>
+
+    <div class="card card-highlight">
+      <span class="badge">Core Promise</span>
+      <h3>Document Management Without Hidden Costs or Data Exploitation</h3>
+      <p>
+        Too many online document utilities hide behind mandatory account registrations, subscription paywalls, watermarked exports, or aggressive data collection. At PDF BOX, our core conversion and manipulation tools remain 100% free, require zero sign-ups, and enforce automatic file destruction after every operation.
+      </p>
+    </div>
+
+    <h2>How Our Technology Works</h2>
+    <p>
+      PDF BOX operates a hybrid processing architecture designed to maximize processing performance and security:
+    </p>
+    <ul>
+      <li><strong>Client-Side Processing (WebAssembly & Local JS):</strong> Whenever possible, tasks like PDF merging, splitting, page reordering, rotation, and encryption execute directly inside your browser. This means your files never leave your device for basic manipulations.</li>
+      <li><strong>High-Fidelity Server Engine (Python & pdf2docx):</strong> For complex layout transformations—such as converting intricate PDF documents into editable Microsoft Word (.docx) files—we utilize custom containerized backend microservices powered by Python. Our engine analyzes text baselines, vector shapes, table lattice structures, and embedded raster images to reconstruct clean, editable DOCX documents without rasterizing text into uneditable bitmaps.</li>
+    </ul>
+
+    <h2>Our Core Pillars</h2>
+    <div class="card">
+      <h3>🔒 Privacy by Design</h3>
+      <p>
+        Security is not an afterthought; it is our foundation. Uploaded documents are assigned isolated UUID containers, processed in volatile memory, and permanently purged immediately upon download. We never inspect, index, or store document contents.
+      </p>
+    </div>
+
+    <div class="card">
+      <h3>⚡ Accuracy & Formatting Retention</h3>
+      <p>
+        Converting PDF documents to editable formats often leads to messy paragraph breaks and broken tables. Our algorithms extract structural bounding boxes, fonts, line spacing, and cell alignments to deliver high-fidelity outputs ready for business, academic, or personal use.
+      </p>
+    </div>
+
+    <div class="card">
+      <h3>🌍 Global Accessibility</h3>
+      <p>
+        Whether you are on a desktop workstation, Chromebook, tablet, or smartphone, PDF BOX offers a lightweight, responsive interface optimized for low latency across all modern web browsers.
+      </p>
+    </div>
+
+    <h2>Get in Touch</h2>
+    <p>
+      We are constantly refining our conversion models and expanding our utility toolbox. If you have questions, feature suggestions, or feedback, our engineering and support team would love to hear from you.
+    </p>
+    <p>
+      Reach out directly at <a href="mailto:support@pdfbox.online">support@pdfbox.online</a> or visit our <a href="contact.html">Contact Us</a> page.
+    </p>
+  </main>
+
+  <!-- Site Footer -->
+  <footer class="site-footer">
+    <div class="footer-container">
+      <div class="footer-col">
+        <h4>PDF BOX</h4>
+        <p>A fast, free, and private online suite for document conversion and PDF management.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Tools</h4>
+        <ul>
+          <li><a href="index.html">PDF to Word</a></li>
+          <li><a href="index.html">Merge PDF</a></li>
+          <li><a href="index.html">Split PDF</a></li>
+          <li><a href="index.html">Compress PDF</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Company</h4>
+        <ul>
+          <li><a href="about.html">About Us</a></li>
+          <li><a href="contact.html">Contact Support</a></li>
+          <li><a href="how-to-use-pdf-tools.html">Guides</a></li>
+        </ul>
+      </div>
+      <div class="footer-col">
+        <h4>Legal</h4>
+        <ul>
+          <li><a href="privacy.html">Privacy Policy</a></li>
+          <li><a href="terms.html">Terms of Service</a></li>
+          <li><a href="cookie-policy.html">Cookie Policy</a></li>
+        </ul>
+      </div>
+    </div>
+    <div class="footer-bottom">
+      <div>&copy; 2026 PDF BOX (pdfbox.online). All rights reserved.</div>
+      <div>Files processed securely & deleted automatically.</div>
+    </div>
+  </footer>
+
 </body>
 </html>

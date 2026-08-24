@@ -3,32 +3,43 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>PDF to Word Converter | PDFBox</title>
+  <title>PDF to Word Converter | PDF BOX</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   
   <style>
     :root {
-      --primary: #4f46e5;
-      --primary-hover: #4338ca;
-      --primary-light: #eef2ff;
-      --bg: #0f172a;
-      --card-bg: #1e293b;
-      --border: #334155;
-      --text: #f8fafc;
-      --text-muted: #94a3b8;
-      --error-bg: #450a0a;
-      --error-border: #dc2626;
-      --error-text: #fca5a5;
+      --bg: #020812;
+      --card-bg: #0F1A35;
+      --card-inner: #0A1224;
+      --border: #1A2D50;
+      --border-glow: rgba(0, 229, 255, 0.25);
+      --text: #E8F4FF;
+      --text-muted: #8BB4CC;
+      --text-dim: #4A7090;
+      --accent: #00E5FF;
+      --accent-mid: #00BCD4;
+      --accent-grad: linear-gradient(135deg, #00E5FF 0%, #00BCD4 100%);
+      --accent-glow: rgba(0, 229, 255, 0.12);
+      --danger: #ef4444;
+      --danger-bg: #450a0a;
+      --danger-border: #dc2626;
+      --danger-text: #fca5a5;
       --success: #10b981;
+      --success-bg: rgba(16, 185, 129, 0.12);
+      --success-border: #10b981;
+      --success-text: #6ee7b7;
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
     }
 
     * {
       box-sizing: border-box;
       margin: 0;
       padding: 0;
-      font-family: 'Inter', sans-serif;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
     }
 
     body {
@@ -38,67 +49,82 @@
       justify-content: center;
       align-items: center;
       min-height: 100vh;
-      padding: 20px;
+      padding: 24px;
     }
 
     .converter-card {
       background: var(--card-bg);
       border: 1px solid var(--border);
-      border-radius: 16px;
+      border-radius: var(--radius-lg);
       width: 100%;
       max-width: 580px;
-      padding: 32px;
-      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+      padding: 36px;
+      box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.7), 0 0 40px rgba(0, 229, 255, 0.05);
+      position: relative;
+    }
+
+    .converter-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+      background: var(--accent-grad);
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
     }
 
     .converter-header {
       text-align: center;
-      margin-bottom: 24px;
+      margin-bottom: 28px;
     }
 
     .converter-header h1 {
-      font-size: 1.5rem;
-      font-weight: 700;
+      font-size: 1.65rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
       margin-bottom: 8px;
+      color: var(--text);
     }
 
     .converter-header p {
       color: var(--text-muted);
-      font-size: 0.9rem;
+      font-size: 0.92rem;
     }
 
     /* Dropzone */
     .dropzone {
       border: 2px dashed var(--border);
-      border-radius: 12px;
-      padding: 36px 20px;
+      border-radius: var(--radius-md);
+      padding: 40px 24px;
       text-align: center;
       cursor: pointer;
-      transition: all 0.2s ease;
-      background: rgba(15, 23, 42, 0.4);
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      background: var(--card-inner);
     }
 
     .dropzone:hover, .dropzone.dragover {
-      border-color: var(--primary);
-      background: rgba(79, 70, 229, 0.08);
+      border-color: var(--accent);
+      background: var(--accent-glow);
+      box-shadow: 0 0 24px rgba(0, 229, 255, 0.1);
+      transform: translateY(-2px);
     }
 
     .dropzone-icon {
-      width: 48px;
-      height: 48px;
-      margin: 0 auto 12px;
-      color: var(--primary);
+      width: 52px;
+      height: 52px;
+      margin: 0 auto 14px;
+      color: var(--accent);
     }
 
     .dropzone-text {
-      font-size: 0.95rem;
-      font-weight: 500;
-      margin-bottom: 4px;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--text);
+      margin-bottom: 6px;
     }
 
     .dropzone-subtext {
-      font-size: 0.8rem;
-      color: var(--text-muted);
+      font-size: 0.82rem;
+      color: var(--text-dim);
     }
 
     /* File Preview */
@@ -106,22 +132,22 @@
       display: none;
       align-items: center;
       justify-content: space-between;
-      background: rgba(15, 23, 42, 0.6);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 12px 16px;
+      background: var(--card-inner);
+      border: 1px solid var(--border-glow);
+      border-radius: var(--radius-md);
+      padding: 14px 18px;
       margin-top: 16px;
     }
 
     .file-details {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 14px;
       overflow: hidden;
     }
 
     .file-icon {
-      color: #ef4444;
+      color: var(--danger);
       flex-shrink: 0;
     }
 
@@ -130,58 +156,65 @@
     }
 
     .file-name {
-      font-size: 0.9rem;
+      font-size: 0.92rem;
       font-weight: 600;
+      color: var(--text);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
     }
 
     .file-size {
-      font-size: 0.75rem;
+      font-size: 0.78rem;
       color: var(--text-muted);
     }
 
     .btn-remove {
       background: none;
       border: none;
-      color: var(--text-muted);
+      color: var(--text-dim);
       cursor: pointer;
-      padding: 4px;
-      border-radius: 4px;
+      padding: 6px;
+      border-radius: var(--radius-sm);
+      transition: all 0.2s ease;
     }
 
     .btn-remove:hover {
-      color: #ef4444;
-      background: rgba(239, 68, 68, 0.1);
+      color: var(--danger);
+      background: rgba(239, 68, 68, 0.15);
     }
 
     /* Buttons */
     .btn-convert {
       width: 100%;
-      background: var(--primary);
-      color: #ffffff;
+      background: var(--accent-grad);
+      color: #020812;
       border: none;
-      border-radius: 8px;
-      padding: 14px;
-      font-size: 0.95rem;
-      font-weight: 600;
+      border-radius: var(--radius-md);
+      padding: 15px;
+      font-size: 1rem;
+      font-weight: 700;
       cursor: pointer;
-      margin-top: 20px;
+      margin-top: 24px;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 8px;
-      transition: background 0.2s ease;
+      gap: 10px;
+      transition: all 0.25s ease;
+      box-shadow: 0 4px 20px rgba(0, 229, 255, 0.25);
     }
 
     .btn-convert:hover:not(:disabled) {
-      background: var(--primary-hover);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 28px rgba(0, 229, 255, 0.4);
+      filter: brightness(1.08);
     }
 
     .btn-convert:disabled {
-      opacity: 0.6;
+      opacity: 0.45;
       cursor: not-allowed;
+      box-shadow: none;
+      transform: none;
     }
 
     /* Progress & Status */
@@ -192,54 +225,57 @@
 
     .progress-bar-bg {
       height: 8px;
-      background: var(--border);
-      border-radius: 4px;
+      background: var(--card-inner);
+      border: 1px solid var(--border);
+      border-radius: 99px;
       overflow: hidden;
     }
 
     .progress-bar {
       width: 0%;
       height: 100%;
-      background: var(--primary);
-      transition: width 0.3s ease;
+      background: var(--accent-grad);
+      border-radius: 99px;
+      transition: width 0.35s ease;
     }
 
     .status-text {
       font-size: 0.85rem;
       color: var(--text-muted);
-      margin-top: 8px;
+      margin-top: 10px;
       text-align: center;
     }
 
     /* Alert Banner */
     .alert {
       display: none;
-      margin-top: 16px;
-      padding: 12px 16px;
-      border-radius: 8px;
-      font-size: 0.85rem;
+      margin-top: 18px;
+      padding: 14px 18px;
+      border-radius: var(--radius-sm);
+      font-size: 0.88rem;
+      line-height: 1.5;
     }
 
     .alert-error {
-      background: var(--error-bg);
-      border: 1px solid var(--error-border);
-      color: var(--error-text);
+      background: var(--danger-bg);
+      border: 1px solid var(--danger-border);
+      color: var(--danger-text);
     }
 
     .alert-success {
-      background: rgba(16, 185, 129, 0.1);
-      border: 1px solid var(--success);
-      color: #6ee7b7;
+      background: var(--success-bg);
+      border: 1px solid var(--success-border);
+      color: var(--success-text);
     }
 
     .spinner {
-      width: 16px;
-      height: 16px;
-      border: 2px solid #ffffff;
+      width: 18px;
+      height: 18px;
+      border: 2.5px solid #020812;
       border-bottom-color: transparent;
       border-radius: 50%;
       display: inline-block;
-      animation: rotation 1s linear infinite;
+      animation: rotation 0.9s linear infinite;
     }
 
     @keyframes rotation {
@@ -253,10 +289,10 @@
   <div class="converter-card">
     <div class="converter-header">
       <h1>Convert PDF to Word</h1>
-      <p>Retain fonts, colors, formatting, images, and tables</p>
+      <p>Preserve fonts, formatting, tables, and images accurately</p>
     </div>
 
-    <!-- Dropzone Area -->
+    <!-- Drag & Drop Zone -->
     <div class="dropzone" id="dropzone">
       <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -264,11 +300,11 @@
         <line x1="12" y1="2" x2="12" y2="15" />
       </svg>
       <div class="dropzone-text">Click to choose a file or drag & drop</div>
-      <div class="dropzone-subtext">PDF files only (up to 50 MB)</div>
+      <div class="dropzone-subtext">PDF documents up to 20 MB</div>
       <input type="file" id="file-input" accept=".pdf,application/pdf" style="display: none;" />
     </div>
 
-    <!-- Selected File Preview -->
+    <!-- Selected File Preview Badge -->
     <div class="file-preview" id="file-preview">
       <div class="file-details">
         <svg class="file-icon" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -288,7 +324,7 @@
       </button>
     </div>
 
-    <!-- Progress Indicator -->
+    <!-- Conversion Progress Indicator -->
     <div class="progress-container" id="progress-container">
       <div class="progress-bar-bg">
         <div class="progress-bar" id="progress-bar"></div>
@@ -296,10 +332,10 @@
       <div class="status-text" id="status-text">Uploading PDF...</div>
     </div>
 
-    <!-- Status Alert -->
+    <!-- Status Alert Banner -->
     <div class="alert" id="alert-banner"></div>
 
-    <!-- Action Button -->
+    <!-- Primary Action Button -->
     <button class="btn-convert" id="btn-convert" disabled>
       <span>Convert to Word (.docx)</span>
     </button>
@@ -307,10 +343,10 @@
 
   <script>
     // Configuration
-    const API_ENDPOINT = '/convert'; // Proxied via Nginx or direct API URL
-    const MAX_SIZE_MB = 50;
+    const API_ENDPOINT = '/convert'; // Proxied via Nginx or absolute API URL
+    const MAX_SIZE_MB = 20;
 
-    // Elements
+    // DOM Elements
     const dropzone = document.getElementById('dropzone');
     const fileInput = document.getElementById('file-input');
     const filePreview = document.getElementById('file-preview');
@@ -325,10 +361,10 @@
 
     let selectedFile = null;
 
-    // Trigger File Picker
+    // Trigger File Picker on Click
     dropzone.addEventListener('click', () => fileInput.click());
 
-    // Drag & Drop Handlers
+    // Drag & Drop Listeners
     ['dragenter', 'dragover'].forEach(event => {
       dropzone.addEventListener(event, (e) => {
         e.preventDefault();
@@ -380,13 +416,13 @@
       hideAlert();
 
       if (!file.name.toLowerCase().endsWith('.pdf')) {
-        showAlert('Invalid file type. Please select a valid .pdf file.');
+        showAlert('Invalid file type. Please select a document ending in .pdf');
         resetSelection();
         return;
       }
 
       if (file.size > MAX_SIZE_MB * 1024 * 1024) {
-        showAlert(`File is too large. Maximum allowable size is ${MAX_SIZE_MB} MB.`);
+        showAlert(`File is too large (${formatBytes(file.size)}). Maximum allowable size is ${MAX_SIZE_MB} MB.`);
         resetSelection();
         return;
       }
@@ -425,11 +461,10 @@
       formData.append('file', selectedFile);
 
       try {
-        // Step 1: Processing Progress Feedback
         setTimeout(() => {
           progressBar.style.width = '65%';
-          statusText.textContent = 'Extracting layout, tables & formatting...';
-        }, 800);
+          statusText.textContent = 'Reconstructing layout, tables & formatting...';
+        }, 700);
 
         const response = await fetch(API_ENDPOINT, {
           method: 'POST',
@@ -450,7 +485,7 @@
         progressBar.style.width = '90%';
         statusText.textContent = 'Preparing Word document download...';
 
-        // Extract filename from Content-Disposition header if present
+        // Extract filename from Content-Disposition header if available
         let downloadName = selectedFile.name.replace(/\.[^/.]+$/, "") + ".docx";
         const disposition = response.headers.get('Content-Disposition');
         if (disposition && disposition.includes('filename=')) {
@@ -458,12 +493,12 @@
           if (match && match[1]) downloadName = match[1];
         }
 
-        // Receive File Stream as Blob
+        // Receive Binary Stream as Blob
         const blob = await response.blob();
         progressBar.style.width = '100%';
         statusText.textContent = 'Download starting!';
 
-        // Trigger Browser File Download
+        // Trigger Instant Browser File Download
         const downloadUrl = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = downloadUrl;
@@ -473,7 +508,7 @@
         a.remove();
         window.URL.revokeObjectURL(downloadUrl);
 
-        showAlert('Conversion complete! Your download has started.', 'success');
+        showAlert('Conversion complete! Your Word document has downloaded.', 'success');
       } catch (err) {
         showAlert(err.message || 'An unexpected error occurred during conversion.');
       } finally {
@@ -482,7 +517,7 @@
         setTimeout(() => {
           progressContainer.style.display = 'none';
           progressBar.style.width = '0%';
-        }, 3000);
+        }, 3500);
       }
     });
   </script>
