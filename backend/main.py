@@ -150,6 +150,9 @@ async def health_check():
 
 
 @app.post("/convert")
+@app.post("/convert/")
+@app.post("/api/convert")
+@app.post("/api/convert/")
 async def convert_pdf_to_docx(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
