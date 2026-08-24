@@ -15,16 +15,19 @@
   word2pdf: { file: null },
 };
 
-const API_BASE_URL = "http://localhost:8000";
+const API_BASE_URL = (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+  ? "http://localhost:8000"
+  : "";
 
 // Check backend health on load
 (async function checkBackendHealth() {
   try {
-    const res = await fetch(`${API_BASE_URL}/health`);
+    const healthUrl = API_BASE_URL ? `${API_BASE_URL}/health` : "/health";
+    const res = await fetch(healthUrl);
     if (!res.ok) throw new Error("Backend returned error");
-    console.log("Backend is healthy");
+    console.log("PDF BOX Backend is healthy");
   } catch (e) {
-    console.error("Backend health check failed. The server might be down or CORS is blocking the request.");
+    console.warn("Backend health check probe failed:", e.message);
   }
 })();
 
@@ -1245,73 +1248,73 @@ async function pdfToWord() {
   }
   showResult("pdf2word", "");
   
-  setProgress("pdf2word", 5, "Initializing local conversion...");
+  setProgress("pdf2word", 10, "Uploading PDF to conversion engine...");
   setButtonEnabled("btn-pdf2word", false);
+  
   try {
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    const docxSections = [];
-    const totalPages = pdf.numPages;
+    const formData = new FormData();
+    formData.append("file", file);
 
-    const bidiFactory = typeof bidi !== "undefined" ? bidi() : null;
+    setProgress("pdf2word", 30, "Analyzing layout, fonts, tables & images...");
 
-    for (let i = 1; i <= totalPages; i++) {
-      setProgress("pdf2word", Math.round((i / totalPages) * 80), `Extracting Page ${i} of ${totalPages}...`);
-      
-      const page = await pdf.getPage(i);
-      
-      // 1. EXTRACT TEXT
-      const items = await extractTextFromPage(page);
-      
-      // 2. GROUP INTO LINES (Math.abs(y1 - y2) < 5)
-      const lines = groupItemsIntoLines(items);
-      
-      // 3. DETECT PARAGRAPHS
-      const paragraphs = detectParagraphs(lines);
+    // Determine API endpoint (relative /convert or fallback to API_BASE_URL)
+    const endpoint = (typeof API_BASE_URL !== "undefined" && API_BASE_URL) 
+      ? `${API_BASE_URL}/convert` 
+      : "/convert";
 
-      // 4. BUILD DOCX TEXT PARAGRAPHS (incorporating Sentence-level Arabic Fix)
-      const pageTextSections = buildDocxParagraphs(paragraphs, bidiFactory);
-      docxSections.push(...pageTextSections);
-      
-      // 5. EXTRACT PAGE SNAPSHOT
-      const imgBase64 = await extractPageSnapshot(page);
-      
-      // 6. APPEND PAGE SNAPSHOT TO DOCX
-      const viewport = page.getViewport({ scale: 1 });
-      const aspect = viewport.height / viewport.width;
-      
-      docxSections.push(new docx.Paragraph({
-          children: [
-             new docx.ImageRun({
-                data: Uint8Array.from(atob(imgBase64.split(",")[1]), c => c.charCodeAt(0)),
-                transformation: { width: 600, height: Math.round(600 * aspect) }
-             })
-          ],
-          alignment: docx.AlignmentType.CENTER,
-          spacing: { before: 400, after: 400 }
-      }));
-      
-      if (i < totalPages) {
-        docxSections[docxSections.length - 1].root.push(new docx.PageBreak());
+    const response = await fetch(endpoint, {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) {
+      let errorMsg = "Conversion failed on server.";
+      try {
+        const errJson = await response.json();
+        if (errJson && errJson.detail) errorMsg = errJson.detail;
+      } catch (_) {
+        errorMsg = `Server returned status HTTP ${response.status}`;
       }
+      throw new Error(errorMsg);
     }
 
-    setProgress("pdf2word", 90, "Generating Word Document...");
-    const doc = new docx.Document({ sections: [{ properties: {}, children: docxSections }] });
-    const blob = await docx.Packer.toBlob(doc);
-    const name = file.name.replace(/\.pdf$/i, "") + ".docx";
-    
+    setProgress("pdf2word", 85, "Reconstructing Word document (.docx)...");
+
+    // Extract filename from header or fallback
+    let downloadName = file.name.replace(/\.pdf$/i, "") + ".docx";
+    const disposition = response.headers.get("Content-Disposition");
+    if (disposition && disposition.includes("filename=")) {
+      const match = disposition.match(/filename="?([^"]+)"?/);
+      if (match && match[1]) downloadName = match[1];
+    }
+
+    const blob = await response.blob();
+
     setProgress("pdf2word", 100, "Complete!");
-    showResult("pdf2word", successResult(name, blob, formatSize(blob.size)));
+    showResult("pdf2word", successResult(downloadName, blob, formatSize(blob.size)));
     showToast("PDF converted to Word successfully!");
+
+    // Trigger instant browser download
+    if (typeof saveAs !== "undefined") {
+      saveAs(blob, downloadName);
+    } else {
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = downloadName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    }
   } catch (err) {
-    console.error(err);
+    console.error("PDF to Word conversion error:", err);
     setProgress("pdf2word", null);
     showResult("pdf2word", errorResult("Conversion failed: " + err.message));
     showToast("Conversion failed: " + err.message, "error");
   } finally {
     setButtonEnabled("btn-pdf2word", !!state.pdf2word.file);
-    setTimeout(() => setProgress("pdf2word", null), 1500);
+    setTimeout(() => setProgress("pdf2word", null), 2000);
   }
 }
 
