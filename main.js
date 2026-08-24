@@ -1362,17 +1362,14 @@ function groupItemsIntoLines(items) {
   linesMap.forEach(line => {
     const lineStr = line.items.map(i => i.str).join("");
     line.isArabic = /[\u0600-\u06FF]/.test(lineStr);
-    
-    if (line.isArabic) {
-        // RTL
-        line.items.sort((a, b) => b.x - a.x);
-    } else {
-        // LTR
-        line.items.sort((a, b) => a.x - b.x);
-    }
+    line.items = sortLine(line.items, line.isArabic);
   });
   
   return linesMap;
+}
+
+function sortLine(items, isArabic) {
+  return isArabic ? items.sort((a, b) => b.x - a.x) : items.sort((a, b) => a.x - b.x);
 }
 
 function detectParagraphs(lines) {
@@ -1418,7 +1415,7 @@ function detectParagraphs(lines) {
   return paragraphs;
 }
 
-function buildDocxParagraphs(paragraphs, bidiFactory) {
+function buildDocxParagraphs(paragraphs) {
   const docxSections = [];
   
   paragraphs.forEach(para => {
@@ -1448,63 +1445,19 @@ function buildDocxParagraphs(paragraphs, bidiFactory) {
       if (lineIdx < para.lines.length - 1) fullText += " ";
     });
 
-    const isArabic = /[\u0600-\u06FF]/.test(fullText);
-    
-    // 1. Join words FIRST, then reshape full sentence
-    let reshaped = window.ArabicReshaper ? window.ArabicReshaper.convertArabic(fullText) : fullText;
-    
-    const finalRuns = [];
-    
-    // 2. Apply bidi transformation to handle mixed Arabic + English inline
-    if (bidiFactory) {
-        try {
-            const levels = bidiFactory.getEmbeddingLevels(reshaped, isArabic ? 'rtl' : 'ltr');
-            let currentLevel = levels[0];
-            let currentRun = "";
-            
-            for (let i = 0; i < reshaped.length; i++) {
-                if (levels[i] === currentLevel) {
-                    currentRun += reshaped[i];
-                } else {
-                    finalRuns.push(new docx.TextRun({
-                        text: currentRun,
-                        size: Math.round(maxSize * 2) || 24,
-                        rightToLeft: currentLevel % 2 !== 0,
-                        bold: maxSize > 12
-                    }));
-                    currentLevel = levels[i];
-                    currentRun = reshaped[i];
-                }
-            }
-            if (currentRun) {
-                finalRuns.push(new docx.TextRun({
-                    text: currentRun,
-                    size: Math.round(maxSize * 2) || 24,
-                    rightToLeft: currentLevel % 2 !== 0,
-                    bold: maxSize > 12
-                }));
-            }
-        } catch(e) {
-            finalRuns.push(new docx.TextRun({
-                text: reshaped,
-                size: Math.round(maxSize * 2) || 24,
-                rightToLeft: isArabic,
-                bold: maxSize > 12
-            }));
-        }
-    } else {
-        finalRuns.push(new docx.TextRun({
-            text: reshaped,
-            size: Math.round(maxSize * 2) || 24,
-            rightToLeft: isArabic,
-            bold: maxSize > 12
-        }));
-    }
+    const finalText = fixArabicSimple(fullText);
+    const finalRuns = [
+      new docx.TextRun({
+        text: finalText,
+        size: Math.round(maxSize * 2) || 24,
+        rightToLeft: /[\u0600-\u06FF]/.test(finalText),
+        bold: maxSize > 12
+      })
+    ];
 
     const paraOptions = {
       children: finalRuns,
-      alignment: isArabic ? docx.AlignmentType.RIGHT : docx.AlignmentType.LEFT,
-      bidi: isArabic,
+      alignment: /[\u0600-\u06FF]/.test(finalText) ? docx.AlignmentType.RIGHT : docx.AlignmentType.LEFT,
       spacing: { after: 200 }
     };
     
@@ -1522,6 +1475,9 @@ function buildDocxParagraphs(paragraphs, bidiFactory) {
   return docxSections;
 }
 
+function fixArabicSimple(text) {
+    return window.ArabicReshaper ? window.ArabicReshaper.convertArabic(text) : text;
+}
 
 /* ──────────────────────────────────────────────────   12. WORD TO PDF
    Uses docx-preview to render the Word document visually with exact layout.
