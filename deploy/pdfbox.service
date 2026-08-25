@@ -1,0 +1,50 @@
+# /etc/systemd/system/pdfbox.service
+# PDFBox.online — PDF to Word conversion API
+#
+# Install:
+#   sudo useradd -r -s /usr/sbin/nologin pdfbox
+#   sudo mkdir -p /opt/pdfbox && sudo cp -r <repo files: main.py, requirements.txt> /opt/pdfbox/
+#   sudo -u pdfbox python3 -m venv /opt/pdfbox/venv
+#   sudo -u pdfbox /opt/pdfbox/venv/bin/pip install -r /opt/pdfbox/requirements.txt
+#   sudo chown -R pdfbox:pdfbox /opt/pdfbox
+#   sudo cp deploy/pdfbox.service /etc/systemd/system/pdfbox.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now pdfbox
+#
+# Verify:  systemctl status pdfbox && curl -s http://127.0.0.1:8000/health
+
+[Unit]
+Description=PDFBox.online PDF-to-Word conversion API (pdfbox.online)
+After=network.target
+
+[Service]
+Type=simple
+User=pdfbox
+Group=pdfbox
+WorkingDirectory=/opt/pdfbox
+
+# Runtime tuning (match the values the frontend/nginx expect)
+Environment=PYTHONUNBUFFERED=1
+Environment=MAX_UPLOAD_MB=20
+Environment=CONVERSION_TIMEOUT_SECONDS=180
+Environment=MAX_CONCURRENT_CONVERSIONS=2
+# Leave unset in production: the service then uses the strict production
+# CORS origins (https://pdfbox.online, https://www.pdfbox.online).
+
+ExecStart=/opt/pdfbox/venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000 --workers 2 --proxy-headers
+
+# Keep it alive
+Restart=always
+RestartSec=3
+TimeoutStopSec=30
+
+# Hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+RestrictSUIDSGID=true
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

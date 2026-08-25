@@ -2,33 +2,69 @@
 
 ## Project
 
-Static client-side PDF toolkit. No build system, no bundler, no package.json. Open `index.html` directly or serve with any static file server.
+pdfbox.online — a client-side PDF toolkit (static site) plus one Python
+microservice for PDF → Word conversion.
 
 ## Structure
 
-- `index.html` — entry point, all CDN library imports
-- `js/main.js` — routing, UI, file handling, auth (mock/localStorage)
-- `js/pdf-tools.js` — converter classes + legacy PDF operations
-- `js/tool-content.js` — SEO article content
-- `css/styles.css` — all styling
+```
+index.html            entry point, all CDN library imports
+main.js               routing, UI, file handling, PDF-to-Word API client
+style.css             main site styling
+site-pages.css        styling for the text pages (about, blog, terms, …)
+cookie-consent.js     cookie banner
+articles/             blog articles (static HTML)
+images/               icons / tool images
 
-## Key Gotchas
+main.py               PDF→Word FastAPI microservice (pdf2docx)
+requirements.txt      its dependencies
+server.mjs            local dev server: static files + /convert,/health proxy → :8000
 
-- **CDN-only dependencies** — versions pinned in index.html script/link tags. Do not add npm packages; this project has no package manager.
-- **docx library loads as ESM** (type="module" script tag) — it's assigned to `window.docx`. Access it via `window.docx` or the `docxReady` promise, not a UMD global.
-- **WordToPDFConverter** — html2canvas requires the temp container to be rendered in the DOM. Use `opacity: 0.01` + `z-index: -9999`, never `display: none` or `left: -9999px` or the PDF will be blank.
-- **PDF encryption** uses `pdfDoc.save({ userPassword, ownerPassword, permissions })` — not a separate encrypt call.
-- **Watermark** tiles diagonally across the full page using nested loops. Single-position watermark was a known bug.
-- **Auth is fake** — stored in localStorage, no backend. Never treat it as real security.
-- `.agents/skills/pdf/` is a Python-based skill (pypdf, reportlab, pdfplumber). It does NOT apply to this JavaScript codebase.
+deploy/pdfbox.service            systemd unit for the API
+deploy/nginx-api-pdfbox.conf     vhost for api.pdfbox.online
+deploy/nginx-site-convert-snippet.conf  /convert + /health locations for the main vhost
+deploy/SERVER_CLEANUP_CHECKLIST.md      step-by-step legacy-removal runbook
+```
+
+## Key gotchas
+
+- **CDN-only frontend dependencies** — versions pinned in index.html script/link
+  tags. No bundler, no package manager.
+- **PDF → Word is server-side.** The frontend `pdfToWord()` posts the file to
+  `/convert` (same origin; nginx proxies it to the API in production) or to
+  `http://localhost:8000` when the page is opened from a local host.
+- **`main.py` endpoint is a sync `def` on purpose** — the blocking pdf2docx
+  work must run in FastAPI's thread pool, never on the async event loop.
+  Uploads are read from `file.file` (the sync SpooledTemporaryFile);
+  `UploadFile.read()` is async and will not work there.
+- The conversion pool is bounded (`MAX_CONCURRENT_CONVERSIONS`) and has a hard
+  timeout (`CONVERSION_TIMEOUT_SECONDS`). Don't re-introduce unbounded
+  concurrency or fork-based `multi_processing=True` in pdf2docx.
+- CORS defaults to `https://pdfbox.online` + `https://www.pdfbox.online` only.
+  Local development overrides via the `ALLOWED_ORIGINS` env var (see
+  start_dev.bat).
+- **Auth on the site is fake** — localStorage only. Never treat it as real security.
 
 ## Commands
 
-```
-# Serve locally (pick one)
-npx serve .
-python -m http.server 8000
-# Then open http://localhost:8000
+```bash
+# API (development)
+python -m venv venv && venv/bin/pip install -r requirements.txt
+python -m uvicorn main:app --host 127.0.0.1 --port 8000
+
+# Full local site (static + API proxy on :3000)
+node server.mjs            # after starting the API above
+# or on Windows: start_dev.bat
+
+# Smoke test
+curl http://127.0.0.1:8000/health
+curl -F "file=@doc.pdf;type=application/pdf" http://127.0.0.1:8000/convert -o out.docx
 ```
 
-No lint, typecheck, test, or build commands exist. Verify manually in browser console (F12).
+Production deployment: `deploy/pdfbox.service` (systemd) +
+`deploy/nginx-api-pdfbox.conf` (api subdomain) +
+`deploy/nginx-site-convert-snippet.conf` (main site).
+Server-side legacy cleanup: `deploy/SERVER_CLEANUP_CHECKLIST.md`.
+
+No lint, typecheck, test, or build commands exist. Verify manually
+(browser console F12 / curl).

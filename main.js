@@ -1262,18 +1262,38 @@ async function pdfToWord() {
       ? `${API_BASE_URL}/convert` 
       : "/convert";
 
-    const response = await fetch(endpoint, {
-      method: "POST",
-      body: formData,
-    });
+    // Safety timeout: never leave the user staring at a spinner forever.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minutes
+
+    let response;
+    try {
+      response = await fetch(endpoint, {
+        method: "POST",
+        body: formData,
+        signal: controller.signal,
+      });
+    } catch (err) {
+      if (err && err.name === "AbortError") {
+        throw new Error("Conversion timed out after 3 minutes. Please try a smaller PDF.");
+      }
+      throw new Error("Cannot reach the conversion server. Please check your connection and try again.");
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
-      let errorMsg = "Conversion failed on server.";
+      let errorMsg = `Server returned status HTTP ${response.status}.`;
       try {
         const errJson = await response.json();
         if (errJson && errJson.detail) errorMsg = errJson.detail;
       } catch (_) {
-        errorMsg = `Server returned status HTTP ${response.status}`;
+        // Non-JSON body (e.g. an nginx error page) - keep the status message.
+      }
+      if (response.status === 413) {
+        errorMsg = "File is too large. The maximum allowed size is 20 MB.";
+      } else if (response.status === 503) {
+        errorMsg = "The conversion server is busy. Please try again in a few seconds.";
       }
       throw new Error(errorMsg);
     }

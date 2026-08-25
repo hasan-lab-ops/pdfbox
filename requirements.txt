@@ -1,7 +1,17 @@
+# PDFBox.online — PDF to Word API (FastAPI + pdf2docx)
+# Install:  python -m venv venv && venv/bin/pip install -r requirements.txt
+#
+# fastapi / uvicorn      -> web framework + ASGI server
+# python-multipart       -> multipart/form-data file uploads
+# pydantic               -> data validation (required by FastAPI)
+# pdf2docx               -> PDF -> .docx conversion engine
+# pymupdf                -> PDF parsing backend used by pdf2docx (pinned for reproducibility)
+# python-docx            -> .docx writer used by pdf2docx (pinned for reproducibility)
+
 fastapi>=0.110.0,<1.0.0
 uvicorn[standard]>=0.28.0,<1.0.0
 python-multipart>=0.0.9
 pydantic>=2.6.0,<3.0.0
-pdf2docx>=0.5.8
-pymupdf>=1.23.0
-python-docx>=1.1.0
+pdf2docx>=0.5.8,<0.6.0
+pymupdf>=1.23.0,<2.0.0
+python-docx>=1.1.0,<2.0.0

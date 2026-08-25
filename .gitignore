@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+
+# Node
+node_modules/
+
+# Local development & environment
+.env
+.env.*
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/
+
+# Temporary conversion workspaces (server-side)
+tmp/
+uploads/
+downloads/
