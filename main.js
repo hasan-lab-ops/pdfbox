@@ -1263,8 +1263,11 @@ async function pdfToWord() {
       : "/convert";
 
     // Safety timeout: never leave the user staring at a spinner forever.
+    // 5 minutes covers the worst-case server limit (CONVERSION_TIMEOUT_SECONDS
+    // = 180 in production + nginx 300s read timeout headroom); on a real
+    // server conversions finish in seconds, so this cap rarely ever fires.
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minutes
+    const timeoutId = setTimeout(() => controller.abort(), 300000); // 5 minutes
 
     let response;
     try {
@@ -1275,7 +1278,7 @@ async function pdfToWord() {
       });
     } catch (err) {
       if (err && err.name === "AbortError") {
-        throw new Error("Conversion timed out after 3 minutes. Please try a smaller PDF.");
+        throw new Error("Conversion timed out after 5 minutes. Please try a smaller PDF.");
       }
       throw new Error("Cannot reach the conversion server. Please check your connection and try again.");
     } finally {
